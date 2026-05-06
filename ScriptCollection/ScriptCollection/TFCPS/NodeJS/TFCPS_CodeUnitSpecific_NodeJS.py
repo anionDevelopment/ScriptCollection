@@ -24,6 +24,10 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def linting(self) -> None:
+        src_folder = os.path.join(self.get_codeunit_folder(), "src")
+        for file in GeneralUtilities.get_all_files_of_folder(src_folder):
+            if file.endswith(".html"):
+                self._protected_sc.format_html_file(file, os.path.basename(file) == "index.html")
         self._protected_sc.run_with_epew("npm", "run lint", self.get_codeunit_folder(),print_live_output=self.get_verbosity()==LogLevel.Debug,encode_argument_in_base64=True)
 
     @GeneralUtilities.check_arguments

@@ -410,4 +410,86 @@ class ScriptCollectionCoreTests(unittest.TestCase):
         # assert
         assert exit_code == 0
 
+    def test_format_html_content_trims_whitespace_in_text(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        input_content = "<b>  x  </b>"
+
+        # act
+        result = sc.format_html_content(input_content)
+
+        # assert
+        assert result == "<b>x</b>"
+
+    def test_format_html_content_collapses_multiline_text(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        input_content = "<b>  \n   x  \n  </b>"
+
+        # act
+        result = sc.format_html_content(input_content)
+
+        # assert
+        assert result == "<b>x</b>"
+
+    def test_format_html_content_collapses_multiline_text_with_inline_attribute(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        input_content = '<mat-checkbox formControlName="x">Can receive\n            ONVIF-commands.</mat-checkbox>'
+
+        # act
+        result = sc.format_html_content(input_content)
+
+        # assert
+        assert result == '<mat-checkbox formControlName="x">Can receive ONVIF-commands.</mat-checkbox>'
+
+    def  test_format_html_content_trims_text_in_nested_elements(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        input_content = "<div>\n  <p>  hello   world  </p>\n  <span>  \n    test  \n  </span>\n</div>"
+
+        # act
+        result = sc.format_html_content(input_content)
+
+        # assert
+        assert result=="""<div>
+  <p>hello world</p>
+  <span>test</span>
+</div>"""
+
+    def test_format_html_content_adds_doctype_when_requested(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        input_content = "<html><body></body></html>"
+
+        # act
+        result = sc.format_html_content(input_content, add_html_declaration=True)
+
+        # assert
+        assert result.startswith("<!DOCTYPE html>")
+
+    def test_format_html_content_does_not_add_doctype_by_default(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        input_content = "<html><body></body></html>"
+
+        # act
+        result = sc.format_html_content(input_content)
+
+        # assert
+        assert "DOCTYPE" not in result
+
+    def test_format_html_content_indents_deeply_nested_elements(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        input_content = "<div><section><p>  hello  </p></section></div>"
+        expected = "<div>\n  <section>\n    <p>hello</p>\n  </section>\n</div>"
+
+        # act
+        result = sc.format_html_content(input_content)
+
+        # assert
+        assert result == expected
+
+
 # TODO all testcases should be independent of epew
