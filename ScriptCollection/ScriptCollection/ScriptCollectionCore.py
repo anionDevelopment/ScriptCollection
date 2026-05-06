@@ -2635,15 +2635,8 @@ TXDX
                 trim_texts(child)
         trim_texts(element)
         ET.indent(element)
-        GeneralUtilities.write_text_to_file(
-            file,
-            ET.tostring(
-                element,
-                xml_declaration=add_xml_declaration,
-                encoding="unicode"
-            ),
-            encoding
-        )
+        content = ET.tostring(element, xml_declaration=add_xml_declaration, encoding="unicode")
+        GeneralUtilities.write_text_to_file(file, content.rstrip("\n") + "\n", encoding)
 
     @GeneralUtilities.check_arguments
     def format_html_file(self, file: str, add_html_declaration: bool = False) -> None:

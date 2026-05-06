@@ -192,8 +192,44 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         self._protected_sc.format_xml_file(target) 
 
     @GeneralUtilities.check_arguments
+    def get_dotnet_build_diagnostics(self) -> list[tuple[LogLevel, str, str | None, int | None]]:
+        codeunit_name = self.get_codeunit_name()
+        codeunit_folder = self.get_codeunit_folder()
+        sln_file = os.path.join(codeunit_folder, codeunit_name + ".sln")
+        run_result = self._protected_sc.run_program("dotnet", f"build \"{sln_file}\" -nologo -v minimal", codeunit_folder, throw_exception_if_exitcode_is_not_zero=False)
+        diagnostics: list[tuple[LogLevel, str, str | None, int | None]] = []
+        pattern = re.compile(r"^\s*(?:(.+?)\((\d+),\d+\): )?(error|warning|message|info) [^:]+: (.+?)(?:\s*\[.+\])?\s*$", re.IGNORECASE)
+        for line in GeneralUtilities.string_to_lines(run_result[1] + "\n" + run_result[2]):
+            m = pattern.match(line)
+            if m:
+                file_path = m.group(1)
+                line_number = int(m.group(2)) if m.group(2) else None
+                level_str = m.group(3).lower()
+                message = m.group(4)
+                if level_str == "error":
+                    level = LogLevel.Error
+                elif level_str == "warning":
+                    level = LogLevel.Warning
+                else:
+                    level = LogLevel.Information
+                diagnostics.append((level, message, file_path, line_number))
+        return diagnostics
+
+    @GeneralUtilities.check_arguments
     def linting(self) -> None:
-        pass#TODO
+        codeunit_name = self.get_codeunit_name()
+        codeunit_folder = self.get_codeunit_folder()
+        self._protected_sc.format_xml_file(os.path.join(codeunit_folder, codeunit_name, codeunit_name + ".csproj"), add_xml_declaration=False)
+        self._protected_sc.format_xml_file(os.path.join(codeunit_folder, codeunit_name + "Tests", codeunit_name + "Tests.csproj"), add_xml_declaration=False)
+        diagnostics = self.get_dotnet_build_diagnostics()
+        has_errors = False
+        for (level, message, file, line) in diagnostics:
+            location = f" ({file}:{line})" if file else ""
+            self._protected_sc.log.log(f"{message}{location}", level)
+            if level == LogLevel.Error:#should not occurr on scbuildcodeunits because then the build would have failed already.
+                has_errors = True
+        if has_errors:
+            raise ValueError("Linting-issues occurred.")
 
     @GeneralUtilities.check_arguments
     def do_common_tasks(self,current_codeunit_version:str,certificateGeneratorInformation:CertificateGeneratorInformationBase)-> None:
