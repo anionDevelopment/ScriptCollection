@@ -13,6 +13,7 @@ import zipfile
 import math
 import base64
 import os
+from html.parser import HTMLParser
 from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
 import xml.etree.ElementTree as ET
@@ -37,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.76"
+version = "4.2.77"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2622,7 +2623,7 @@ TXDX
         self.run_program("docker", f"network create {network_name}")
 
     @GeneralUtilities.check_arguments
-    def format_xml_file(self, file: str) -> None:
+    def format_xml_file(self, file: str,add_xml_declaration:bool=True) -> None:
         encoding = "utf-8"
         element = ET.XML(GeneralUtilities.read_text_from_file(file, encoding))
         def trim_texts(elem: ET.Element):
@@ -2638,11 +2639,118 @@ TXDX
             file,
             ET.tostring(
                 element,
-                xml_declaration=True,
+                xml_declaration=add_xml_declaration,
                 encoding="unicode"
             ),
             encoding
         )
+
+    @GeneralUtilities.check_arguments
+    def format_html_file(self, file: str, add_html_declaration: bool = False) -> None:
+        encoding = "utf-8"
+        content = GeneralUtilities.read_text_from_file(file, encoding)
+        content=self.format_html_content(content, add_html_declaration)
+        GeneralUtilities.write_text_to_file(file, content, encoding)
+
+    @GeneralUtilities.check_arguments
+    def format_html_content(self, content: str, add_html_declaration: bool = False) -> str:
+
+        VOID_ELEMENTS = {"area", "base", "br", "col", "embed", "hr", "img", "input",
+                         "link", "meta", "param", "source", "track", "wbr"}
+
+        class _Node:
+            __slots__ = ("tag", "attrs", "children", "text", "is_void", "raw")
+            def __init__(self, tag=None, attrs=(), text=None, is_void=False, raw=None):
+                self.tag = tag
+                self.attrs = list(attrs)
+                self.children = []
+                self.text = text
+                self.is_void = is_void
+                self.raw = raw
+
+        class _Builder(HTMLParser):
+            def __init__(self):
+                super().__init__(convert_charrefs=False)
+                self.root = _Node()
+                self.stack = [self.root]
+
+            def _top(self):
+                return self.stack[-1]
+
+            def handle_starttag(self, tag, attrs):
+                raw = self.get_starttag_text()
+                raw_lower = raw.lower()
+                original_attrs = []
+                pos = 1 + len(tag)
+                for lc_name, value in attrs:
+                    idx = raw_lower.index(lc_name, pos)
+                    original_attrs.append((raw[idx:idx + len(lc_name)], value))
+                    pos = idx + len(lc_name)
+                node = _Node(tag=tag, attrs=original_attrs, is_void=tag.lower() in VOID_ELEMENTS)
+                self._top().children.append(node)
+                if not node.is_void:
+                    self.stack.append(node)
+
+            def handle_endtag(self, tag):
+                if len(self.stack) > 1 and self.stack[-1].tag == tag:
+                    self.stack.pop()
+
+            def handle_data(self, data):
+                t = " ".join(data.split())
+                if t:
+                    self._top().children.append(_Node(text=t))
+
+            def handle_entityref(self, name):
+                self._top().children.append(_Node(text=f"&{name};"))
+
+            def handle_charref(self, name):
+                self._top().children.append(_Node(text=f"&#{name};"))
+
+            def handle_comment(self, data):
+                self._top().children.append(_Node(raw=f"<!--{data}-->"))
+
+            def handle_decl(self, decl):
+                self._top().children.append(_Node(raw=f"<!{decl}>"))
+
+            def handle_pi(self, data):
+                self._top().children.append(_Node(raw=f"<?{data}>"))
+
+        builder = _Builder()
+        builder.feed(content)
+        ind = "  "
+
+        def _serialize(node: _Node, depth: int) -> list:
+            prefix = ind * depth
+            if node.raw is not None:
+                return [prefix + node.raw]
+            if node.text is not None:
+                return [node.text]
+            if node.tag is None:
+                out = []
+                for c in node.children:
+                    out.extend(_serialize(c, depth))
+                return out
+            attr_str = "".join(f" {n}" if v is None else f' {n}="{v}"' for n, v in node.attrs)
+            if node.is_void:
+                return [f"{prefix}<{node.tag}{attr_str}>"]
+            has_elem_children = any(c.tag is not None for c in node.children)
+            if not has_elem_children:
+                inner = "".join(c.text or "" for c in node.children)
+                return [f"{prefix}<{node.tag}{attr_str}>{inner}</{node.tag}>"]
+            lines = [f"{prefix}<{node.tag}{attr_str}>"]
+            for c in node.children:
+                child_lines = _serialize(c, depth + 1)
+                if c.text is not None:
+                    lines.append(ind * (depth + 1) + child_lines[0])
+                else:
+                    lines.extend(child_lines)
+            lines.append(f"{prefix}</{node.tag}>")
+            return lines
+
+        result = "\n".join(_serialize(builder.root, 0))
+        if add_html_declaration and not result.lstrip().startswith("<!DOCTYPE"):
+            result = "<!DOCTYPE html>\n" + result
+        return result
 
     @GeneralUtilities.check_arguments
     def get_pip_index_url_arguments_from_local_cache(self)->list[str]:
@@ -3264,7 +3372,9 @@ OCR-content:
         tree = ET.parse(file)
         root = tree.getroot()
 
-        for segment in root.findall(".//xliff:segment[@state='initial']", ns):
+        for segment in root.findall(".//xliff:segment", ns):
+            if segment.get("state", "initial") != "initial":
+                continue
             source_el = segment.find("xliff:source", ns)
             if source_el is None or not source_el.text:
                 continue
@@ -3337,12 +3447,14 @@ OCR-content:
     @GeneralUtilities.check_arguments
     def get_all_commits_in_git_repository(self,repository_folder:str,include_all_heads:bool=False) -> list[str]:
         """Returns a textual visualization of all commits in a git-repository."""
-        #do 'git log --reverse --all --pretty=format:"%ci | %H | %cn <%ce> | %s"'
-        args = ["log", "--reverse", "--pretty=format:%ci | %H | %cn <%ce> | %s"]
+        #do 'git log --reverse --all --pretty=format:"%ci | %H | %cn <%ce> | %d | %s"'
+        args = ["log", "--reverse", "--pretty=format:%ci | %H | %cn <%ce> | %D | %s"]
         if include_all_heads:
             args.append("--all")
         result=self.run_program_argsasarray("git", args, repository_folder, throw_exception_if_exitcode_is_not_zero=True)
-        return result[1]
+        output= result[1]
+        result=output.splitlines()
+        return result
 
     @GeneralUtilities.check_arguments
     def write_commit_list_for_repository(self,repository_folder:str,target_file:str,include_all_heads:bool=False) -> None:

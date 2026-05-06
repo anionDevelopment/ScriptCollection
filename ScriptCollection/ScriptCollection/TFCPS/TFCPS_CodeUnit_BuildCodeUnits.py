@@ -1,6 +1,7 @@
 import os
 import json
 from datetime import datetime, timedelta,timezone
+import yaml
 from ..GeneralUtilities import GeneralUtilities
 from ..ScriptCollectionCore import ScriptCollectionCore
 from ..SCLog import  LogLevel
@@ -67,6 +68,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.__search_for_vulnerabilities()
         self.__search_for_secrets()
         if self.is_pre_merge():
+            self.__translate()
             self.__collect_metrics()
             self.__generate_loc_diagram()
         end_time:datetime=GeneralUtilities.get_now()
@@ -96,6 +98,17 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     @GeneralUtilities.check_arguments
     def build_codeunits_in_container(self) -> None:
         raise ValueError("Not implemented.")
+
+    @GeneralUtilities.check_arguments
+    def __translate(self) -> None:
+        for taskfile_name in ("Taskfile.yml", "Taskfile.yaml"):
+            taskfile = os.path.join(self.repository, taskfile_name)
+            if os.path.isfile(taskfile):
+                with open(taskfile, "r", encoding="utf-8") as f:
+                    taskfile_content = yaml.safe_load(f)
+                if isinstance(taskfile_content.get("tasks"), dict) and "Translate" in taskfile_content["tasks"]:
+                    self.sc.run_program("task", "Translate", self.repository, print_live_output=self.sc.log.loglevel == LogLevel.Debug)
+                break
 
     @GeneralUtilities.check_arguments
     def __collect_metrics(self) -> None:
