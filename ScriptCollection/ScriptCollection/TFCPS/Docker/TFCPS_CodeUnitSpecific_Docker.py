@@ -43,7 +43,9 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
             args.append("--output")
             args.append(f"type=docker,dest={target_file}")
             args.append(".")
+            time.sleep(5)
             self._protected_sc.run_program_argsasarray("docker", args, codeunit_folder, print_errors_as_information=True,print_live_output=self.get_verbosity()==LogLevel.Debug)
+            time.sleep(2)
             self._protected_sc.run_program_argsasarray("docker", ["load", "-i", target_file], codeunit_folder, print_errors_as_information=True,print_live_output=self.get_verbosity()==LogLevel.Debug)
 
         self.__generate_sbom_for_docker_image()
