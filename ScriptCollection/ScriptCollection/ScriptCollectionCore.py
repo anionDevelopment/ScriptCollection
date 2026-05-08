@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.77"
+version = "4.2.78"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2708,8 +2708,16 @@ TXDX
             def handle_pi(self, data):
                 self._top().children.append(_Node(raw=f"<?{data}>"))
 
+        _angular_exprs: list[str] = []
+
+        def _protect_angular(m: re.Match) -> str:
+            idx = len(_angular_exprs)
+            _angular_exprs.append(m.group(0))
+            return f"__ANGEXPR{idx}__"
+
+        protected = re.sub(r'\{\{[\s\S]*?\}\}', _protect_angular, content)
         builder = _Builder()
-        builder.feed(content)
+        builder.feed(protected)
         ind = "  "
 
         def _serialize(node: _Node, depth: int) -> list:
@@ -2740,7 +2748,9 @@ TXDX
             lines.append(f"{prefix}</{node.tag}>")
             return lines
 
-        result = "\n".join(_serialize(builder.root, 0))
+        result = "\n".join(line for line in _serialize(builder.root, 0) if line.strip())
+        for i, expr in enumerate(_angular_exprs):
+            result = result.replace(f"__ANGEXPR{i}__", expr)
         if add_html_declaration and not result.lstrip().startswith("<!DOCTYPE"):
             result = "<!DOCTYPE html>\n" + result
         return result
