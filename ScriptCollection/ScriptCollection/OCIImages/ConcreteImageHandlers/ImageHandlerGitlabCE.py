@@ -1,6 +1,5 @@
 from packaging.version import Version
-
-from ScriptCollection.build.lib.ScriptCollection.GeneralUtilities import VersionEcholon
+from ...GeneralUtilities import VersionEcholon
 from ..AbstractImageHandler import AbstractImageHandler
 
 class ImageHandlerGitlabCE(AbstractImageHandler):

@@ -1,5 +1,4 @@
 import os
-from unittest import result
 from packaging.version import Version
 from ..GeneralUtilities import GeneralUtilities
 from ..ScriptCollectionCore import ScriptCollectionCore

@@ -1,6 +1,5 @@
 from packaging.version import Version
-
-from ScriptCollection.ScriptCollection.GeneralUtilities import VersionEcholon
+from ...GeneralUtilities import VersionEcholon
 from ..AbstractImageHandler import AbstractImageHandler
 
 class ImageHandlerGenericV(AbstractImageHandler):
