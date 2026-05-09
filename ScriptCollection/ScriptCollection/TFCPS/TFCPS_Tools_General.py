@@ -1562,4 +1562,4 @@ class TFCPS_Tools_General:
 
 
     def update_dependent_oci_images(self,repo:str):
-        pass#TODO update all image-tags in repo/.ScriptCollection/OCIImages/ImageDefinition.csv if possible using the custom defined registries in ~/.ScriptCollection if possible.
+        self.oci_image_manager.update_default_tag_for_images_in_image_definitions_file(repo,True)

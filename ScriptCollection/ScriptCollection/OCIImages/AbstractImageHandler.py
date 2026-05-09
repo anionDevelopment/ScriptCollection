@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from packaging.version import Version
-from ..GeneralUtilities import GeneralUtilities
+from ..GeneralUtilities import GeneralUtilities, VersionEcholon
 
 class AbstractImageHandler(ABC):
     
@@ -26,9 +26,13 @@ class AbstractImageHandler(ABC):
         raise NotImplementedError()#because it is abstract
 
     @abstractmethod
-    def tag_to_version(self,image_name:str,registry_address:str,tag:str)->Version:
+    def tag_to_version(self,image_name:str,tag:str)->Version:
         raise NotImplementedError()#because it is abstract
 
     @abstractmethod
-    def version_to_tag(self,image_name:str,registry_address:str,version:Version)->str:
+    def version_to_tag(self,image_name:str,version:Version)->str:
+        raise NotImplementedError()#because it is abstract
+
+    @abstractmethod
+    def get_default_echolon_for_update(self,image_name:str)->VersionEcholon:
         raise NotImplementedError()#because it is abstract
