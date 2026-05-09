@@ -10,6 +10,7 @@ from .GeneralUtilities import GeneralUtilities
 from .SCLog import LogLevel, SCLog
 from .TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
 from .TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
+from .OCIImages.OCIImageManager import OCIImageManager
 
 def FilenameObfuscator() -> int:
     parser = argparse.ArgumentParser(description=''''Obfuscates the names of all files in the given folder.
@@ -745,7 +746,14 @@ def OCRAnalysisOfRepository() -> int:
 
 
 def UpdateImagesInDockerComposeFile() -> int:
-    #TODO use OCIImageUpdater
+    parser = argparse.ArgumentParser(description="This function updates images in a Docker Compose file.")
+    parser.add_argument('-f', '--file', required=False,default="./docker-compose.yml")
+    #TODO add possibility to set version-echolon for each image specifically and pass this information to OCIImageManager
+    args = parser.parse_args()
+    sc = ScriptCollectionCore()
+    file=GeneralUtilities.resolve_relative_path(args.file, os.getcwd())
+    oci=OCIImageManager(sc)
+    oci.update_image_in_docker_compose_file(file)
     return 0
 
 

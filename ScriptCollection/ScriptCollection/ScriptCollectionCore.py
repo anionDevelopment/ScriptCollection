@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.78"
+version = "4.2.79"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -1997,6 +1997,12 @@ class ScriptCollectionCore:
         if self.call_program_runner_directly:
             return self.program_runner.run_program(program, arguments, working_directory, custom_argument, interactive)
         return self.run_program_argsasarray(program, GeneralUtilities.arguments_to_array(arguments), working_directory,  print_errors_as_information, log_file, timeoutInSeconds, addLogOverhead, title, log_namespace, GeneralUtilities.arguments_to_array(arguments_for_log), throw_exception_if_exitcode_is_not_zero, custom_argument, interactive, print_live_output)
+
+    # Return-values program_runner: Exitcode, StdOut, StdErr, Pid
+    @GeneralUtilities.check_arguments
+    def run_program_argsasarray_with_retry(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None,  print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = 600, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False, print_live_output: bool = False, amount_of_attempts: int = 5, delay_in_seconds: int = 2) -> tuple[int, str, str, int]:
+        return GeneralUtilities.retry_action(lambda: self.run_program_argsasarray(program, arguments_as_array, working_directory, print_errors_as_information, log_file, timeoutInSeconds, addLogOverhead, title, log_namespace,arguments_for_log, throw_exception_if_exitcode_is_not_zero, custom_argument, interactive, print_live_output), amount_of_attempts, delay_in_seconds=delay_in_seconds)
+
 
     # Return-values program_runner: Pid
     @GeneralUtilities.check_arguments

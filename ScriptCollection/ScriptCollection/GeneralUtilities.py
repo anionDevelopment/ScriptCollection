@@ -34,6 +34,7 @@ class VersionEcholon(Enum):
     LatestPatchOrLatestMinor = 1
     LatestPatchOrLatestMinorOrNextMajor = 2
     LatestVersion = 3
+    CustomAlgorithm = 4
 
 class Platform(Enum):
     Windows_AMD64 = 0

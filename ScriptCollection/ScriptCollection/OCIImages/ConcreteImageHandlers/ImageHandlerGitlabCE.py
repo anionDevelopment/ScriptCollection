@@ -1,9 +1,9 @@
 from packaging.version import Version
 
-from ScriptCollection.ScriptCollection.GeneralUtilities import VersionEcholon
+from ScriptCollection.build.lib.ScriptCollection.GeneralUtilities import VersionEcholon
 from ..AbstractImageHandler import AbstractImageHandler
 
-class ImageHandlerGenericV(AbstractImageHandler):
+class ImageHandlerGitlabCE(AbstractImageHandler):
 
     def can_handle(self,image_name:str)->bool:
         raise NotImplementedError()#TODO
@@ -13,9 +13,9 @@ class ImageHandlerGenericV(AbstractImageHandler):
 
     def tag_to_version(self,image_name:str,tag:str)->Version:
         raise NotImplementedError()
-
+    
     def version_to_tag(self,image_name:str,version:Version)->str:
         raise NotImplementedError()
 
     def get_default_echolon_for_update(self,image_name:str)->VersionEcholon:
-        raise NotImplementedError()
+        return VersionEcholon.CustomAlgorithm

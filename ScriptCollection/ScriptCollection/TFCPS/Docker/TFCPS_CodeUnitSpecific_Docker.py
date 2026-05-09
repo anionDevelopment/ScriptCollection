@@ -13,7 +13,6 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
     def __init__(self,current_file:str,verbosity:LogLevel,targetenvironmenttype:str,use_cache:bool,is_pre_merge:bool):
         super().__init__(current_file, verbosity,targetenvironmenttype,use_cache,is_pre_merge)
 
-    
     @GeneralUtilities.check_arguments
     def build(self,platforms:list[Platform],custom_arguments:dict[str,str]) -> None:
         codeunitname: str =self.get_codeunit_name()
@@ -44,7 +43,7 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
             args.append(f"type=docker,dest={target_file}")
             args.append(".")
             time.sleep(5)
-            self._protected_sc.run_program_argsasarray("docker", args, codeunit_folder, print_errors_as_information=True,print_live_output=self.get_verbosity()==LogLevel.Debug)
+            self._protected_sc.run_program_argsasarray_with_retry("docker", args, codeunit_folder, print_errors_as_information=True,print_live_output=self.get_verbosity()==LogLevel.Debug,amount_of_attempts=3,delay_in_seconds=5)
             time.sleep(2)
             self._protected_sc.run_program_argsasarray("docker", ["load", "-i", target_file], codeunit_folder, print_errors_as_information=True,print_live_output=self.get_verbosity()==LogLevel.Debug)
 
