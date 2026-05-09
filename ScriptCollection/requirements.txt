@@ -1,5 +1,5 @@
 autopep8>=2.3.2
-build>=1.4.3
+build>=1.5.0
 coverage>=7.13.5
 cyclonedx-bom>=7.1.0
 defusedxml>=0.7.1
@@ -9,7 +9,7 @@ lxml>=6.0.1
 ntplib>=0.4.0
 Pillow>=11.3.0
 psutil>=7.2.2
-pycdlib>=1.14.0
+pycdlib>=1.16.0
 Pygments>=2.20.0
 pylint>=4.0.5
 pyOpenSSL>=25.3.0
