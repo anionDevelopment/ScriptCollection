@@ -204,6 +204,11 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             GeneralUtilities.ensure_directory_does_not_exist(temp_output_folder)
         diagnostics: list[tuple[LogLevel, str, str | None, int | None]] = []
         pattern = re.compile(r"^\s*(?:(.+?)\((\d+),\d+\): )?(error|warning|message|info) [^:]+: (.+?)(?:\s*\[.+\])?\s*$", re.IGNORECASE)
+        #TODO fix this function. this does not work. fyi output looks like this:
+        #E:\Data\Projects\GRYLibrary\GRYLibrary>dotnet build GRYLibrary.sln -nologo -v minimal
+        #Restore succeeded with 11 warning(s) in 0,9s
+        #    E:\Data\Projects\GRYLibrary\GRYLibrary\GRYLibrary\GRYLibrary.csproj : warning NU1510: PackageReference Microsoft.CSharp will not be pruned. Consider removing this package from your dependencies, as it is likely unnecessary.
+        #    E:\Data\Projects\GRYLibrary\GRYLibrary\GRYLibraryTests\GRYLibraryTests.csproj : warning NU1510: PackageReference Microsoft.Win32.Registry will not be pruned. Consider removing this package from your dependencies, as it is likely unnecessary.
         for line in GeneralUtilities.string_to_lines(run_result[1] + "\n" + run_result[2]):
             m = pattern.match(line)
             if m:
@@ -462,14 +467,26 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         GeneralUtilities.ensure_directory_exists(temp_folder)
         runsettings_file = "runsettings.xml"
         codeunit_folder = f"{repository_folder}/{codeunit_name}"
-        arg = f"test . -c {dotnet_build_configuration}"
+        args: list[str] = ["test", ".", "-c", dotnet_build_configuration]
         if os.path.isfile(os.path.join(codeunit_folder, runsettings_file)):
-            arg = f"{arg} --settings {runsettings_file}"
-        arg = f"{arg} /p:CollectCoverage=true /p:CoverletOutput=../Other/Artifacts/TestCoverage/Testcoverage /p:CoverletOutputFormat=cobertura"
-        self._protected_sc.run_program("dotnet", arg, codeunit_folder, print_live_output=self.get_verbosity()==LogLevel.Debug,timeoutInSeconds=60*20)
-        target_file = os.path.join(coverage_file_folder,  "TestCoverage.xml")
+            args += ["--settings", runsettings_file]
+        args += ["--collect:XPlat Code Coverage", "--results-directory", temp_folder]
+        self._protected_sc.run_program_argsasarray("dotnet", args, codeunit_folder, print_live_output=self.get_verbosity()==LogLevel.Debug, timeoutInSeconds=60*20)
+        # coverlet.collector writes the report to <temp_folder>/<run-guid>/coverage.cobertura.xml
+        generated_coverage_file: str = None
+        for root_dir, _, files in os.walk(temp_folder):
+            for f in files:
+                if f == "coverage.cobertura.xml":
+                    generated_coverage_file = os.path.join(root_dir, f)
+                    break
+            if generated_coverage_file is not None:
+                break
+        GeneralUtilities.assert_condition(generated_coverage_file is not None, f"Coverage file 'coverage.cobertura.xml' was not found under '{temp_folder}'.")
+        GeneralUtilities.ensure_directory_exists(coverage_file_folder)
+        target_file = os.path.join(coverage_file_folder, "TestCoverage.xml")
         GeneralUtilities.ensure_file_does_not_exist(target_file)
-        os.rename(os.path.join(coverage_file_folder,  "Testcoverage.cobertura.xml"), target_file)
+        shutil.copyfile(generated_coverage_file, target_file)
+        GeneralUtilities.ensure_directory_does_not_exist(temp_folder)
         self.__remove_unrelated_package_from_testcoverage_file(target_file, codeunit_name)
         root: etree._ElementTree = etree.parse(target_file)
         source_base_path_in_coverage_file: str = root.xpath("//coverage/sources/source/text()")[0].replace("\\", "/")
