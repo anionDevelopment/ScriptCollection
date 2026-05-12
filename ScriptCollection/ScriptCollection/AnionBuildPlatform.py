@@ -98,7 +98,7 @@ class AnionBuildPlatform:
         #    merge_to_main_arguments+=f" --commonremotename {self.__configuration.common_remote_name}"
         if self.__configuration.verbosity is not None:
             merge_to_main_arguments+=f" --verbosity {self.__configuration.verbosity.value}"
-        self.__sc.run_program("python",f"MergeToMain.py{merge_to_main_arguments}",scripts_folder,print_live_output=True)
+        self.__sc.run_program(GeneralUtilities.get_python_executable(),f"MergeToMain.py{merge_to_main_arguments}",scripts_folder,print_live_output=True)
 
         merge_to_stable_arguments=""
         #if self.__configuration.project_to_build is not None:
@@ -127,7 +127,7 @@ class AnionBuildPlatform:
         #    merge_to_stable_arguments+=f" --commonremoteurl {self.__configuration.common_remote_url}"
         if self.__configuration.verbosity == LogLevel.Debug:
             merge_to_stable_arguments+=f" --verbosity {self.__configuration.verbosity.value}"
-        self.__sc.run_program("python",f"MergeToStable.py{merge_to_stable_arguments}",scripts_folder,print_live_output=True)
+        self.__sc.run_program(GeneralUtilities.get_python_executable(),f"MergeToStable.py{merge_to_stable_arguments}",scripts_folder,print_live_output=True)
 
         #prepare for next-release
         self.__sc.git_checkout(repository,self.__configuration.source_branch)

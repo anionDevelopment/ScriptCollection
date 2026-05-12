@@ -194,7 +194,7 @@ class TasksForCommonProjectStructure:
         # hint: arguments can be overwritten by commandline_arguments
         folder_of_this_file = os.path.dirname(create_release_file)
         
-        result = self.__sc.run_program("python", f"CreateRelease.py --overwrite_verbosity {str(int(self.__log.loglevel))}", folder_of_this_file, log_file=logfile, addLogOverhead=addLogOverhead, print_live_output=True, throw_exception_if_exitcode_is_not_zero=False)
+        result = self.__sc.run_program(GeneralUtilities.get_python_executable(), f"CreateRelease.py --overwrite_verbosity {str(int(self.__log.loglevel))}", folder_of_this_file, log_file=logfile, addLogOverhead=addLogOverhead, print_live_output=True, throw_exception_if_exitcode_is_not_zero=False)
         if result[0] != 0:
             raise ValueError(f"CreateRelease.py resulted in exitcode {result[0]}.")
 
@@ -463,7 +463,7 @@ class TasksForCommonProjectStructure:
         codeunit_name = os.path.basename(codeunit_folder)
 
         build_folder = os.path.join(codeunit_folder, "Other", "Build")
-        self.__sc.run_program("python", "Build.py", build_folder)
+        self.__sc.run_program(GeneralUtilities.get_python_executable(), "Build.py", build_folder)
 
         test_csproj_file = os.path.join(codeunit_folder, f"{codeunit_name}Tests", f"{codeunit_name}Tests.csproj")
         self.__sc.update_dependencies_of_dotnet_project(test_csproj_file, ignored_dependencies)
@@ -654,7 +654,7 @@ class TasksForCommonProjectStructure:
         # update dependencies of resources
         global_scripts_folder = os.path.join(repository_folder, "Other", "Scripts")
         if os.path.isfile(os.path.join(global_scripts_folder, update_dependencies_script_filename)):
-            self.__sc.run_program("python", update_dependencies_script_filename, global_scripts_folder, print_live_output=True)
+            self.__sc.run_program(GeneralUtilities.get_python_executable(), update_dependencies_script_filename, global_scripts_folder, print_live_output=True)
             version_of_project = self.get_version_of_project(repository_folder)
             self.__ensure_changelog_file_is_added(repository_folder, version_of_project)
             self.__log.log(f"Updated global dependencies of {project_name}.")
@@ -670,7 +670,7 @@ class TasksForCommonProjectStructure:
                 codeunit_folder = os.path.join(repository_folder, codeunit)
                 update_dependencies_script_folder = os.path.join(codeunit_folder, "Other")
                 GeneralUtilities.ensure_directory_exists(os.path.join(update_dependencies_script_folder, "Resources", "CodeAnalysisResult"))
-                self.__sc.run_program("python", update_dependencies_script_filename, update_dependencies_script_folder,  print_live_output=True)
+                self.__sc.run_program(GeneralUtilities.get_python_executable(), update_dependencies_script_filename, update_dependencies_script_folder,  print_live_output=True)
                 if self.__sc.git_repository_has_uncommitted_changes(repository_folder):
                     version_of_project = self.get_version_of_project(repository_folder)
                     self.__ensure_changelog_file_is_added(repository_folder, version_of_project)

@@ -190,6 +190,15 @@ class GeneralUtilitiesTests(unittest.TestCase):
     def test_to_pascal_case(self) -> None:
         assert GeneralUtilities.to_pascal_case("ab: Cd-ef_ghIj") == "AbCdEfGhij"
 
+    def test_to_snake_case(self) -> None:
+        assert GeneralUtilities.to_snake_case("ab: Cd-ef_ghIj") == "ab_cd_ef_ghij"
+
+    def test_to_camel_case(self) -> None:
+        assert GeneralUtilities.to_camel_case("ab: Cd-ef_ghIj") == "abCdEfGhij"
+
+    def test_to_kebab_case(self) -> None:
+        assert GeneralUtilities.to_kebab_case("ab: Cd-ef_ghIj") == "ab-cd-ef-ghij"
+
     def test_find_between(self) -> None:
         assert GeneralUtilities.find_between("a(bc)de", "(", ")") == "bc"
 

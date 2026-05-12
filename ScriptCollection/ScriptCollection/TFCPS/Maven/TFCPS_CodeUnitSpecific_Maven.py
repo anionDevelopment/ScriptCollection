@@ -1,4 +1,3 @@
-import os
 from ...GeneralUtilities import GeneralUtilities
 from ...SCLog import LogLevel
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base, TFCPS_CodeUnitSpecific_Base_CLI

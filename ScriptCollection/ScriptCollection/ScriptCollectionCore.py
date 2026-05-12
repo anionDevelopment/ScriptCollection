@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.80"
+version = "4.2.81"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -513,17 +513,22 @@ class ScriptCollectionCore:
 
     @GeneralUtilities.check_arguments
     def git_fetch(self, folder: str, remotename: str = "--all") -> None:
-        self.is_git_or_bare_git_repository(folder)
+        self.assert_is_git_repository(folder)
         self.run_program_argsasarray("git", ["fetch", remotename, "--tags", "--prune"], folder, throw_exception_if_exitcode_is_not_zero=True)
 
     @GeneralUtilities.check_arguments
     def git_fetch_in_bare_repository(self, folder: str, remotename, localbranch: str, remotebranch: str) -> None:
-        self.is_git_or_bare_git_repository(folder)
+        self.assert_is_git_repository(folder)
         self.run_program_argsasarray("git", ["fetch", remotename, f"{remotebranch}:{localbranch}"], folder, throw_exception_if_exitcode_is_not_zero=True)
+
+    def branch_exists(self, folder: str, branchname: str) -> bool:
+        self.assert_is_git_repository(folder)
+        result = self.run_program_argsasarray("git", ["rev-parse", "--verify", branchname], folder, throw_exception_if_exitcode_is_not_zero=False)
+        return result[0] == 0
 
     @GeneralUtilities.check_arguments
     def git_remove_branch(self, folder: str, branchname: str) -> None:
-        self.is_git_or_bare_git_repository(folder)
+        self.assert_is_git_repository(folder)
         self.run_program("git", f"branch -D {branchname}", folder, throw_exception_if_exitcode_is_not_zero=True)
 
     @GeneralUtilities.check_arguments

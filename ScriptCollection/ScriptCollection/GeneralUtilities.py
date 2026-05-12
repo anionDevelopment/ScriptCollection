@@ -735,6 +735,22 @@ class GeneralUtilities:
 
     @staticmethod
     @check_arguments
+    def to_snake_case(s: str) -> str:
+        return '_'.join(t.lower() for t in re.split(r'[^a-zA-Z0-9]+', s) if t)
+
+    @staticmethod
+    @check_arguments
+    def to_camel_case(s: str) -> str:
+        words = [t.lower() for t in re.split(r'[^a-zA-Z0-9]+', s) if t]
+        return words[0] + ''.join(w.capitalize() for w in words[1:]) if words else ''
+
+    @staticmethod
+    @check_arguments
+    def to_kebab_case(s: str) -> str:
+        return '-'.join(t.lower() for t in re.split(r'[^a-zA-Z0-9]+', s) if t)
+
+    @staticmethod
+    @check_arguments
     def find_between(s: str, start: str, end: str) -> str:
         return s.split(start)[1].split(end)[0]
 
@@ -1525,7 +1541,7 @@ class GeneralUtilities:
             Platform.MacOS_ARM64:   "linux/arm64",  # macOS → linux container
         }
         return mapping[platform_value]
-    
+
     @staticmethod
     @check_arguments
     def platform_to_dotnet_runtime_identifier(platform_value: Platform) -> str:
@@ -1536,6 +1552,7 @@ class GeneralUtilities:
             Platform.MacOS_ARM64:   "osx-arm64",
         }
         return mapping[platform_value]
+
     @staticmethod
     @check_arguments
     def platform_to_go_runtime_identifier(platform_value: Platform) -> str:
@@ -1549,9 +1566,24 @@ class GeneralUtilities:
     @check_arguments
     def get_all_platforms() -> list[Platform]:
         return [
-            Platform.Windows_AMD64, 
-            Platform.Linux_AMD64, 
-            Platform.Linux_ARM64, 
+            Platform.Windows_AMD64,
+            Platform.Linux_AMD64,
+            Platform.Linux_ARM64,
             Platform.MacOS_ARM64,
         ]
-    
+
+    @staticmethod
+    @check_arguments
+    def get_python_executable() -> str:
+        #virtual_env = os.environ.get("VIRTUAL_ENV")
+        #if GeneralUtilities.string_has_content(virtual_env):
+        #    if platform.system() == "Windows":
+        #        result = os.path.join(virtual_env, "Scripts", "python.exe")
+        #    else:
+        #        result = os.path.join(virtual_env, "bin", "python")
+        if GeneralUtilities.string_has_content(sys.executable):
+            result = sys.executable
+        else:
+            result = "python"
+        GeneralUtilities.assert_condition(os.path.isfile(result), f"Python executable does not exist: '{result}'")
+        return result
