@@ -1572,18 +1572,3 @@ class GeneralUtilities:
             Platform.MacOS_ARM64,
         ]
 
-    @staticmethod
-    @check_arguments
-    def get_python_executable() -> str:
-        #virtual_env = os.environ.get("VIRTUAL_ENV")
-        #if GeneralUtilities.string_has_content(virtual_env):
-        #    if platform.system() == "Windows":
-        #        result = os.path.join(virtual_env, "Scripts", "python.exe")
-        #    else:
-        #        result = os.path.join(virtual_env, "bin", "python")
-        if GeneralUtilities.string_has_content(sys.executable):
-            result = sys.executable
-        else:
-            result = "python"
-        GeneralUtilities.assert_condition(os.path.isfile(result), f"Python executable does not exist: '{result}'")
-        return result

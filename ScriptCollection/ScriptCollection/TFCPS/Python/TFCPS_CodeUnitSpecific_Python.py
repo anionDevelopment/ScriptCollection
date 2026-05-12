@@ -15,7 +15,7 @@ class TFCPS_CodeUnitSpecific_Python_Functions(TFCPS_CodeUnitSpecific_Base):
         codeunit_folder = self.get_codeunit_folder()
         target_directory = GeneralUtilities.resolve_relative_path("../Artifacts/BuildResult_Wheel", os.path.join(self.get_artifacts_folder()))
         GeneralUtilities.ensure_directory_exists(target_directory)
-        self._protected_sc.run_program(GeneralUtilities.get_python_executable(), f"-m build --wheel --outdir {target_directory}", codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
+        self._protected_sc.run_program(self._protected_sc.get_python_executable(), f"-m build --wheel --outdir {target_directory}", codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
         self.generate_bom_for_python_project( )
         self.copy_source_files_to_output_directory()
 
