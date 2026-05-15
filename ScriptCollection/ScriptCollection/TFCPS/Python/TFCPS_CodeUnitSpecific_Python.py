@@ -30,7 +30,7 @@ class TFCPS_CodeUnitSpecific_Python_Functions(TFCPS_CodeUnitSpecific_Base):
         GeneralUtilities.ensure_directory_exists(bom_folder_full)
         if not os.path.isfile(os.path.join(codeunit_folder, "requirements.txt")):
             raise ValueError(f"Codeunit {codeunitname} does not have a 'requirements.txt'-file.")
-        # TODO check that all values from setup.cfg are contained in requirements.txt
+        # TODO check that all values from pyproject.cfg are contained in requirements.txt
         result = self._protected_sc.run_program("cyclonedx-py", "requirements", codeunit_folder)
         bom_file_relative_json = f"{bom_folder}/{codeunitname}.{codeunitversion}.bom.json"
         bom_file_relative_xml = f"{bom_folder}/{codeunitname}.{codeunitversion}.bom.xml"
@@ -75,7 +75,7 @@ class TFCPS_CodeUnitSpecific_Python_Functions(TFCPS_CodeUnitSpecific_Base):
         self.do_common_tasks_base(current_codeunit_version)
         codeunitname =self.get_codeunit_name()
         codeunit_version = self.tfcps_Tools_General.get_version_of_project(self.get_repository_folder()) 
-        self._protected_sc.replace_version_in_ini_file(GeneralUtilities.resolve_relative_path("./setup.cfg", self.get_codeunit_folder()), codeunit_version)
+        self._protected_sc.replace_version_in_ini_file(GeneralUtilities.resolve_relative_path("./pyproject.toml", self.get_codeunit_folder()), codeunit_version)
         self._protected_sc.replace_version_in_python_file(GeneralUtilities.resolve_relative_path(f"./{codeunitname}/{codeunitname}Core.py", self.get_codeunit_folder()), codeunit_version)
 
     @GeneralUtilities.check_arguments
@@ -107,14 +107,14 @@ class TFCPS_CodeUnitSpecific_Python_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def get_dependencies_from_setupcfg(self)->list[Dependency]:
-        setupcfg_file=os.path.join(self.get_codeunit_folder(),"setup.cfg")
+        setupcfg_file=os.path.join(self.get_codeunit_folder(),"pyproject.toml")
         lines = GeneralUtilities.read_lines_from_file(setupcfg_file)
         result:list[Dependency]=[]
         is_in_dependency_section=False
         for line in lines:
-            if line=="install_requires =":
+            if line=="dependencies = [":
                 is_in_dependency_section=True
-            elif line.startswith(" "):
+            elif line.startswith("    "):
                 if is_in_dependency_section:
                     match = re.match(r"^\s*([A-Za-z0-9_\-]+)\s*([<>=!~]+)?\s*(.*)?$", line)
                     if match:
@@ -173,13 +173,13 @@ class TFCPS_CodeUnitSpecific_Python_Functions(TFCPS_CodeUnitSpecific_Base):
     
     @GeneralUtilities.check_arguments
     def set_dependency_version(self,name:str,new_version:str)->None:
-        self.__set_dependency_version_in_setupcfg(name,new_version)
+        self.__set_dependency_version_in_pyprojecttoml(name,new_version)
         self.__set_dependency_version_in_requirementstxt(name,new_version)
         self.__set_dependency_version_in_otherrequirementstxt(name,new_version)
 
     @GeneralUtilities.check_arguments
-    def __set_dependency_version_in_setupcfg(self,name:str,new_version:str)->None:
-        setupcfg_file=os.path.join(self.get_codeunit_folder(),"setup.cfg")
+    def __set_dependency_version_in_pyprojecttoml(self,name:str,new_version:str)->None:
+        setupcfg_file=os.path.join(self.get_codeunit_folder(),"pyproject.toml")
         lines=GeneralUtilities.read_lines_from_file(setupcfg_file)
         new_lines:list[str]=[]
         for line in lines:

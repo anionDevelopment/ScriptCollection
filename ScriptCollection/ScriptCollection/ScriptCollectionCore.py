@@ -39,7 +39,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.81"
+version = "4.2.82"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -355,7 +355,7 @@ class ScriptCollectionCore:
 
     @GeneralUtilities.check_arguments
     def replace_version_in_ini_file(self, file: str, new_version_value: str):
-        GeneralUtilities.write_text_to_file(file, re.sub("version = \\d+\\.\\d+\\.\\d+", f"version = {new_version_value}", GeneralUtilities.read_text_from_file(file)))
+        GeneralUtilities.write_text_to_file(file, re.sub("version = \\\"?\\d+\\.\\d+\\.\\d+\\\"?", f"version = \"{new_version_value}\"", GeneralUtilities.read_text_from_file(file)))
 
     @GeneralUtilities.check_arguments
     def replace_version_in_nuspec_file(self, nuspec_file: str, new_version: str) -> None:
