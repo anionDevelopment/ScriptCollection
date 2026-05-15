@@ -13,6 +13,7 @@ import zipfile
 import math
 import base64
 import os
+import sys
 from html.parser import HTMLParser
 from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
@@ -38,7 +39,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.81"
+version = "4.2.82"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -313,6 +314,18 @@ class ScriptCollectionCore:
                 self.run_program("docker",arg,arguments_for_log=arg_for_log,print_live_output=self.log.loglevel==LogLevel.Debug)
         
     @GeneralUtilities.check_arguments
+    def get_python_executable(self) -> str:
+        configured_file = os.path.join(self.get_scriptcollection_configuration_folder(), "PythonExecutable.txt")
+        if os.path.isfile(configured_file):
+            result = GeneralUtilities.read_text_from_file(configured_file).strip()
+            GeneralUtilities.assert_condition(os.path.isfile(result), f"Python executable does not exist: '{result}'")
+        elif GeneralUtilities.string_has_content(sys.executable):
+            result = sys.executable
+        else:
+            result = "python"
+        return result
+
+    @GeneralUtilities.check_arguments
     def python_file_has_errors(self, file: str, working_directory: str, treat_warnings_as_errors: bool = True) -> tuple[bool, list[str]]:
         errors = list()
         filename = os.path.relpath(file, working_directory)
@@ -342,7 +355,7 @@ class ScriptCollectionCore:
 
     @GeneralUtilities.check_arguments
     def replace_version_in_ini_file(self, file: str, new_version_value: str):
-        GeneralUtilities.write_text_to_file(file, re.sub("version = \\d+\\.\\d+\\.\\d+", f"version = {new_version_value}", GeneralUtilities.read_text_from_file(file)))
+        GeneralUtilities.write_text_to_file(file, re.sub("version = \\\"?\\d+\\.\\d+\\.\\d+\\\"?", f"version = \"{new_version_value}\"", GeneralUtilities.read_text_from_file(file)))
 
     @GeneralUtilities.check_arguments
     def replace_version_in_nuspec_file(self, nuspec_file: str, new_version: str) -> None:

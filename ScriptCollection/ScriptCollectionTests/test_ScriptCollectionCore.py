@@ -356,7 +356,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
         repository = str(Path(__file__).parent.parent.parent.absolute())
 
         # act
-        result = sc.file_is_git_ignored(os.path.join("ScriptCollection", "setup.cfg"), repository)
+        result = sc.file_is_git_ignored(os.path.join("ScriptCollection", "pyproject.toml"), repository)
 
         # assert
         assert result is False

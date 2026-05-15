@@ -851,7 +851,7 @@ def CreateRelease()->int:
         arguments=arguments+" --updatedependencies"
     if args.lazymode:
         arguments=arguments+" --lazymode"
-    sc.run_program(GeneralUtilities.get_python_executable(), arguments, scripts_folder,print_live_output=True)
+    sc.run_program(sc.get_python_executable(), arguments, scripts_folder,print_live_output=True)
 
     return 0
 
