@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.2.84"
+version = "4.2.85"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
@@ -129,8 +129,8 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["PPLibrary*"]
-exclude = ["PPLibraryTests*"]
+include = ["ScriptCollection*"]
+exclude = ["ScriptCollectionTests*"]
 
 [tool.setuptools.package-data]
 ScriptCollection = ["Resources/**/*"]
