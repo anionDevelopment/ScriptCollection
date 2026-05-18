@@ -6,6 +6,7 @@ from shutil import copyfile
 import argparse
 from .GeneralUtilities import GeneralUtilities
 from .ScriptCollectionCore import ScriptCollectionCore
+from .SCLog import LogLevel
 
 
 class CertificateUpdater:
@@ -107,13 +108,15 @@ class CertificateUpdater:
                     GeneralUtilities.write_message_to_stdout(f"Create certificate for domain {domain}")
                 dockerargument = f"run --rm --name {certbot_container_name} --volume {self.__letsencrypt_folder}:/etc/letsencrypt"
                 dockerargument = dockerargument + f" --volume {self.__log_folder}:/var/log/letsencrypt -p 80:80 "+self.__certbot_image_address_with_tag
-                certbotargument = f"--standalone --email {self.__email} --agree-tos --force-renewal --rsa-key-size 4096 --non-interactive --no-eff-email --domain {domain}"
+                certbotargument = f"--standalone --email {self.__email} --agree-tos --force-renewal --rsa-key-size 4096 --non-interactive --no-eff-email --domain {domain} certonly"
+                if self.__sc.log.loglevel==LogLevel.Debug:
+                    certbotargument=certbotargument+" -v"
                 if (certificate_for_domain_already_exists):
-                    self.__sc.run_program("docker", f"{dockerargument} certonly --no-random-sleep-on-renew {certbotargument}", self.__current_folder)
+                    self.__sc.run_program("docker", f"{dockerargument} --no-random-sleep-on-renew {certbotargument}", self.__current_folder)
                     self.__replace_symlinks_by_files(domain)
                     GeneralUtilities.write_message_to_stdout(f"Certificates updated for {domain}.")
                 else:
-                    self.__sc.run_program("docker", f"{dockerargument} certonly --cert-name {domain} {certbotargument}", self.__current_folder)
+                    self.__sc.run_program("docker", f"{dockerargument} --cert-name {domain} {certbotargument}", self.__current_folder)
             except Exception as exception:
                 error_occurred = True
                 GeneralUtilities.write_exception_to_stderr_with_traceback(exception, traceback, "Error while updating certificate")
@@ -137,10 +140,13 @@ class CertificateUpdater:
 
     @GeneralUtilities.check_arguments
     def update_certificates_if_required(self) -> None:
+        now = datetime.now()
         parser = argparse.ArgumentParser(description="Updated lets-encrypt-certificates")
         parser.add_argument('-f', '--force', action='store_true', required=False, default=False)
+        parser.add_argument('-v', '--verbose', action='store_true', required=False, default=False)
         args = parser.parse_args(self.__arguments)
-        now = datetime.now()
+        if args.verbose:
+            self.__sc.log.loglevel = LogLevel.Debug
         if (self.__get_last_certificate_update_date()+timedelta(days=self.maximal_age_of_certificates_in_days)) < now or args.force:
             GeneralUtilities.write_message_to_stdout(f"Update certificates...")
             self.__update_certificates()
