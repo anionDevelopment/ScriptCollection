@@ -100,13 +100,13 @@ class TFCPS_CodeUnitSpecific_Python_Functions(TFCPS_CodeUnitSpecific_Base):
     @GeneralUtilities.check_arguments
     def get_dependencies(self)->dict[str,set[str]]:
         return GeneralUtilities.merge_dependency_lists([
-            self.get_dependencies_from_setupcfg(),
+            self.get_dependencies_from_pyprojecttoml(),
             self.get_dependencies_from_requirementstxt(),
             self.get_dependencies_from_otherrequirementstxt()
         ])
 
     @GeneralUtilities.check_arguments
-    def get_dependencies_from_setupcfg(self)->list[Dependency]:
+    def get_dependencies_from_pyprojecttoml(self)->list[Dependency]:
         setupcfg_file=os.path.join(self.get_codeunit_folder(),"pyproject.toml")
         lines = GeneralUtilities.read_lines_from_file(setupcfg_file)
         result:list[Dependency]=[]
