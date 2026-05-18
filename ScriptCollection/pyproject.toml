@@ -129,8 +129,8 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["PPLibrary*"]
-exclude = ["PPLibraryTests*"]
+include = ["ScriptCollection*"]
+exclude = ["ScriptCollectionTests*"]
 
 [tool.setuptools.package-data]
 ScriptCollection = ["Resources/**/*"]
