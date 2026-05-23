@@ -471,18 +471,20 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         target_file = os.path.join(coverage_file_folder, "TestCoverage.xml")
         GeneralUtilities.ensure_file_does_not_exist(target_file)
 
-        args: list[str] = ["test", f"{codeunit_name}.sln", "-c", dotnet_build_configuration]
+        args: list[str] = ["test", f"{codeunit_name}.sln", "-c", dotnet_build_configuration, "-o", temp_folder]
         if os.path.isfile(os.path.join(codeunit_folder, runsettings_file)):
             args += ["--settings", runsettings_file]
         args += ["--results-directory","./TestResults"]
-        program_output=self._protected_sc.run_program_argsasarray("dotnet", args, codeunit_folder, print_live_output=self.get_verbosity()==LogLevel.Debug, timeoutInSeconds=60*20)
-        output_lines=program_output[1].split("\n")
-        output_lines=[line for line in output_lines if GeneralUtilities.string_has_content(line)]
-        generated_coverage_file: str = output_lines[-1].strip()#the cobertura file is printed in the end of the output by the xplat collector
-        GeneralUtilities.assert_file_exists(generated_coverage_file)
-        shutil.copyfile(generated_coverage_file, target_file)
+        try:
+            program_output=self._protected_sc.run_program_argsasarray("dotnet", args, codeunit_folder, print_live_output=self.get_verbosity()==LogLevel.Debug, timeoutInSeconds=60*20)
+            output_lines=program_output[1].split("\n")
+            output_lines=[line for line in output_lines if GeneralUtilities.string_has_content(line)]
+            generated_coverage_file: str = output_lines[-1].strip()#the cobertura file is printed in the end of the output by the xplat collector
+            GeneralUtilities.assert_file_exists(generated_coverage_file)
+            shutil.copyfile(generated_coverage_file, target_file)
+        finally:
+            GeneralUtilities.ensure_directory_does_not_exist(temp_folder)
 
-        GeneralUtilities.ensure_directory_does_not_exist(temp_folder)
         self.__remove_unrelated_package_from_testcoverage_file(target_file, codeunit_name)
         root: etree._ElementTree = etree.parse(target_file)
         source_base_path_in_coverage_file: str = root.xpath("//coverage/sources/source/text()")[0].replace("\\", "/")
