@@ -3464,7 +3464,7 @@ OCR-content:
 
     @GeneralUtilities.check_arguments
     def write_file_list_for_repository(self,repository_folder:str,target_file:str="./FileList.txt",ignore_ignored_files:bool=True,include_submodules: bool = True) -> None:
-        if os.path.isabs(target_file):
+        if not os.path.isabs(target_file):
             target_file=GeneralUtilities.resolve_relative_path(target_file,repository_folder)
         target_file=GeneralUtilities.normalize_path(target_file)
         files=[path.replace("\\","/") for path in self.get_all_files_in_git_repository(repository_folder,ignore_ignored_files,include_submodules)]
