@@ -39,7 +39,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.89"
+version = "4.2.90"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -178,14 +178,10 @@ class ScriptCollectionCore:
 
     @GeneralUtilities.check_arguments
     def get_scriptcollection_configuration_folder(self)->str:
-        user_folder = str(Path.home())
-        result = os.path.join(user_folder, ".ScriptCollection")
-        result=GeneralUtilities.normalize_path(result)
-        GeneralUtilities.ensure_directory_exists(result)
-        return result
+        return GeneralUtilities.get_scriptcollection_configuration_folder()
 
     def get_global_cache_folder(self)->str:
-        result = os.path.join(self.get_scriptcollection_configuration_folder(), "GlobalCache")
+        result = os.path.join(GeneralUtilities.get_scriptcollection_configuration_folder(), "GlobalCache")
         result=GeneralUtilities.normalize_path(result)
         GeneralUtilities.ensure_directory_exists(result)
         return result
@@ -313,17 +309,6 @@ class ScriptCollectionCore:
                 arg_for_log=f"login {registry} -u {username} -p ***"
                 self.run_program("docker",arg,arguments_for_log=arg_for_log,print_live_output=self.log.loglevel==LogLevel.Debug)
         
-    @GeneralUtilities.check_arguments
-    def get_python_executable(self) -> str:
-        configured_file = os.path.join(self.get_scriptcollection_configuration_folder(), "PythonExecutable.txt")
-        if os.path.isfile(configured_file):
-            result = GeneralUtilities.read_text_from_file(configured_file).strip()
-            GeneralUtilities.assert_condition(os.path.isfile(result), f"Python executable does not exist: '{result}'")
-        elif GeneralUtilities.string_has_content(sys.executable):
-            result = sys.executable
-        else:
-            result = "python"
-        return result
 
     @GeneralUtilities.check_arguments
     def python_file_has_errors(self, file: str, working_directory: str, treat_warnings_as_errors: bool = True) -> tuple[bool, list[str]]:

@@ -103,7 +103,7 @@ class TFCPS_MergeToStable:
             push_script:str=os.path.join( self.createRelease_configuration.build_repo,"Scripts","CreateRelease",f"PushArtifacts.{codeunit}.py")
             if os.path.isfile(push_script):
                 self.sc.log.log(f"Push artifacts of codeunit {codeunit}...")
-                self.sc.run_program(self.sc.get_python_executable(),os.path.basename(push_script),os.path.dirname(push_script))
+                self.sc.run_program(GeneralUtilities.get_python_executable(),os.path.basename(push_script),os.path.dirname(push_script))
             else:
                 self.sc.log.log(f"Codeunit {codeunit} does not have artifacts to push. (Scriptfile \"{push_script}\" does not exist.)",LogLevel.Debug)
 

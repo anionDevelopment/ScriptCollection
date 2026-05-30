@@ -75,7 +75,7 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
         codeunit_version = current_codeunit_version
         self._protected_sc.replace_version_in_dockerfile_file(GeneralUtilities.resolve_relative_path(f"./{codeunitname}/Dockerfile", codeunit_folder), codeunit_version)
         self.do_common_tasks_base(current_codeunit_version)
-        self.tfcps_Tools_General.standardized_tasks_update_version_in_docker_examples(codeunit_folder,codeunit_version)
+        self.tfcps_Tools_General.standardized_tasks_update_version_in_docker_examples_if_available(codeunit_folder,codeunit_version)
  
     @GeneralUtilities.check_arguments
     def generate_reference(self) -> None:
