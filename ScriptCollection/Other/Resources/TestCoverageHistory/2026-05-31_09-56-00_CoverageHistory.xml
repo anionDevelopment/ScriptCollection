@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<coverage version="1.0" date="2026-05-31_09-56-00" tag="v4.2.90">
+  <assembly name="ScriptCollection">
+    <class name="AbstractImageHandler.py" coveredlines="17" coverablelines="26" totallines="38" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="AnionBuildPlatform.py" coveredlines="0" coverablelines="117" totallines="199" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="CertificateGeneratorInformationBase.py" coveredlines="0" coverablelines="5" totallines="8" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="CertificateGeneratorInformationGenerate.py" coveredlines="0" coverablelines="4" totallines="6" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="CertificateGeneratorInformationNoGenerate.py" coveredlines="0" coverablelines="4" totallines="7" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="CertificateUpdater.py" coveredlines="0" coverablelines="136" totallines="155" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="Executables.py" coveredlines="0" coverablelines="701" totallines="921" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="GeneralUtilities.py" coveredlines="797" coverablelines="1312" totallines="1607" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="HTTPMaintenanceOverheadHelper.py" coveredlines="0" coverablelines="24" totallines="36" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="ImageHandlerDebian.py" coveredlines="9" coverablelines="14" totallines="20" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="ImageHandlerDebianSlim.py" coveredlines="9" coverablelines="14" totallines="20" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="ImageHandlerGeneric.py" coveredlines="9" coverablelines="14" totallines="20" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="ImageHandlerGenericV.py" coveredlines="9" coverablelines="14" totallines="20" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="ImageHandlerGitlabCE.py" coveredlines="9" coverablelines="14" totallines="20" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="ImageHandlerGitlabEE.py" coveredlines="9" coverablelines="14" totallines="20" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="OCIImageManager.py" coveredlines="50" coverablelines="146" totallines="190" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="ProcessesRunner.py" coveredlines="0" coverablelines="33" totallines="43" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="ProgramRunnerBase.py" coveredlines="25" coverablelines="32" totallines="47" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="ProgramRunnerMock.py" coveredlines="0" coverablelines="2" totallines="2" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="ProgramRunnerPopen.py" coveredlines="26" coverablelines="43" totallines="57" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="ProgramRunnerSudo.py" coveredlines="0" coverablelines="79" totallines="108" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="SCLog.py" coveredlines="64" coverablelines="91" totallines="115" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="ScriptCollectionCore.py" coveredlines="869" coverablelines="2613" totallines="3483" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_CodeUnit_BuildCodeUnit.py" coveredlines="0" coverablelines="102" totallines="135" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_CodeUnit_BuildCodeUnits.py" coveredlines="0" coverablelines="211" totallines="301" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_CodeUnitSpecific_Base.py" coveredlines="0" coverablelines="337" totallines="433" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_CodeUnitSpecific_Docker.py" coveredlines="0" coverablelines="169" totallines="192" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_CodeUnitSpecific_DotNet.py" coveredlines="0" coverablelines="414" totallines="599" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_CodeUnitSpecific_Flutter.py" coveredlines="0" coverablelines="109" totallines="137" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_CodeUnitSpecific_Go.py" coveredlines="0" coverablelines="58" totallines="72" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_CodeUnitSpecific_Maven.py" coveredlines="0" coverablelines="31" totallines="42" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_CodeUnitSpecific_NodeJS.py" coveredlines="0" coverablelines="175" totallines="232" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_CodeUnitSpecific_Python.py" coveredlines="0" coverablelines="201" totallines="239" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_CodeUnitSpecific_Rust.py" coveredlines="0" coverablelines="31" totallines="42" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_CreateRelease.py" coveredlines="0" coverablelines="79" totallines="98" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_Generic.py" coveredlines="0" coverablelines="38" totallines="44" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_MergeToMain.py" coveredlines="0" coverablelines="103" totallines="128" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_MergeToStable.py" coveredlines="0" coverablelines="251" totallines="356" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_PreBuildCodeunitsScript.py" coveredlines="0" coverablelines="41" totallines="48" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+    <class name="TFCPS_Tools_General.py" coveredlines="262" coverablelines="1317" totallines="1566" coveredbranches="0" totalbranches="0" coveredcodeelements="0" fullcoveredcodeelements="0" totalcodeelements="0" />
+  </assembly>
+</coverage>
