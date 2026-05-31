@@ -4,6 +4,7 @@ import shutil
 import tempfile
 import uuid
 import json
+import csv
 from lxml import etree
 import yaml
 from .CertificateGeneratorInformationBase import CertificateGeneratorInformationBase
@@ -23,6 +24,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def build(self,runtimes:list[str],generate_open_api_spec:bool) -> None:
+        self.__add_custom_nuget_sources()
         if self.is_library:
             self.standardized_tasks_build_for_dotnet_library_project(runtimes)
             GeneralUtilities.assert_condition(not generate_open_api_spec,"OpenAPI-Specification can not be generated for a library.")
@@ -32,11 +34,56 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
                 self.generate_openapi_file(runtimes[0])
 
     @GeneralUtilities.check_arguments
+    def __add_custom_nuget_sources(self) -> None:
+        self._protected_sc.log.log(f"Add custom NuGet-sources from '{csv_file}'...")
+        sources:list[tuple[str,str,str,str]] = []
+        
+        csv_file = os.path.join(self._protected_sc.get_scriptcollection_configuration_folder(), "TFCPS", "CustomC#Dependencies.csv")
+        if  os.path.isfile(csv_file):
+            with open(csv_file, encoding="utf-8-sig", newline="") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    name = (row.get("Name") or "").strip()
+                    url = (row.get("Url") or "").strip()
+                    username = (row.get("Username") or "").strip()
+                    password = (row.get("Password") or "").strip()
+                    if not name or not url:
+                        continue
+                    sources.append((name, url, username, password))
+
+        env_name_pattern = re.compile(r"^Dependency_CSharp_(.+?)_Name$")
+        for env_var_name, env_var_value in os.environ.items():
+            m = env_name_pattern.match(env_var_name)
+            if not m:
+                continue
+            dependency_name = m.group(1)
+            name = (env_var_value or "").strip()
+            url = (os.environ.get(f"Dependency_CSharp_{dependency_name}_URL") or "").strip()
+            username = (os.environ.get(f"Dependency_CSharp_{dependency_name}_Username") or "").strip()
+            password = (os.environ.get(f"Dependency_CSharp_{dependency_name}_Passwort") or "").strip()
+            if not name or not url:
+                continue
+            sources.append((name, url, username, password))
+
+        for name, url, username, password in sources:
+            #TODO add only the sources which are needed by the project
+            self._protected_sc.log.log(f"Add NuGet-source '{name}' with url '{url}'",LogLevel.Debug)
+            args = ["nuget", "add", "source", url, "--name", name]
+            if username:
+                args += ["--username", username]
+            if password:
+                args += ["--password", password, "--store-password-in-clear-text"]
+            args_for_log = list(args)
+            if password:
+                args_for_log[args_for_log.index(password)] = "***"
+            self._protected_sc.run_program_argsasarray("dotnet", args, arguments_for_log=args_for_log, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.get_verbosity()==LogLevel.Debug)
+
+    @GeneralUtilities.check_arguments
     def generate_openapi_file(self, runtime: str) -> None:
         swagger_document_name: str = "APISpecification"
         self._protected_sc.log.log("Generate OpenAPI-specification-file...")
-        codeunitname =self.get_codeunit_name()
-        repository_folder =self.get_repository_folder()
+        codeunitname = self.get_codeunit_name()
+        repository_folder = self.get_repository_folder()
         codeunit_folder = os.path.join(repository_folder, codeunitname)
         artifacts_folder = os.path.join(codeunit_folder, "Other", "Artifacts")
         GeneralUtilities.ensure_directory_exists(os.path.join(artifacts_folder, "APISpecification"))
