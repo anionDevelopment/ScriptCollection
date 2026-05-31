@@ -1571,3 +1571,37 @@ class GeneralUtilities:
             Platform.Linux_ARM64,
             Platform.MacOS_ARM64,
         ]
+
+    @staticmethod
+    @check_arguments
+    def get_scriptcollection_configuration_folder() -> str:
+        result = os.path.join(str(Path.home()), ".ScriptCollection")
+        result = GeneralUtilities.normalize_path(result)
+        GeneralUtilities.ensure_directory_exists(result)
+        return result
+
+    @staticmethod
+    @check_arguments
+    def get_python_executable() -> str:
+        configured_file = os.path.join(GeneralUtilities.get_scriptcollection_configuration_folder(), "PythonExecutable.txt")
+        if os.path.isfile(configured_file):
+            result = GeneralUtilities.read_text_from_file(configured_file).strip()
+            GeneralUtilities.assert_condition(os.path.isfile(result), f"Python executable does not exist: '{result}'")
+        elif GeneralUtilities.string_has_content(sys.executable):
+            result = sys.executable
+        else:
+            result = "python"
+        return result
+
+    @staticmethod
+    @check_arguments
+    def get_docker_executable() -> str:
+        configured_file = os.path.join(GeneralUtilities.get_scriptcollection_configuration_folder(), "DockerExecutable.txt")
+        if os.path.isfile(configured_file):
+            result = GeneralUtilities.read_text_from_file(configured_file).strip()
+            GeneralUtilities.assert_condition(os.path.isfile(result), f"Docker executable does not exist: '{result}'")
+        elif GeneralUtilities.string_has_content(sys.executable):
+            result = sys.executable
+        else:
+            result = "docker"
+        return result

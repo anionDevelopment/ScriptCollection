@@ -52,21 +52,21 @@ class TFCPS_CodeUnit_BuildCodeUnit:
             arguments = f"{arguments} --ispremerge"
 
         self.sc.log.log("Do common tasks...")
-        self.sc.run_program(self.sc.get_python_executable(), f"CommonTasks.py {arguments}", os.path.join(self.codeunit_folder, "Other"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
+        self.sc.run_program(GeneralUtilities.get_python_executable(), f"CommonTasks.py {arguments}", os.path.join(self.codeunit_folder, "Other"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
         self.verify_artifact_exists(self.codeunit_folder, dict[str, bool]({"License": True, "DiffReport": True}))
 
         self.sc.log.log("Build...")
-        self.sc.run_program(self.sc.get_python_executable(), f"Build.py {arguments}", os.path.join(self.codeunit_folder, "Other", "Build"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
+        self.sc.run_program(GeneralUtilities.get_python_executable(), f"Build.py {arguments}", os.path.join(self.codeunit_folder, "Other", "Build"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
         artifacts = {"BuildResult_.+": True, "BOM": False, "SourceCode":  self.tFCPS_Tools.codeunit_has_testable_sourcecode(codeunit_file)}
         self.verify_artifact_exists(self.codeunit_folder, dict[str, bool](artifacts))
 
         if self.tFCPS_Tools.codeunit_has_testable_sourcecode(codeunit_file):
             self.sc.log.log("Run testcases...")
-            self.sc.run_program(self.sc.get_python_executable(), f"RunTestcases.py {arguments}", os.path.join(self.codeunit_folder, "Other", "QualityCheck"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
+            self.sc.run_program(GeneralUtilities.get_python_executable(), f"RunTestcases.py {arguments}", os.path.join(self.codeunit_folder, "Other", "QualityCheck"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
             self.verify_artifact_exists(self.codeunit_folder, dict[str, bool]({"TestCoverage": True, "TestCoverageReport": False}))
 
         self.sc.log.log("Check for linting-issues...")
-        linting_result = self.sc.run_program(self.sc.get_python_executable(), f"Linting.py {arguments}", os.path.join(self.codeunit_folder, "Other", "QualityCheck"), print_live_output=self.sc.log.loglevel==LogLevel.Quiet, throw_exception_if_exitcode_is_not_zero=False)
+        linting_result = self.sc.run_program(GeneralUtilities.get_python_executable(), f"Linting.py {arguments}", os.path.join(self.codeunit_folder, "Other", "QualityCheck"), print_live_output=self.sc.log.loglevel==LogLevel.Quiet, throw_exception_if_exitcode_is_not_zero=False)
         if linting_result[0] != 0:
             self.sc.log.log("Linting-issues were found.", LogLevel.Warning)
             for line in GeneralUtilities.string_to_lines(linting_result[1]):
@@ -76,14 +76,14 @@ class TFCPS_CodeUnit_BuildCodeUnit:
 
         self.sc.log.log("Generate reference...")
         try:
-            self.sc.run_program(self.sc.get_python_executable(), "GenerateReference.py", os.path.join(self.codeunit_folder, "Other", "Reference"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
+            self.sc.run_program(GeneralUtilities.get_python_executable(), "GenerateReference.py", os.path.join(self.codeunit_folder, "Other", "Reference"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
         except Exception as e:
             self.sc.log.log_exception(f"Generating reference failed with the following error",e, LogLevel.Warning)
         self.verify_artifact_exists(self.codeunit_folder, dict[str, bool]({"Reference": True}))
 
         if os.path.isfile(os.path.join(self.codeunit_folder, "Other", "OnBuildingFinished.py")):
             self.sc.log.log('Finalize building codeunits...')
-            self.sc.run_program(self.sc.get_python_executable(), f"OnBuildingFinished.py {arguments}", os.path.join(self.codeunit_folder, "Other"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
+            self.sc.run_program(GeneralUtilities.get_python_executable(), f"OnBuildingFinished.py {arguments}", os.path.join(self.codeunit_folder, "Other"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
 
         artifacts_folder = os.path.join(self.codeunit_folder, "Other", "Artifacts")
         artifactsinformation_file = os.path.join(artifacts_folder, f"{self.codeunit_name}.artifactsinformation.xml")
@@ -132,4 +132,4 @@ class TFCPS_CodeUnit_BuildCodeUnit:
     @GeneralUtilities.check_arguments
     def update_dependencies(self) -> None:
         self.sc.log.log("Update dependencies...")
-        self.sc.run_program(self.sc.get_python_executable(), "UpdateDependencies.py", os.path.join(self.codeunit_folder, "Other"),print_live_output=True)
+        self.sc.run_program(GeneralUtilities.get_python_executable(), "UpdateDependencies.py", os.path.join(self.codeunit_folder, "Other"),print_live_output=True)
