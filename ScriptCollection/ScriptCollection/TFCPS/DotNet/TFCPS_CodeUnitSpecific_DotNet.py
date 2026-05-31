@@ -148,7 +148,10 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             GeneralUtilities.ensure_directory_does_not_exist(outputfolder)
             self._protected_sc.run_program("dotnet", "clean", csproj_file_folder)
             GeneralUtilities.ensure_directory_exists(outputfolder)
-            self._protected_sc.run_program("dotnet", "restore", codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
+            restore_args = ["restore"]
+            if os.path.isfile(os.path.join(codeunit_folder, "NuGet.config")):
+                restore_args += ["--configfile", "NuGet.config"]
+            self._protected_sc.run_program_argsasarray("dotnet", restore_args, codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
             self._protected_sc.run_program_argsasarray("dotnet", ["build", csproj_file_name, "-c", dotnet_build_configuration, "-o", outputfolder, "--runtime", runtime], csproj_file_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
             if copy_license_file_to_target_folder:
                 license_file = os.path.join(repository_folder, "License.txt")
