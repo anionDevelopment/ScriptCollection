@@ -35,11 +35,11 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def __add_custom_nuget_sources(self) -> None:
-        self._protected_sc.log.log(f"Add custom NuGet-sources from '{csv_file}'...")
         sources:list[tuple[str,str,str,str]] = []
         
         csv_file = os.path.join(self._protected_sc.get_scriptcollection_configuration_folder(), "TFCPS", "CustomC#Dependencies.csv")
         if  os.path.isfile(csv_file):
+            self._protected_sc.log.log(f"Add custom NuGet-sources from '{csv_file}'...",LogLevel.Debug)
             with open(csv_file, encoding="utf-8-sig", newline="") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
@@ -51,6 +51,8 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
                         continue
                     sources.append((name, url, username, password))
 
+        if len(os.environ.items()) > 0:
+            self._protected_sc.log.log(f"Add custom NuGet-sources from environment variables...",LogLevel.Debug)
         env_name_pattern = re.compile(r"^Dependency_CSharp_(.+?)_Name$")
         for env_var_name, env_var_value in os.environ.items():
             m = env_name_pattern.match(env_var_name)
