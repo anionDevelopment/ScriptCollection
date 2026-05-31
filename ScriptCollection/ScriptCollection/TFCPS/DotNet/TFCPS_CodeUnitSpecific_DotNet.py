@@ -79,6 +79,13 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             if password:
                 args_for_log[args_for_log.index(password)] = "***"
             self._protected_sc.run_program_argsasarray("dotnet", args, arguments_for_log=args_for_log, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.get_verbosity()==LogLevel.Debug)
+        
+        self._protected_sc.run_program_argsasarray("dotnet", ["nuget", "add", "source", "https://api.nuget.org/v3/index.json", "--name", "nuget.org"], LogLevel.Debug, print_live_output=True)
+
+        if self._protected_sc.log.loglevel==LogLevel.Debug:
+            self._protected_sc.run_program("dotnet", "nuget list source --format detailed", LogLevel.Debug, print_live_output=True)
+        else:
+            self._protected_sc.run_program("dotnet", "nuget list source",LogLevel.Information, print_live_output=True)
 
     @GeneralUtilities.check_arguments
     def generate_openapi_file(self, runtime: str) -> None:
