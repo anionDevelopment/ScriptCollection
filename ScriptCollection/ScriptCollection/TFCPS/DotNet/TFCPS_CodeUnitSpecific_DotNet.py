@@ -38,7 +38,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         if self._protected_sc.is_running_in_build_container():
             
             self._protected_sc.log.log("Remove all existing NuGet-sources...", LogLevel.Debug)
-            list_result = self._protected_sc.run_program_argsasarray("dotnet", ["nuget", "list", "source"], throw_exception_if_exitcode_is_not_zero=False)
+            list_result = self._protected_sc.run_program_argsasarray("dotnet", ["nuget", "list", "source"], throw_exception_if_exitcode_is_not_zero=False,print_live_output=False)
             existing_source_name_pattern = re.compile(r"^\s*\d+\.\s+(.+?)\s+\[(?:Enabled|Disabled)\]\s*$")
             for line in list_result[1].splitlines():
                 m = existing_source_name_pattern.match(line)
@@ -93,7 +93,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
                 if password:
                     args_for_log[args_for_log.index(password)] = "***"
                 self._protected_sc.run_program_argsasarray("dotnet", args, arguments_for_log=args_for_log, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.get_verbosity()==LogLevel.Debug)
-            
+
 
             if self._protected_sc.log.loglevel==LogLevel.Debug:
                 self._protected_sc.run_program_argsasarray("dotnet", ["nuget","list","source","--format","detailed"], print_live_output=True)
@@ -165,7 +165,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             if os.path.isfile(os.path.join(codeunit_folder, "NuGet.config")):
                 restore_args += ["--configfile", "NuGet.config"]
             self._protected_sc.run_program_argsasarray("dotnet", restore_args, codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
-            self._protected_sc.run_program_argsasarray("dotnet", ["build", csproj_file_name, "-c", dotnet_build_configuration, "-o", outputfolder, "--runtime", runtime], csproj_file_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
+            self._protected_sc.run_program_argsasarray("dotnet", ["build", "--no-restore", csproj_file_name, "-c", dotnet_build_configuration, "-o", outputfolder, "--runtime", runtime], csproj_file_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
             if copy_license_file_to_target_folder:
                 license_file = os.path.join(repository_folder, "License.txt")
                 target = os.path.join(outputfolder, f"{codeunit_name}.License.txt")
