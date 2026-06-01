@@ -908,6 +908,21 @@ def AddImageToCustomRegistry()->int:
     sc.add_image_to_custom_docker_image_registry(args.remotehub,args.imagenameonremotehub,args.ownregistryaddress,args.imagenameonownregistry,args.tag,args.username,args.password)
     return 0
 
+def ShowVersion() -> int:
+    GeneralUtilities.write_message_to_stdout(ScriptCollectionCore.get_scriptcollection_version())
+    return 0
+
+
+def ShowProjectVersion() -> int:
+    parser = argparse.ArgumentParser(description="Prints the semver-version of a project as calculated by gitversion.")
+    parser.add_argument('-r', '--repository', required=False, default=None, help="Path to the repository. Defaults to the current working directory.")
+    args = parser.parse_args()
+    repository = GeneralUtilities.resolve_relative_path(args.repository, os.getcwd()) if args.repository is not None else os.getcwd()
+    sc: ScriptCollectionCore = ScriptCollectionCore()
+    GeneralUtilities.write_message_to_stdout(sc.get_semver_version_from_gitversion(repository))
+    return 0
+
+
 def SyncXlfFiles()->int:
     parser = argparse.ArgumentParser(description="This function syncs the content of xlf-files in a folder. This is useful to keep the content of xlf-files in sync which are used for translations in software projects.")
     parser.add_argument('-p', '--prefix',  required=True, help="File prefix. Example: 'message' when the files are named 'message.xlf', 'message.fr.xlf', etc.")

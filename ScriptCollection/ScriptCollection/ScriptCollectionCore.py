@@ -39,7 +39,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.95"
+version = "4.2.96"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -3481,3 +3481,8 @@ OCR-content:
     def is_runnning_in_container(self) ->bool:
         """this function is based on a convention and does not do a real check."""
         return os.environ.get("ISRUNNINGINCONTAINER") == "true"
+    
+    @GeneralUtilities.check_arguments
+    def is_running_in_build_container(self) ->bool:
+        """this function is based on a convention and does not do a real check."""
+        return os.environ.get("ISRUNNINGINBUILDCONTAINER") == "true"
