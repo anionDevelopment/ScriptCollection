@@ -161,7 +161,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             GeneralUtilities.ensure_directory_does_not_exist(outputfolder)
             self._protected_sc.run_program("dotnet", "clean", csproj_file_folder)
             GeneralUtilities.ensure_directory_exists(outputfolder)
-            restore_args = ["restore"]
+            restore_args = ["restore", "--runtime", runtime]
             if os.path.isfile(os.path.join(codeunit_folder, "NuGet.config")):
                 restore_args += ["--configfile", "NuGet.config"]
             self._protected_sc.run_program_argsasarray("dotnet", restore_args, codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
