@@ -60,8 +60,7 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
         sbom_folder = os.path.join(artifacts_folder, "BOM")
         codeunitversion = self.tfcps_Tools_General.get_version_of_codeunit(self.get_codeunit_file())
         GeneralUtilities.ensure_directory_exists(sbom_folder)
-        #TODO ensure syft-image-tag will be updated by update-dependencies-script.
-        self._protected_sc.run_program_argsasarray("docker", ["run","--rm","-v","/var/run/docker.sock:/var/run/docker.sock","-v","./BOM:/BOM",self.tfcps_Tools_General.oci_image_manager.get_registry_address_for_image_with_default_tag(self.get_repository_folder(),"Syft",True),f"{codeunitname_lower}:{codeunitversion}","-o",f"cyclonedx-xml=/BOM/{codeunitname}.{codeunitversion}.sbom.xml"], artifacts_folder, print_errors_as_information=True)
+        self._protected_sc.run_program_argsasarray("docker", ["run","--rm","-v","/var/run/docker.sock:/var/run/docker.sock","-v","./BOM:/BOM",self.tfcps_Tools_General.oci_image_manager.get_registry_address_for_image_with_default_tag(self.get_repository_folder(),"Syft",True),f"{codeunitname_lower}:{codeunitversion}","-o",f"cyclonedx-xml=./BOM/{codeunitname}.{codeunitversion}.sbom.xml"], artifacts_folder, print_errors_as_information=True)
         self._protected_sc.format_xml_file(sbom_folder+f"/{codeunitname}.{codeunitversion}.sbom.xml")
  
     @GeneralUtilities.check_arguments
