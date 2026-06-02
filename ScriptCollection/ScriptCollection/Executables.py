@@ -252,13 +252,14 @@ def HealthCheck() -> int:
 def BuildCodeUnits() -> int:
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--repositoryfolder', required=False, default=".")
+    parser.add_argument('-r','--repositoryfolder', required=False, default=".")
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
     parser.add_argument('-e','--targetenvironment', required=False, default="QualityCheck")
     parser.add_argument('-a','--additionalargumentsfile', required=False, default=None)
     parser.add_argument("-c",'--nocache', required=False, default=False, action='store_true')
-    parser.add_argument('--ispremerge', required=False, default=False, action='store_true')
+    parser.add_argument('-p','--ispremerge', required=False, default=False, action='store_true')
+    parser.add_argument('-a','--assertnonewchanges', required=False, default=False, action='store_true')
 
     args = parser.parse_args()
     
@@ -266,32 +267,33 @@ def BuildCodeUnits() -> int:
 
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
 
-    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge) 
+    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges) 
     t.build_codeunits()
     return 0
 
 
 def BuildCodeUnitsC() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--repositoryfolder', required=False, default=".")
+    parser.add_argument('-r','--repositoryfolder', required=False, default=".")
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
     parser.add_argument('--targetenvironment', required=False, default="QualityCheck")
     parser.add_argument('--additionalargumentsfile', required=False, default=None)
     parser.add_argument("-c",'--nocache', required=False, default=False, action='store_true')
-    parser.add_argument('--ispremerge', required=False, default=False, action='store_true')
+    parser.add_argument('-p','--ispremerge', required=False, default=False, action='store_true')
     parser.add_argument('--image', required=False, default="scbuilder:latest")
+    parser.add_argument('-a','--assertnonewchanges', required=False, default=False, action='store_true')
     args = parser.parse_args()
     GeneralUtilities.reconfigure_standard_input_and_outputs()
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
     verbosity=LogLevel(int(args.verbosity))
-    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge) 
+    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.asertnonewchanges) 
     t.build_codeunits_in_container()
     return 1#TODO
 
 def UpdateDependencies() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--repositoryfolder', required=False, default=".")
+    parser.add_argument('-r','--repositoryfolder', required=False, default=".")
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
     parser.add_argument('--targetenvironment', required=False, default="QualityCheck")
@@ -300,7 +302,7 @@ def UpdateDependencies() -> int:
     args = parser.parse_args()    
     verbosity=LogLevel(int(args.verbosity))
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
-    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,False) 
+    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,False,False) 
     t.update_dependencies()
     return 0
 
@@ -907,6 +909,20 @@ def AddImageToCustomRegistry()->int:
     sc.log.loglevel=LogLevel(verbosity)
     sc.add_image_to_custom_docker_image_registry(args.remotehub,args.imagenameonremotehub,args.ownregistryaddress,args.imagenameonownregistry,args.tag,args.username,args.password)
     return 0
+
+def PrepareBuildPipelineForGitlab() -> int:
+    parser = argparse.ArgumentParser(description="Prepares the build-pipeline-configuration for GitLab.")
+    verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
+    parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
+    args = parser.parse_args()
+    sc: ScriptCollectionCore = ScriptCollectionCore()
+    sc.log.loglevel = LogLevel(int(args.verbosity))
+    GeneralUtilities.assert_condition(sc.is_running_in_build_container(), "This function should only be run in the build container.")
+    sc.run_program("update-ca-certificates")
+    sc.run_program_argsasarray("sh",["-c","docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder"])
+    sc.run_program("docker","buildx inspect --bootstrap")
+    return 0
+
 
 def ShowVersion() -> int:
     GeneralUtilities.write_message_to_stdout(ScriptCollectionCore.get_scriptcollection_version())

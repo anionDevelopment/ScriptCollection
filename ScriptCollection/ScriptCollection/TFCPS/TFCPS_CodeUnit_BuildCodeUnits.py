@@ -16,8 +16,9 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     additionalargumentsfile:str=None
     __use_cache:bool
     __is_pre_merge:bool
+    __assert_no_new_changes:bool
 
-    def __init__(self,repository:str,loglevel:LogLevel,target_environment_type:str,additionalargumentsfile:str,use_cache:bool,is_pre_merge:bool):
+    def __init__(self,repository:str,loglevel:LogLevel,target_environment_type:str,additionalargumentsfile:str,use_cache:bool,is_pre_merge:bool,assertnonewchanges:bool):
         self.sc=ScriptCollectionCore()
         self.sc.log.loglevel=loglevel
         self.__use_cache=use_cache
@@ -29,12 +30,15 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.target_environment_type=target_environment_type
         self.additionalargumentsfile=additionalargumentsfile
         self.__is_pre_merge=is_pre_merge
+        self.__assert_no_new_changes=assertnonewchanges
 
     @GeneralUtilities.check_arguments
     def build_codeunits(self) -> None:
         self.sc.log.log(GeneralUtilities.get_line())
         start_time:datetime=GeneralUtilities.get_now()
         self.sc.log.log(f"Start building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(start_time,False)}. (Target environment-type: {self.target_environment_type})")
+        if self.__assert_no_new_changes:
+            self.sc.assert_no_uncommitted_changes(self.repository,"Can not build codeunit: There are uncommitted changes in the repository.")
 
         #check if changelog exists
         changelog_file=os.path.join(self.repository,"Other","Resources","Changelog",f"v{self.tfcps_tools_general.get_version_of_project(self.repository)}.md")
@@ -71,6 +75,10 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.__translate()
             self.__collect_metrics()
             self.__generate_loc_diagram()
+
+        if self.__assert_no_new_changes:
+            self.sc.assert_no_uncommitted_changes(self.repository,"There are new uncommitted changes in the repository.")
+            
         end_time:datetime=GeneralUtilities.get_now()
         duration=end_time-start_time
         self.sc.log.log(f"Finished building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(end_time,False)}. (Duration: {GeneralUtilities.timedelta_to_simple_string(duration)})")
