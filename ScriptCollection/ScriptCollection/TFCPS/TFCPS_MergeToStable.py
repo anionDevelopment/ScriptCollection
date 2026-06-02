@@ -76,7 +76,7 @@ class TFCPS_MergeToStable:
         product_version:str=self.tFCPS_Tools_General.get_version_of_project(self.createRelease_configuration.repository)
  
         #TODO do premerge-build instead
-        tfcps_CodeUnit_BuildCodeUnits:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(self.createRelease_configuration.repository,self.sc.log.loglevel,"Productive",self.createRelease_configuration.additional_arguments_file,False,False)
+        tfcps_CodeUnit_BuildCodeUnits:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(self.createRelease_configuration.repository,self.sc.log.loglevel,"Productive",self.createRelease_configuration.additional_arguments_file,False,False,False)
         try:
             tfcps_CodeUnit_BuildCodeUnits.build_codeunits()
         except Exception:
