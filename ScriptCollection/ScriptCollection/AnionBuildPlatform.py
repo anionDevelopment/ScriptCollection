@@ -136,7 +136,7 @@ class AnionBuildPlatform:
     def __update_dependencies(self,product_name:str) -> None:
         self.__sc.log.log("Update dependencies...")
         repository:str=os.path.join(self.__configuration.build_repositories_folder,"Submodules",product_name)
-        t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repository,self.__sc.log.loglevel,"QualityCheck",None,True,False)
+        t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repository,self.__sc.log.loglevel,"QualityCheck",None,True,False,False)
         t.update_dependencies()
 
 

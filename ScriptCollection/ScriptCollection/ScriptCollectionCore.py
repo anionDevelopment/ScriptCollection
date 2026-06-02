@@ -39,7 +39,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.99"
+version = "4.2.100"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -980,9 +980,12 @@ class ScriptCollectionCore:
         self.run_program_argsasarray("git", ["config", "--bool", "core.bare", "true"], target_folder)
 
     @GeneralUtilities.check_arguments
-    def assert_no_uncommitted_changes(self, repository_folder: str):
+    def assert_no_uncommitted_changes(self, repository_folder: str,custom_message:str=None) -> None:
         if self.git_repository_has_uncommitted_changes(repository_folder):
-            raise ValueError(f"Repository '{repository_folder}' has uncommitted changes.")
+            if custom_message:
+                raise ValueError(f"Repository '{repository_folder}' has uncommitted changes: "+custom_message)
+            else:
+                raise ValueError(f"Repository '{repository_folder}' has uncommitted changes.")
 
     @GeneralUtilities.check_arguments
     def list_content(self, path: str, include_files: bool, include_folder: bool, printonlynamewithoutpath: bool) -> list[str]:
