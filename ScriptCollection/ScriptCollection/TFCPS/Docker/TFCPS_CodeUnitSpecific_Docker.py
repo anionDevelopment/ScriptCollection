@@ -105,6 +105,7 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
         raise ValueError(f"Operation is not implemented.")
 
     @GeneralUtilities.check_arguments
+    @GeneralUtilities.deprecated("Use image_is_working_via_network instead, which tests the image over a user-defined docker-network without publishing a host-port.")
     def image_is_working(self,timeout:timedelta,environment_variables:dict[str,str],test_port:int,http_test_route:str,use_https_for_test:bool)->tuple[bool,str]:
         if timeout is None:
             timeout=timedelta(seconds=120)
@@ -182,8 +183,99 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
             self.tfcps_Tools_General.ensure_containers_are_not_running([container_name])
 
     @GeneralUtilities.check_arguments
+    @GeneralUtilities.deprecated("Use verify_image_is_working_via_network instead, which tests the image over a user-defined docker-network without publishing a host-port.")
     def verify_image_is_working(self,timeout:timedelta,environment_variables:dict[str,str],test_port:int,http_test_route:str,use_https_for_test:bool):
         check_result:tuple[bool,str]= self.image_is_working(timeout,environment_variables,test_port,http_test_route,use_https_for_test)
+        if not check_result[0]:
+            raise ValueError("Image not working: "+check_result[1])
+
+    @GeneralUtilities.check_arguments
+    def image_is_working_via_network(self,timeout:timedelta,environment_variables:dict[str,str],container_port:int,http_test_route:str,use_https_for_test:bool,network_name:str)->tuple[bool,str]:
+        """Tests the built image without publishing a host-port: the container is attached to a
+        user-defined docker-network and the http-test is executed from a sibling-container on the
+        same network (addressing the container under test by its name). This avoids opening a port
+        on the docker-host - which, when the daemon is the host-daemon (mounted socket), would be a
+        real port on the host. The http-test is executed from a dedicated minimal curl-image that is
+        resolved via the image-manager (registered as "Curl"), so it is pulled from the configured
+        registry (no rate-limit) and does not require the image under test to provide curl.
+        container_port is the port the application listens on inside the container."""
+        if timeout is None:
+            timeout=timedelta(seconds=120)
+        if environment_variables is None:
+            environment_variables={}
+        current_platform = GeneralUtilities.get_current_platform()
+        platform_for_test:Platform=None
+        if current_platform == Platform.Windows_AMD64:
+            platform_for_test=Platform.Linux_AMD64
+        elif current_platform == Platform.Linux_AMD64:
+            platform_for_test=Platform.Linux_AMD64
+        elif current_platform == Platform.Linux_ARM64:
+            platform_for_test=Platform.Linux_ARM64
+        elif current_platform == Platform.MacOS_ARM64:
+            platform_for_test=Platform.Linux_ARM64
+        else:
+            raise ValueError(f"Current platform {current_platform} is not supported for testing.")
+        oci_image_artifacts_folder :str= GeneralUtilities.resolve_relative_path("Other/Artifacts/BuildResult_OCIImage", self.get_codeunit_folder())
+        container_name:str=f"{self.get_codeunit_name()}finaltest".lower()
+        GeneralUtilities.assert_condition(http_test_route is None or http_test_route.startswith("/"),"If a test-route is given then it must start with \"/\".")
+        self.tfcps_Tools_General.ensure_containers_are_not_running([container_name])
+        self.tfcps_Tools_General.load_docker_image(oci_image_artifacts_folder,platform_for_test)
+        codeunit_file:str=os.path.join(self.get_codeunit_folder(),f"{self.get_codeunit_name()}.codeunit.xml")
+        image=f"{self.get_codeunit_name()}:{self.tfcps_Tools_General.get_version_of_codeunit(codeunit_file)}".lower()
+        self._protected_sc.ensure_local_docker_network_exists(network_name)
+        argument=f"run -d --name {container_name} --network {network_name}"
+        for k,v in environment_variables.items():
+            argument=f"{argument} -e {k}={v}"#TODO switch to argument-array to also allow values with white-space
+        argument=f"{argument} {image}"
+        curl_image:str=None
+        if http_test_route is not None:
+            # Use a dedicated minimal curl-image to run the http-test from a sibling-container,
+            # so it does not depend on the image under test providing curl. It is resolved via
+            # the image-manager (like Syft), so it is pulled from the configured registry and
+            # does not hit registry-rate-limits.
+            curl_image=self.tfcps_Tools_General.oci_image_manager.get_registry_address_for_image_with_default_tag(self.get_repository_folder(),"Curl",True)
+        try:
+            last_exception:Exception=None
+            self._protected_sc.run_program("docker",argument)
+            start:datetime=GeneralUtilities.get_now()
+            end:datetime=start+timeout
+            while GeneralUtilities.get_now()<end:
+                time.sleep(1)
+                try:
+                    if not self._protected_sc.container_is_running_and_healthy(container_name):
+                        raise ValueError("Container is not running and healthy.")
+                    if http_test_route is not None:
+                        scheme="https" if use_https_for_test else "http"
+                        url=f"{scheme}://{container_name}:{container_port}{http_test_route}"
+                        curl_arguments="--fail --silent --show-error --max-time 30"
+                        if use_https_for_test:
+                            curl_arguments=curl_arguments+" --insecure"
+                        self._protected_sc.run_program("docker",f"run --rm --network {network_name} --entrypoint curl {curl_image} {curl_arguments} \"{url}\"")
+                    return (True,None)
+                except Exception as e:
+                    last_exception=e
+            container_output:str=None
+            if not self._protected_sc.container_is_exists(container_name):
+                return (False,f"Container \"{container_name}\" does not exist.")
+            try:
+                container_output="\nContainer-output:\n"+self._protected_sc.get_output_of_container(container_name)
+            except Exception:
+                container_output="\n(Container-output not retrievable.)"
+            exception_message=f"\nContainer was started with \"docker {argument}\"."
+            if last_exception is not None:
+                exception_message=exception_message+"\nLast exception: "+GeneralUtilities.exception_to_str(last_exception)
+            if not self._protected_sc.container_is_running(container_name):
+                return (False,f"Container \"{container_name}\" is not running.{exception_message}{container_output}")
+            if not self._protected_sc.container_is_healthy(container_name):
+                return (False,f"Container \"{container_name}\" is not healthy.{exception_message}{container_output}")
+            return (False,f"Container \"{container_name}\" is not working properly.{exception_message}{container_output}")
+        finally:
+            self.tfcps_Tools_General.ensure_containers_are_not_running([container_name])
+            self._protected_sc.ensure_local_docker_network_does_not_exist(network_name)
+
+    @GeneralUtilities.check_arguments
+    def verify_image_is_working_via_network(self,timeout:timedelta,environment_variables:dict[str,str],container_port:int,http_test_route:str,use_https_for_test:bool,network_name:str):
+        check_result:tuple[bool,str]= self.image_is_working_via_network(timeout,environment_variables,container_port,http_test_route,use_https_for_test,network_name)
         if not check_result[0]:
             raise ValueError("Image not working: "+check_result[1])
 
