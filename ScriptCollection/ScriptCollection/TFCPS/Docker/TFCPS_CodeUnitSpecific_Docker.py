@@ -60,8 +60,16 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
         sbom_folder = os.path.join(artifacts_folder, "BOM")
         codeunitversion = self.tfcps_Tools_General.get_version_of_codeunit(self.get_codeunit_file())
         GeneralUtilities.ensure_directory_exists(sbom_folder)
-        self._protected_sc.run_program_argsasarray("docker", ["run","--rm","-v","/var/run/docker.sock:/var/run/docker.sock","-v","./BOM:/BOM",self.tfcps_Tools_General.oci_image_manager.get_registry_address_for_image_with_default_tag(self.get_repository_folder(),"Syft",True),f"{codeunitname_lower}:{codeunitversion}","-o",f"cyclonedx-xml=./BOM/{codeunitname}.{codeunitversion}.sbom.xml"], artifacts_folder, print_errors_as_information=True)
-        self._protected_sc.format_xml_file(sbom_folder+f"/{codeunitname}.{codeunitversion}.sbom.xml")
+        sbom_file = os.path.join(sbom_folder, f"{codeunitname}.{codeunitversion}.sbom.xml")
+        # Let syft write the SBOM to stdout and capture it instead of retrieving it via a
+        # bind-mount: in CI the docker daemon does not share this job's filesystem (mounted
+        # socket / DinD), so a "-v ./BOM:/BOM" mount would write the file onto the daemon host
+        # rather than into this job's BOM folder. stdout flows back through the docker client,
+        # so it works regardless of where the daemon runs. format_xml_file re-parses and
+        # rewrites the document, so the resulting file is byte-stable.
+        syft_result = self._protected_sc.run_program_argsasarray("docker", ["run","--rm","-v","/var/run/docker.sock:/var/run/docker.sock",self.tfcps_Tools_General.oci_image_manager.get_registry_address_for_image_with_default_tag(self.get_repository_folder(),"Syft",True),f"{codeunitname_lower}:{codeunitversion}","-o","cyclonedx-xml"], artifacts_folder, print_errors_as_information=True)
+        GeneralUtilities.write_text_to_file(sbom_file, syft_result[1])
+        self._protected_sc.format_xml_file(sbom_file)
  
     @GeneralUtilities.check_arguments
     def linting(self) -> None:
