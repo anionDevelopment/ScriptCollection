@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.2.104"
+version = "4.2.105"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
@@ -118,6 +118,7 @@ scupdatetimestampinfile = "ScriptCollection.Executables:UpdateTimestampInFile"
 scloc = "ScriptCollection.Executables:LOC"
 sccreaterelease = "ScriptCollection.Executables:CreateRelease"
 sccleantoolscache = "ScriptCollection.Executables:CleanToolsCache"
+scdownloadcachabletools = "ScriptCollection.Executables:DownloadCachableTools"
 scensuredockernetworkisavailable = "ScriptCollection.Executables:EnsureDockerNetworkIsAvailable"
 screclaimspacefromdocker = "ScriptCollection.Executables:ReclaimSpaceFromDocker"
 scaddimagetocustomregistry = "ScriptCollection.Executables:AddImageToCustomRegistry"

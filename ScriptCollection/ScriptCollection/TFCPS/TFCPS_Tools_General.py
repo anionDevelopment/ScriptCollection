@@ -67,6 +67,56 @@ class TFCPS_Tools_General:
             raise ValueError("Unsupported operating system for cyclonedx-cli.")
 
     @GeneralUtilities.check_arguments
+    def download_all_cachable_tools(self, enforce_update: bool = False, verbose: bool = False) -> None:
+        """Downloads all tools that are stored in the global ScriptCollection-cache.
+        Running this (for example in a build-image) lets repeated pipeline-runs avoid
+        rate-limits and run faster, because the tools are already present when a later
+        ensure_*_is_available-call needs them. Each tool is downloaded for all platforms,
+        so the warmed cache can be reused independent of the executing platform.
+        When verbose is set, the loglevel is set to debug so the per-tool log-output becomes visible."""
+        if verbose:
+            self.__sc.log.loglevel = LogLevel.Debug
+        self.download_cyclonedx(enforce_update)
+        self.download_plantuml(enforce_update)
+        self.download_mediamtx(enforce_update)
+        self.download_trufflehog(enforce_update)
+        self.download_openapigenerator(enforce_update)
+        self.download_androidappbundletool(enforce_update)
+
+    @GeneralUtilities.check_arguments
+    def download_cyclonedx(self, enforce_update: bool = False) -> None:
+        self.__sc.log.log("Download cachable tool \"CycloneDX-CLI\" into global cache...", LogLevel.Debug)
+        self.ensure_cyclonedxcli_is_available(enforce_update)
+
+    @GeneralUtilities.check_arguments
+    def download_plantuml(self, enforce_update: bool = False) -> None:
+        self.__sc.log.log("Download cachable tool \"PlantUML\" into global cache...", LogLevel.Debug)
+        self.ensure_plantuml_is_available(enforce_update)
+
+    @GeneralUtilities.check_arguments
+    def download_mediamtx(self, enforce_update: bool = False) -> None:
+        self.__sc.log.log("Download cachable tool \"MediaMTX\" into global cache...", LogLevel.Debug)
+        for architecture in [Platform.Windows_AMD64, Platform.Linux_AMD64, Platform.Linux_ARM64, Platform.MacOS_ARM64]:
+            self.__ensure_mediamtx_archive_in_global_cache(architecture, enforce_update)
+
+    @GeneralUtilities.check_arguments
+    def download_trufflehog(self, enforce_update: bool = False) -> None:
+        self.__sc.log.log("Download cachable tool \"TruffleHog\" into global cache...", LogLevel.Debug)
+        self.ensure_trufflehog_is_available(enforce_update)
+
+    @GeneralUtilities.check_arguments
+    def download_openapigenerator(self, enforce_update: bool = False) -> None:
+        self.__sc.log.log("Download cachable tool \"OpenAPIGenerator\" into global cache...", LogLevel.Debug)
+        self.ensure_openapigenerator_is_available(not enforce_update)
+
+    @GeneralUtilities.check_arguments
+    def download_androidappbundletool(self, enforce_update: bool = False) -> None:
+        self.__sc.log.log("Download cachable tool \"AndroidAppBundleTool\" into global cache...", LogLevel.Debug)
+        # target_folder is not used by ensure_androidappbundletool_is_available (the jar is
+        # always stored in the global cache); pass the cache folder as a harmless value.
+        self.ensure_androidappbundletool_is_available(self.__sc.get_global_cache_folder(), enforce_update)
+
+    @GeneralUtilities.check_arguments
     def ensure_file_from_github_assets_is_available_with_retry(self, githubuser: str, githubprojectname: str, local_resource_name: str, local_filename: str, get_filename_on_github, amount_of_attempts: int = 5,enforce_update:bool=False) -> str:
         return GeneralUtilities.retry_action(lambda: self.ensure_file_from_github_assets_is_available(githubuser, githubprojectname, local_resource_name, local_filename, get_filename_on_github,enforce_update), amount_of_attempts)
 
@@ -683,46 +733,55 @@ class TFCPS_Tools_General:
 
     @GeneralUtilities.check_arguments
     def ensure_mediamtx_is_available(self, target_folder: str,enforce_update:bool) -> None:
-        def download_and_extract(osname: str, osname_in_github_asset: str, extension: str,architecture:Platform):
+        for architecture in [Platform.Windows_AMD64, Platform.Linux_AMD64, Platform.Linux_ARM64, Platform.MacOS_ARM64]:
             resource_name: str = f"MediaMTX_{GeneralUtilities.platform_to_dash_str(architecture)}"
             resource_folder: str = os.path.join(target_folder, "Other", "Resources", resource_name)
             target_folder_extracted = os.path.join(resource_folder, "MediaMTX")
             update:bool=not os.path.isdir(target_folder_extracted) or GeneralUtilities.folder_is_empty(target_folder_extracted) or enforce_update
             if update:
-                platform_str:str=None
-                match architecture:
-                    case Platform.Windows_AMD64:
-                        platform_str = "windows_amd64"
-                    case Platform.Linux_ARM64:
-                        platform_str = "linux_arm64"
-                    case Platform.Linux_AMD64:
-                        platform_str = "linux_amd64"
-                    case Platform.MacOS_ARM64:
-                        platform_str = "darwin_arm64"
-                    case _:
-                        raise ValueError(f"Unknown platform: {str(architecture)}")
-
-                resource_filename_name_remote:str=f"mediamtx_{platform_str}.{extension}"
-                resource_name_local:str=f"MediaMTCX_{platform_str}"
-                global_cache_file=os.path.join( self.__sc.get_global_cache_folder(),"Tools",resource_name_local,resource_filename_name_remote)
-                if (not os.path.isfile( global_cache_file )) or enforce_update:
-                    self.ensure_file_from_github_assets_is_available_with_retry( "bluenviron", "mediamtx", resource_name_local, resource_filename_name_remote, lambda latest_version: f"mediamtx_{latest_version}_{platform_str}.{extension}",enforce_update=enforce_update)
-                    GeneralUtilities.assert_file_exists(global_cache_file)
-                GeneralUtilities.assert_file_exists(global_cache_file)
+                global_cache_file = self.__ensure_mediamtx_archive_in_global_cache(architecture, enforce_update)
+                extension: str = self.__get_mediamtx_archive_extension(architecture)
                 GeneralUtilities.ensure_folder_exists_and_is_empty(target_folder_extracted)
                 if extension == "zip":
                     with zipfile.ZipFile(global_cache_file, 'r') as zip_ref:
                         zip_ref.extractall(target_folder_extracted)
-                elif extension == "tar.gz": 
+                elif extension == "tar.gz":
                     with tarfile.open(global_cache_file, "r:gz") as tar:
                         tar.extractall(path=target_folder_extracted)
                 else:
                     raise ValueError(f"Unknown extension: \"{extension}\"")
 
-        download_and_extract("Windows", "windows", "zip",Platform.Windows_AMD64)
-        download_and_extract("Linux", "linux", "tar.gz",Platform.Linux_AMD64)
-        download_and_extract("Linux", "linux", "tar.gz",Platform.Linux_ARM64)
-        download_and_extract("MacOS", "darwin", "tar.gz",Platform.MacOS_ARM64)
+    @GeneralUtilities.check_arguments
+    def __get_mediamtx_platform_str(self, architecture: Platform) -> str:
+        match architecture:
+            case Platform.Windows_AMD64:
+                return "windows_amd64"
+            case Platform.Linux_ARM64:
+                return "linux_arm64"
+            case Platform.Linux_AMD64:
+                return "linux_amd64"
+            case Platform.MacOS_ARM64:
+                return "darwin_arm64"
+            case _:
+                raise ValueError(f"Unknown platform: {str(architecture)}")
+
+    @GeneralUtilities.check_arguments
+    def __get_mediamtx_archive_extension(self, architecture: Platform) -> str:
+        if architecture == Platform.Windows_AMD64:
+            return "zip"
+        return "tar.gz"
+
+    @GeneralUtilities.check_arguments
+    def __ensure_mediamtx_archive_in_global_cache(self, architecture: Platform, enforce_update: bool) -> str:
+        platform_str: str = self.__get_mediamtx_platform_str(architecture)
+        extension: str = self.__get_mediamtx_archive_extension(architecture)
+        resource_filename_name_remote: str = f"mediamtx_{platform_str}.{extension}"
+        resource_name_local: str = f"MediaMTCX_{platform_str}"
+        global_cache_file = os.path.join(self.__sc.get_global_cache_folder(), "Tools", resource_name_local, resource_filename_name_remote)
+        if (not os.path.isfile(global_cache_file)) or enforce_update:
+            self.ensure_file_from_github_assets_is_available_with_retry("bluenviron", "mediamtx", resource_name_local, resource_filename_name_remote, lambda latest_version: f"mediamtx_{latest_version}_{platform_str}.{extension}", enforce_update=enforce_update)
+            GeneralUtilities.assert_file_exists(global_cache_file)
+        return global_cache_file
  
     @GeneralUtilities.check_arguments
     def clone_repository_as_resource(self, local_repository_folder: str, remote_repository_link: str, resource_name: str, repository_subname: str = None,use_cache:bool=True) -> None:
