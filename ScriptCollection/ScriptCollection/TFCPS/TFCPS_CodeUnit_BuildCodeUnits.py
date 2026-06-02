@@ -78,7 +78,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
         if self.__assert_no_new_changes:
             self.sc.assert_no_uncommitted_changes(self.repository,"There are new uncommitted changes in the repository.")
-            
+
         end_time:datetime=GeneralUtilities.get_now()
         duration=end_time-start_time
         self.sc.log.log(f"Finished building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(end_time,False)}. (Duration: {GeneralUtilities.timedelta_to_simple_string(duration)})")
@@ -288,7 +288,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             changelog_file = os.path.join(changelog_folder, f"v{project_version}.md")
             if not os.path.isfile(changelog_file):
                 self.__ensure_changelog_file_is_added(repository, project_version)
-            t=TFCPS_CodeUnit_BuildCodeUnits(repository,self.sc.log.loglevel,"QualityCheck",None,True,False)
+            t=TFCPS_CodeUnit_BuildCodeUnits(repository,self.sc.log.loglevel,"QualityCheck",None,True,False,False)
             t.build_codeunits()#check codeunits are buildable at all
             self.sc.git_commit(repository, "Updated dependencies", stage_all_changes=True) 
 
