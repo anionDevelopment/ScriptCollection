@@ -61,7 +61,7 @@ class TFCPS_MergeToMain:
         #premerge-build
         #TODO the premerge-build is now supposed to be in MergeToStable
         try:
-            tfcps_CodeUnit_BuildCodeUnits:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(self.generic_prepare_new_release_arguments.repository_folder,self.sc.log.loglevel,"QualityCheck",self.generic_prepare_new_release_arguments.additional_arguments_file,False,True)
+            tfcps_CodeUnit_BuildCodeUnits:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(self.generic_prepare_new_release_arguments.repository_folder,self.sc.log.loglevel,"QualityCheck",self.generic_prepare_new_release_arguments.additional_arguments_file,False,True,False)
             tfcps_CodeUnit_BuildCodeUnits.build_codeunits()
         except Exception:
             self.sc.log.log(f"Branch {source_branch} is not buildable.",LogLevel.Error)
