@@ -78,7 +78,11 @@ class TFCPS_Tools_General:
         file_exists = os.path.isfile(file)
         if not file_exists:
             self.__sc.log.log(f"Download Asset \"{githubuser}/{githubprojectname}: {local_resource_name}\" from GitHub to global cache...", LogLevel.Information)
-            GeneralUtilities.ensure_folder_exists_and_is_empty(resource_folder)
+            # Only ensure the folder exists; do NOT empty it. Several assets (e.g. the
+            # linux/windows x64/arm64 variants of cyclonedx-cli) share one resource folder
+            # and are downloaded one after another, so emptying here would delete the
+            # siblings downloaded by previous calls and leave only the last one.
+            GeneralUtilities.ensure_directory_exists(resource_folder)
             headers = { 'User-Agent': 'Mozilla/5.0'}
             self.__add_github_api_key_if_available(headers)
             url = f"https://api.github.com/repos/{githubuser}/{githubprojectname}/releases/latest"
@@ -105,6 +109,10 @@ class TFCPS_Tools_General:
                                 sys.stdout.write(f"\rDownload: {percent:.2f}%")
                                 sys.stdout.flush()
             self.__sc.log.log(f"Downloaded \"{url}\".", LogLevel.Diagnostic)
+            if not GeneralUtilities.current_system_is_windows():
+                # Downloaded binaries (e.g. cyclonedx-linux-x64) are written without the
+                # executable bit; make them runnable so they can be executed directly.
+                os.chmod(file, 0o755)
         GeneralUtilities.assert_file_exists(file)
         return file
 
