@@ -3,4 +3,5 @@
 The following articles are available in the documentation
 
 - [Required tools for CommonProjectStructure](./Articles/RequiredToolsForCommonProjectStructure.md)
-- [Using custom image-registry](./Articles/UsingCustomImageRegistry.md)
+- [Configuration-folder](./Articles/ConfigurationFolder.md)
+- [Downloadable tools](./Articles/DownloadableTools.md)

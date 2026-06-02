@@ -863,6 +863,16 @@ def CleanToolsCache()->int:
     return 0
 
 
+def DownloadCachableTools()->int:
+    parser = argparse.ArgumentParser(description="Downloads all tools that are stored in the global ScriptCollection-cache (for example CycloneDX-CLI, PlantUML, MediaMTX, TruffleHog, OpenAPIGenerator and AndroidAppBundleTool). Running this - for example in a build-image - lets repeated pipeline-runs avoid rate-limits and run faster because the tools are already present.")
+    parser.add_argument('-v', '--verbose', action='store_true', required=False, default=False, help="Enables verbose (debug) output.")
+    parser.add_argument('-e', '--enforceupdate', action='store_true', required=False, default=False, help="Re-download the tools even if they are already present in the cache.")
+    args = parser.parse_args()
+    sc: ScriptCollectionCore = ScriptCollectionCore()
+    TFCPS_Tools_General(sc).download_all_cachable_tools(args.enforceupdate, args.verbose)
+    return 0
+
+
 def EnsureDockerNetworkIsAvailable()->int:
     sc = ScriptCollectionCore()
     parser = argparse.ArgumentParser()
