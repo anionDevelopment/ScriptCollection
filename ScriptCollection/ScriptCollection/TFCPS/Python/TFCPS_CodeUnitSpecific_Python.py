@@ -116,7 +116,14 @@ class TFCPS_CodeUnitSpecific_Python_Functions(TFCPS_CodeUnitSpecific_Base):
                 is_in_dependency_section=True
             elif line.startswith("    "):
                 if is_in_dependency_section:
-                    match = re.match(r"^\s*([A-Za-z0-9_\-]+)\s*([<>=!~]+)?\s*(.*)?$", line)
+                    stripped = line.strip()
+                    if not stripped or stripped.startswith("#"):
+                        continue
+                    if stripped.endswith(","):
+                        stripped = stripped[:-1].rstrip()
+                    if len(stripped) >= 2 and stripped[0] in ('"', "'") and stripped[-1] == stripped[0]:
+                        stripped = stripped[1:-1]
+                    match = re.match(r"^([A-Za-z0-9_\-\.]+)\s*([<>=!~]+)?\s*(.*)?$", stripped)
                     if match:
                         dep_name = match.group(1)
                         dep_operator = match.group(2) or None#pylint:disable=unused-variable
@@ -183,16 +190,12 @@ class TFCPS_CodeUnitSpecific_Python_Functions(TFCPS_CodeUnitSpecific_Base):
         lines=GeneralUtilities.read_lines_from_file(setupcfg_file)
         new_lines:list[str]=[]
         for line in lines:
-            match = re.match("^(\\s*)("+re.escape(name)+")\\s*([<>=!~]+)?\\s*(.*)?$", line)
+            match = re.match(r'^(\s*)"(' + re.escape(name) + r')\s*([<>=!~]+)?\s*([^"]*?)"(,?)\s*$', line)
             if match:
                 whitespace = match.group(1)
-                dep_name = match.group(2)#pylint:disable=unused-variable
-                dep_operator = match.group(3) or None
-                dep_version = match.group(4) or None#pylint:disable=unused-variable
-                new_line=whitespace+name
-                if dep_operator is None:
-                    dep_operator=">="
-                new_line=new_line+dep_operator+new_version
+                dep_operator = match.group(3) or ">="
+                comma = match.group(5)
+                new_line = f'{whitespace}"{name}{dep_operator}{new_version}"{comma}'
                 new_lines.append(new_line)
             else:
                 new_lines.append(line)
