@@ -34,7 +34,7 @@ The package can be installed using `pip install coverage`.
 
 [DocFX](https://github.com/dotnet/docfx) is a tool to generate HTML-references by markdown-files.
 It is primary used for references based on [documentation-comments](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/documentation-comments) in the source-code of .NET-projects.
-The commandline-tool can be installed using `choco install docfx`.
+The commandline-tool can be installed using `dotnet tool install -g docfx`.
 
 #### docker
 
