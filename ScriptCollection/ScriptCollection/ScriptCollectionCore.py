@@ -13,7 +13,6 @@ import zipfile
 import math
 import base64
 import os
-import sys
 from html.parser import HTMLParser
 from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
@@ -39,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.106"
+version = "4.2.107"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:

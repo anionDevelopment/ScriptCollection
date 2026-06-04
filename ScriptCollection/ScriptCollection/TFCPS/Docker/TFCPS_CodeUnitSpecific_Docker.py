@@ -250,7 +250,7 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
                         curl_arguments="--fail --silent --show-error --max-time 30"
                         if use_https_for_test:
                             curl_arguments=curl_arguments+" --insecure"
-                        self._protected_sc.run_program("docker",f"run --rm --network {network_name} --entrypoint curl {curl_image} {curl_arguments} \"{url}\"")
+                        self._protected_sc.run_program("docker",f"run --rm --network {network_name} --entrypoint curl {curl_image} {curl_arguments} {url}")
                     return (True,None)
                 except Exception as e:
                     last_exception=e
@@ -271,7 +271,6 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
             return (False,f"Container \"{container_name}\" is not working properly.{exception_message}{container_output}")
         finally:
             self.tfcps_Tools_General.ensure_containers_are_not_running([container_name])
-            self._protected_sc.ensure_local_docker_network_does_not_exist(network_name)
 
     @GeneralUtilities.check_arguments
     def verify_image_is_working_via_network(self,timeout:timedelta,environment_variables:dict[str,str],container_port:int,http_test_route:str,use_https_for_test:bool,network_name:str):

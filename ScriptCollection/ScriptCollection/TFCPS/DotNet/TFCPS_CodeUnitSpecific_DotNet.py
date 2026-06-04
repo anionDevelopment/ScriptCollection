@@ -579,12 +579,6 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         result = etree.tostring(root).decode("utf-8")
         GeneralUtilities.write_text_to_file(file, result)
 
-    @GeneralUtilities.check_arguments
-    def __coverage_file_contains_sources_and_packages(self, file: str) -> bool:
-        root: etree._ElementTree = etree.parse(file)
-        sources = root.xpath("//coverage/sources/source/text()")
-        packages = root.xpath("//coverage/packages/package")
-        return len(sources) > 0 and len(packages) > 0
 
     @GeneralUtilities.check_arguments
     def __standardized_tasks_run_testcases_for_dotnet_project_helper(self, source: str, codeunit_folder: str, match: re.Match) -> str:
