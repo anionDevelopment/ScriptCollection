@@ -18,7 +18,7 @@ This product requires to use `scbuildcodeunits` implemented/provided by [ScriptC
 
 See the [Changelog-folder](./Other/Resources/Changelog).
 
-## Contribue
+## Contribute
 
 Contributions are always welcome.
 

@@ -243,7 +243,19 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         nupkg_file = f"{build_folder}/{nupkg_filename}"
         GeneralUtilities.ensure_file_does_not_exist(nupkg_file)
         commit_id = self._protected_sc.git_get_commit_id(repository_folder)
-        self._protected_sc.run_program("nuget", f"pack {codeunitname}.nuspec -Properties \"commitid={commit_id}\"", build_folder)
+        nuspec_file = os.path.join(build_folder, f"{codeunitname}.nuspec")
+        # Pack the hand-written nuspec using "dotnet pack" (the classic "nuget pack" is not available in the dotnet-only build-container).
+        # With NuspecFile the package-content is taken entirely from the nuspec's <files>-list, so no rebuild happens here (the library was already built before).
+        self._protected_sc.run_program_argsasarray("dotnet", [
+            "pack", self.csproj_file,
+            "-c", self.get_target_environment_type(),
+            "--no-build", "--no-restore",
+            "--output", build_folder,
+            f"-p:NuspecFile={nuspec_file}",
+            f"-p:NuspecBasePath={build_folder}",
+            f"-p:NuspecProperties=commitid={commit_id}",
+            "-p:IsPackable=true",
+        ], build_folder, print_live_output=self.get_verbosity()==LogLevel.Debug)
         GeneralUtilities.ensure_directory_does_not_exist(outputfolder)
         GeneralUtilities.ensure_directory_exists(outputfolder)
         os.rename(nupkg_file, f"{outputfolder}/{nupkg_filename}")
