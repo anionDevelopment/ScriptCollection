@@ -5,7 +5,6 @@ import binascii
 import filecmp
 import hashlib
 import multiprocessing
-import socket
 import time
 from io import BytesIO
 import itertools
@@ -3017,10 +3016,11 @@ OCR-content:
             if generated_ports_override_file != GeneralUtilities.empty_string:
                 GeneralUtilities.ensure_file_does_not_exist(generated_ports_override_file)
         if in_build_container:
-            # Inside the build-container the test-process itself runs in a container. Instead of publishing the container-ports to the host it is
-            # attached to the docker-network(s) of the test-services so it can reach them directly by their container-name. This way no ports have
-            # to be opened on the host at all and concurrent pipelines can not conflict on the same host-port anymore.
-            self.__connect_self_to_compose_networks(docker_compose_file)
+            # Inside the build-container the docker-daemon runs in the same (ephemeral) container, so the test-process can reach the test-service-
+            # containers via their container-IP but there is no docker-DNS available for it. To still be able to use the container-name in the
+            # connection-strings (and to avoid publishing any port to the host, which would let concurrent pipelines conflict on the same host-port),
+            # the container-names are mapped to their current container-IPs in the /etc/hosts of this build-container.
+            self.__register_test_service_containers_in_etc_hosts(docker_compose_file)
 
     @GeneralUtilities.check_arguments
     def __generate_localhost_ports_override_file(self, docker_compose_file: str) -> str:
@@ -3041,25 +3041,35 @@ OCR-content:
         return override_file
 
     @GeneralUtilities.check_arguments
-    def get_external_networks_from_yaml_file(self, yaml_file: str) -> list[str]:
-        with open(yaml_file, encoding="utf-8") as stream:
+    def __register_test_service_containers_in_etc_hosts(self, docker_compose_file: str) -> None:
+        # Maps the container-names of the test-services to their current container-IPs in the /etc/hosts of THIS build-container (neither the runner-host
+        # nor the test-service-containers are touched). The managed block is rewritten on each start because the containers get a new IP every time.
+        hosts_file = "/etc/hosts"
+        if not os.path.isfile(hosts_file):
+            return
+        with open(docker_compose_file, encoding="utf-8") as stream:
             loaded = yaml.safe_load(stream)
-        result: list[str] = []
-        networks = loaded.get("networks", None)
-        if networks is None:
-            return result
-        for network_key, network_definition in networks.items():
-            if isinstance(network_definition, dict) and network_definition.get("external", False):
-                # For external networks the actual docker-network-name is the explicit "name" if given, otherwise the key itself.
-                result.append(network_definition.get("name", network_key))
-        return result
-
-    @GeneralUtilities.check_arguments
-    def __connect_self_to_compose_networks(self, docker_compose_file: str) -> None:
-        own_container = socket.gethostname()  # Inside a container the hostname equals the container-id, which "docker network connect" accepts.
-        for network_name in self.get_external_networks_from_yaml_file(docker_compose_file):
-            # Connecting an already-connected container returns a non-zero exitcode; this is ignored on purpose to keep this operation idempotent.
-            self.run_program("docker", f"network connect {network_name} {own_container}", throw_exception_if_exitcode_is_not_zero=False)
+        services = loaded.get("services", dict())
+        entries: list[str] = []
+        for service_name, service_definition in services.items():
+            container_name = service_definition.get("container_name", service_name)
+            inspect_result = self.run_program_argsasarray("docker", ["inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", container_name], throw_exception_if_exitcode_is_not_zero=False)
+            if inspect_result[0] != 0:
+                continue
+            ip_addresses = [ip_address for ip_address in inspect_result[1].split() if GeneralUtilities.string_has_content(ip_address)]
+            if 0 < len(ip_addresses):
+                entries.append(f"{ip_addresses[0]}\t{container_name}")
+        start_marker = "# >>> scriptcollection-test-service-hosts (managed automatically; do not edit)"
+        end_marker = "# <<< scriptcollection-test-service-hosts"
+        with open(hosts_file, "r", encoding="utf-8") as stream:
+            content = stream.read()
+        # Remove a previously written block first so stale IPs of already-recreated containers do not shadow the current ones.
+        content = re.sub(re.escape(start_marker)+".*?"+re.escape(end_marker)+r"\n?", GeneralUtilities.empty_string, content, flags=re.DOTALL)
+        content = content.rstrip("\n")+"\n"
+        if 0 < len(entries):
+            content = content+start_marker+"\n"+"\n".join(entries)+"\n"+end_marker+"\n"
+        with open(hosts_file, "w", encoding="utf-8") as stream:
+            stream.write(content)
 
     @GeneralUtilities.check_arguments
     def stop_local_test_service(self, file: str):
