@@ -280,7 +280,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         temp_output_folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
         GeneralUtilities.ensure_directory_exists(temp_output_folder)
         try:
-            run_result = self._protected_sc.run_program("dotnet", f"build \"{sln_file}\" -nologo -v minimal -o \"{temp_output_folder}\"", codeunit_folder, throw_exception_if_exitcode_is_not_zero=False)
+            run_result = self._protected_sc.run_program("dotnet", f"build \"{sln_file}\" -nologo -v minimal -o \"{temp_output_folder}\"", codeunit_folder, throw_exception_if_exitcode_is_not_zero=False, env_vars={"DOTNET_CLI_UI_LANGUAGE": "en-US"})
         finally:
             GeneralUtilities.ensure_directory_does_not_exist(temp_output_folder)
         diagnostics: list[tuple[LogLevel, str, str | None, int | None]] = []
