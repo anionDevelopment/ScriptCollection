@@ -5,6 +5,7 @@ import binascii
 import filecmp
 import hashlib
 import multiprocessing
+import socket
 import time
 from io import BytesIO
 import itertools
@@ -38,7 +39,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.112"
+version = "4.2.113"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2996,11 +2997,69 @@ OCR-content:
             self.kill_docker_container(service)
         example_name = os.path.basename(example_folder)
         title = f"Test{example_name}"
-        argument=f"compose -p {title.lower()}"
+        in_build_container = self.is_running_in_build_container()
+        generated_ports_override_file = GeneralUtilities.empty_string
+        argument = "compose"
+        if not in_build_container:
+            # Locally the test-process runs directly on the host (not inside the docker-network), so the container-ports (declared as "expose" in the
+            # compose-file) have to be published to the host. To avoid a committed override-file this publish-mapping is generated on the fly into a
+            # temporary file. In the build-container nothing is published at all (see below) to avoid host-port-conflicts.
+            generated_ports_override_file = self.__generate_localhost_ports_override_file(docker_compose_file)
+            if generated_ports_override_file != GeneralUtilities.empty_string:
+                argument = argument+f" -f docker-compose.yml -f {generated_ports_override_file}"
+        argument = argument+f" -p {title.lower()}"
         if os.path.isfile(os.path.join(example_folder,"Parameters.env")):
             argument=argument+" --env-file Parameters.env"
         argument=argument+" up --detach"
-        self.run_program("docker", argument, example_folder, title=title,print_live_output=True)
+        try:
+            self.run_program("docker", argument, example_folder, title=title,print_live_output=True)
+        finally:
+            if generated_ports_override_file != GeneralUtilities.empty_string:
+                GeneralUtilities.ensure_file_does_not_exist(generated_ports_override_file)
+        if in_build_container:
+            # Inside the build-container the test-process itself runs in a container. Instead of publishing the container-ports to the host it is
+            # attached to the docker-network(s) of the test-services so it can reach them directly by their container-name. This way no ports have
+            # to be opened on the host at all and concurrent pipelines can not conflict on the same host-port anymore.
+            self.__connect_self_to_compose_networks(docker_compose_file)
+
+    @GeneralUtilities.check_arguments
+    def __generate_localhost_ports_override_file(self, docker_compose_file: str) -> str:
+        with open(docker_compose_file, encoding="utf-8") as stream:
+            loaded = yaml.safe_load(stream)
+        services = loaded.get("services", dict())
+        override_services = dict()
+        for service_name, service_definition in services.items():
+            exposed_ports = service_definition.get("expose", list())
+            if 0 < len(exposed_ports):
+                # Each exposed container-port is published to the same port on the host (e.g. "5432" -> "5432:5432").
+                override_services[service_name] = {"ports": [f"{exposed_port}:{exposed_port}" for exposed_port in exposed_ports]}
+        if 0 == len(override_services):
+            return GeneralUtilities.empty_string
+        override_file = os.path.join(tempfile.gettempdir(), f"docker-compose.localhost.{str(uuid.uuid4())}.yml")
+        with open(override_file, "w", encoding="utf-8") as stream:
+            yaml.safe_dump({"services": override_services}, stream)
+        return override_file
+
+    @GeneralUtilities.check_arguments
+    def get_external_networks_from_yaml_file(self, yaml_file: str) -> list[str]:
+        with open(yaml_file, encoding="utf-8") as stream:
+            loaded = yaml.safe_load(stream)
+        result: list[str] = []
+        networks = loaded.get("networks", None)
+        if networks is None:
+            return result
+        for network_key, network_definition in networks.items():
+            if isinstance(network_definition, dict) and network_definition.get("external", False):
+                # For external networks the actual docker-network-name is the explicit "name" if given, otherwise the key itself.
+                result.append(network_definition.get("name", network_key))
+        return result
+
+    @GeneralUtilities.check_arguments
+    def __connect_self_to_compose_networks(self, docker_compose_file: str) -> None:
+        own_container = socket.gethostname()  # Inside a container the hostname equals the container-id, which "docker network connect" accepts.
+        for network_name in self.get_external_networks_from_yaml_file(docker_compose_file):
+            # Connecting an already-connected container returns a non-zero exitcode; this is ignored on purpose to keep this operation idempotent.
+            self.run_program("docker", f"network connect {network_name} {own_container}", throw_exception_if_exitcode_is_not_zero=False)
 
     @GeneralUtilities.check_arguments
     def stop_local_test_service(self, file: str):
