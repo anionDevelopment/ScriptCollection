@@ -64,17 +64,19 @@ class ProgramRunnerSudo(ProgramRunnerBase):
         return True
 
     @GeneralUtilities.check_arguments
-    def run_program_internal(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None) -> tuple[int, str, str, int]:
+    def run_program_internal(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, env_vars: dict = None) -> tuple[int, str, str, int]:
+        if env_vars is not None:
+            raise ValueError("env_vars is not supported in Sudo-runner")
         argument = program+" " + ' '.join(GeneralUtilities.args_array_surround_with_quotes_if_required(arguments_as_array))
         argument = f"echo {self.__password} | sudo -k -S {argument}"  # TODO maybe add "exit" somewhere before argument or before sudo to correctly return the exit-code"
         result = self.__sc.run_program_argsasarray("sh", ["-c", argument], working_directory)
         return result
 
     @GeneralUtilities.check_arguments
-    def run_program_argsasarray_async_helper(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, interactive: bool = False) -> Popen:
+    def run_program_argsasarray_async_helper(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> Popen:
         if interactive:
             raise ValueError("Interactive execution is not supported in Sudo-runner")
-        r: tuple[int, str, str, int] = self.run_program_internal(program, arguments_as_array, working_directory, custom_argument)
+        r: tuple[int, str, str, int] = self.run_program_internal(program, arguments_as_array, working_directory, custom_argument, env_vars)
         popen: SudoPopen = SudoPopen(r[0], r[1], r[2], r[3])
         return popen
 
@@ -85,24 +87,24 @@ class ProgramRunnerSudo(ProgramRunnerBase):
 
     # Return-values program_runner: Exitcode, StdOut, StdErr, Pid
     @GeneralUtilities.check_arguments
-    def run_program_argsasarray(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, interactive: bool = False) -> tuple[int, str, str, int]:
+    def run_program_argsasarray(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> tuple[int, str, str, int]:
         if interactive:
             raise ValueError("Interactive execution is not supported in Sudo-runner")
-        return self.run_program_internal(program, arguments_as_array, working_directory, custom_argument)
+        return self.run_program_internal(program, arguments_as_array, working_directory, custom_argument, env_vars)
 
     # Return-values program_runner: Exitcode, StdOut, StdErr, Pid
     @GeneralUtilities.check_arguments
-    def run_program(self, program: str, arguments:  str = "", working_directory: str = None, custom_argument: object = None, interactive: bool = False) -> tuple[int, str, str, int]:
+    def run_program(self, program: str, arguments:  str = "", working_directory: str = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> tuple[int, str, str, int]:
         if interactive:
             raise ValueError("Interactive execution is not supported in Sudo-runner")
-        return self.run_program_internal(program, arguments.split(" "), working_directory, custom_argument)
+        return self.run_program_internal(program, arguments.split(" "), working_directory, custom_argument, env_vars)
 
     # Return-values program_runner: Pid
     @GeneralUtilities.check_arguments
-    def run_program_argsasarray_async(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, interactive: bool = False) -> int:
+    def run_program_argsasarray_async(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> int:
         raise ValueError("Async execution is not supported in Sudo-runner")
 
     # Return-values program_runner: Pid
     @GeneralUtilities.check_arguments
-    def run_program_async(self, program: str, arguments: str,  working_directory: str, custom_argument: object, interactive: bool = False) -> int:
+    def run_program_async(self, program: str, arguments: str,  working_directory: str, custom_argument: object, interactive: bool = False, env_vars: dict = None) -> int:
         raise ValueError("Async execution is not supported in Sudo-runner")
