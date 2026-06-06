@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.116"
+version = "4.2.117"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -3047,10 +3047,21 @@ OCR-content:
 
     @GeneralUtilities.check_arguments
     def __get_own_container_id(self) -> str:
-        # Determines the id of the container this process currently runs in. The hostname usually equals the short container-id, but a runner can
-        # override the hostname, so the id is primarily derived from the cgroup-/mountinfo-entries (docker mounts files like /etc/hostname from
-        # /var/lib/docker/containers/<full-id>/... so the full 64-char container-id appears in these paths). The hostname is used as fallback only.
-        full_container_id_pattern = re.compile(r"([0-9a-f]{64})")
+        # Determines the id of the container this process currently runs in. The hostname usually equals the short container-id, but a runner can override
+        # the hostname, so the id is derived from the mountinfo-/cgroup-entries instead. Docker bind-mounts files like /etc/hostname, /etc/hosts and
+        # /etc/resolv.conf from /var/lib/docker/containers/<full-id>/..., so the OWN full container-id appears in a "docker/containers/<id>"-path-segment.
+        # A plain 64-hex-search is NOT sufficient because mountinfo can also contain other 64-hex-ids (most notably anonymous-volume-ids under
+        # /var/lib/docker/volumes/<id>/_data, but also layer-ids) which are not container-ids and would cause a "No such container"-error when used for
+        # "docker network connect". Therefore container-id-specific patterns are collected first and (where the docker-daemon is reachable) each candidate
+        # is verified to actually be a known container; only then a broader 64-hex-search and finally the hostname are used as fallbacks.
+        specific_container_id_patterns = [
+            re.compile(r"docker/containers/([0-9a-f]{64})"),  # own id via the bind-mounted /etc/*-files (most reliable)
+            re.compile(r"docker[-/]([0-9a-f]{64})"),           # cgroup-style: /docker/<id> (cgroup v1) or docker-<id>.scope (systemd-cgroup)
+            re.compile(r"kubepods[^\n]*?([0-9a-f]{64})"),      # kubernetes-pods
+        ]
+        broad_container_id_pattern = re.compile(r"([0-9a-f]{64})")
+        specific_candidate_ids: list[str] = []
+        broad_candidate_ids: list[str] = []
         for proc_file in ["/proc/self/mountinfo", "/proc/self/cgroup"]:
             if not os.path.isfile(proc_file):
                 continue
@@ -3058,15 +3069,27 @@ OCR-content:
                 content = GeneralUtilities.read_text_from_file(proc_file)
             except Exception:
                 continue
-            # Prefer lines which clearly reference a container-id-path to avoid matching unrelated 64-hex-strings.
-            for line in content.splitlines():
-                if "docker/containers/" in line or "/docker/" in line or "kubepods" in line:
-                    match = full_container_id_pattern.search(line)
-                    if match is not None:
-                        return match.group(1)
-            match = full_container_id_pattern.search(content)
-            if match is not None:
-                return match.group(1)
+            for pattern in specific_container_id_patterns:
+                for match in pattern.finditer(content):
+                    if match.group(1) not in specific_candidate_ids:
+                        specific_candidate_ids.append(match.group(1))
+            for match in broad_container_id_pattern.finditer(content):
+                if match.group(1) not in broad_candidate_ids:
+                    broad_candidate_ids.append(match.group(1))
+        # Prefer a specific candidate that the docker-daemon actually knows (this reliably filters out volume-/layer-ids); fall back to the first specific
+        # candidate if the daemon is not reachable here at all.
+        for candidate_id in specific_candidate_ids:
+            inspect_result = self.run_program_argsasarray("docker", ["inspect", "-f", "{{.Id}}", candidate_id], throw_exception_if_exitcode_is_not_zero=False)
+            if inspect_result[0] == 0:
+                return candidate_id
+        if 0 < len(specific_candidate_ids):
+            return specific_candidate_ids[0]
+        for candidate_id in broad_candidate_ids:
+            inspect_result = self.run_program_argsasarray("docker", ["inspect", "-f", "{{.Id}}", candidate_id], throw_exception_if_exitcode_is_not_zero=False)
+            if inspect_result[0] == 0:
+                return candidate_id
+        if 0 < len(broad_candidate_ids):
+            return broad_candidate_ids[0]
         if os.path.isfile("/etc/hostname"):
             return GeneralUtilities.read_text_from_file_without_linebreak("/etc/hostname").strip()
         return GeneralUtilities.empty_string
