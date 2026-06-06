@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.114"
+version = "4.2.115"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -3016,10 +3016,15 @@ OCR-content:
             if generated_ports_override_file != GeneralUtilities.empty_string:
                 GeneralUtilities.ensure_file_does_not_exist(generated_ports_override_file)
         if in_build_container:
-            # Inside the build-container the docker-daemon runs in the same (ephemeral) container, so the test-process can reach the test-service-
-            # containers via their container-IP but there is no docker-DNS available for it. To still be able to use the container-name in the
-            # connection-strings (and to avoid publishing any port to the host, which would let concurrent pipelines conflict on the same host-port),
-            # the container-names are mapped to their current container-IPs in the /etc/hosts of this build-container.
+            # Inside the build-container the docker-socket points at a daemon on which the test-service-containers are created as SIBLING-containers
+            # attached to the (external) compose-network. The build-container itself is not attached to that network, so without the following step it
+            # could neither route to the container-IPs nor use the docker-DNS (which results in connection-timeouts even though the container-name can
+            # be resolved via /etc/hosts). Therefore the build-container is attached to every (external) network the compose-file uses. No port is
+            # published to the host, so concurrent pipelines on the same host do not conflict on host-ports.
+            self.__connect_build_container_to_compose_networks(docker_compose_file)
+            # In addition the container-names are mapped to their current container-IPs in the /etc/hosts of this build-container so that the
+            # container-names can be used in the connection-strings even if the docker-DNS is not consulted. The managed block is rewritten on each
+            # start because the containers get a new IP every time.
             self.__register_test_service_containers_in_etc_hosts(docker_compose_file)
 
     @GeneralUtilities.check_arguments
@@ -3039,6 +3044,55 @@ OCR-content:
         with open(override_file, "w", encoding="utf-8") as stream:
             yaml.safe_dump({"services": override_services}, stream)
         return override_file
+
+    @GeneralUtilities.check_arguments
+    def __get_own_container_id(self) -> str:
+        # Determines the id of the container this process currently runs in. The hostname usually equals the short container-id, but a runner can
+        # override the hostname, so the id is primarily derived from the cgroup-/mountinfo-entries (docker mounts files like /etc/hostname from
+        # /var/lib/docker/containers/<full-id>/... so the full 64-char container-id appears in these paths). The hostname is used as fallback only.
+        full_container_id_pattern = re.compile(r"([0-9a-f]{64})")
+        for proc_file in ["/proc/self/mountinfo", "/proc/self/cgroup"]:
+            if not os.path.isfile(proc_file):
+                continue
+            try:
+                content = GeneralUtilities.read_text_from_file(proc_file)
+            except Exception:
+                continue
+            # Prefer lines which clearly reference a container-id-path to avoid matching unrelated 64-hex-strings.
+            for line in content.splitlines():
+                if "docker/containers/" in line or "/docker/" in line or "kubepods" in line:
+                    match = full_container_id_pattern.search(line)
+                    if match is not None:
+                        return match.group(1)
+            match = full_container_id_pattern.search(content)
+            if match is not None:
+                return match.group(1)
+        if os.path.isfile("/etc/hostname"):
+            return GeneralUtilities.read_text_from_file_without_linebreak("/etc/hostname").strip()
+        return GeneralUtilities.empty_string
+
+    @GeneralUtilities.check_arguments
+    def __connect_build_container_to_compose_networks(self, docker_compose_file: str) -> None:
+        # Attaches THIS build-container to every (external) network used by the compose-file so that the test-service-containers (which are
+        # sibling-containers on the same docker-daemon) become routable and resolvable. The docker-socket is shared with the daemon, but the
+        # network-namespace of the build-container is not, so without attaching there is no network-path to the container-IPs.
+        own_container_id = self.__get_own_container_id()
+        if not GeneralUtilities.string_has_content(own_container_id):
+            return
+        with open(docker_compose_file, encoding="utf-8") as stream:
+            loaded = yaml.safe_load(stream)
+        networks = loaded.get("networks", dict())
+        for network_key, network_definition in networks.items():
+            network_definition = network_definition or dict()
+            network_name = network_definition.get("name", network_key)
+            inspect_result = self.run_program_argsasarray("docker", ["network", "inspect", "-f", "{{range $id, $c := .Containers}}{{$id}}\n{{end}}", network_name], throw_exception_if_exitcode_is_not_zero=False)
+            if inspect_result[0] != 0:
+                continue  # The network does not exist (yet); nothing to attach to.
+            # The keys of .Containers are full container-ids; the hostname (own_container_id) is the corresponding short-id (a prefix of it).
+            connected_container_ids = [line.strip() for line in inspect_result[1].splitlines() if GeneralUtilities.string_has_content(line)]
+            already_connected = any(connected_container_id.startswith(own_container_id) for connected_container_id in connected_container_ids)
+            if not already_connected:
+                self.run_program_argsasarray("docker", ["network", "connect", network_name, own_container_id], throw_exception_if_exitcode_is_not_zero=False)
 
     @GeneralUtilities.check_arguments
     def __register_test_service_containers_in_etc_hosts(self, docker_compose_file: str) -> None:
