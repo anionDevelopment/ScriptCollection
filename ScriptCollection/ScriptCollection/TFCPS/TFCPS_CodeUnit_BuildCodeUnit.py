@@ -108,6 +108,18 @@ class TFCPS_CodeUnit_BuildCodeUnit:
     </cps:artifacts>
 </cps:artifactsinformation>""")
         # TODO validate artifactsinformation_file against xsd
+        if self.sc.log.loglevel == LogLevel.Debug:
+            artifacts_folder_size_bytes = sum(os.path.getsize(os.path.join(dirpath, f))
+                                              for dirpath, _, filenames in os.walk(artifacts_folder)
+                                              for f in filenames)
+            size_value: float = float(artifacts_folder_size_bytes)
+            size_unit: str = "B"
+            for candidate_unit in ("KB", "MB", "GB", "TB"):
+                if size_value < 1024:
+                    break
+                size_value /= 1024
+                size_unit = candidate_unit
+            self.sc.log.log(f"Size of artifacts-folder of codeunit {self.codeunit_name}: {size_value:.2f} {size_unit}", LogLevel.Debug)
         self.sc.log.log(f"Finished building codeunit {self.codeunit_name} without errors.")
 
 
