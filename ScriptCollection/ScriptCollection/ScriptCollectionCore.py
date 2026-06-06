@@ -3010,6 +3010,12 @@ OCR-content:
         if os.path.isfile(os.path.join(example_folder,"Parameters.env")):
             argument=argument+" --env-file Parameters.env"
         argument=argument+" up --detach"
+        if in_build_container:
+            # In a DooD-setup the test-service-containers are siblings on the docker-daemon and resolve their bind-mount-sources against the DAEMON's
+            # filesystem, not against this build-container's filesystem. Clearing the source-folders from within this build-container (as the *Start.py-
+            # scripts do) therefore does not reset what the containers actually mount. Reset them daemon-side first so that e.g. a database starts on a
+            # clean data-directory instead of stale content (which could otherwise keep an outdated pg_hba.conf and reject the build-container's connection).
+            self.__reset_compose_bind_mounted_volumes_daemon_side(docker_compose_file, example_folder, title.lower())
         try:
             self.run_program("docker", argument, example_folder, title=title,print_live_output=True)
         finally:
@@ -3026,6 +3032,46 @@ OCR-content:
             # container-names can be used in the connection-strings even if the docker-DNS is not consulted. The managed block is rewritten on each
             # start because the containers get a new IP every time.
             self.__register_test_service_containers_in_etc_hosts(docker_compose_file)
+
+    @GeneralUtilities.check_arguments
+    def __reset_compose_bind_mounted_volumes_daemon_side(self, docker_compose_file: str, example_folder: str, project_name: str) -> None:
+        # Empties the bind-mounted directories of all compose-services on the DAEMON's filesystem, i.e. exactly where the (sibling-)containers will mount
+        # them. In a DooD-setup a bind-mount-source like "./Volumes/..." is resolved by the docker-daemon and not inside this build-container, so deleting
+        # the folder from within this build-container does not reset what e.g. a database-container mounts (which would otherwise start on stale data, like
+        # an outdated pg_hba.conf). The directories are emptied via a throwaway-container of the service's own image (compose resolves the image and mounts
+        # the volumes exactly like for the real container); only the directory-content is removed, not the mount-root itself. Failures are tolerated because
+        # a not-yet existing source-directory simply needs no clearing.
+        env_file_arguments: list[str] = []
+        if os.path.isfile(os.path.join(example_folder, "Parameters.env")):
+            env_file_arguments = ["--env-file", "Parameters.env"]
+        with open(docker_compose_file, encoding="utf-8") as stream:
+            loaded = yaml.safe_load(stream)
+        services = loaded.get("services", dict())
+        for service_name, service_definition in services.items():
+            service_definition = service_definition or dict()
+            for volume in service_definition.get("volumes", list()):
+                source = None
+                target = None
+                if isinstance(volume, str):
+                    volume_parts = volume.split(":")
+                    if 2 <= len(volume_parts):
+                        source = volume_parts[0]
+                        target = volume_parts[1]
+                elif isinstance(volume, dict):
+                    if volume.get("type", "bind") == "bind":
+                        source = volume.get("source")
+                        target = volume.get("target")
+                if not GeneralUtilities.string_has_content(source) or not GeneralUtilities.string_has_content(target):
+                    continue
+                # Named volumes (a source without a path-indicator) are managed by docker itself and must not be cleared this way.
+                if not (source.startswith(".") or source.startswith("/") or source.startswith("~")):
+                    continue
+                # Empty the directory-content using only a POSIX-shell (no dependency on "find"/"-delete", which busybox-based images may not provide). The
+                # three globs cover normal entries, dotfiles and double-dot-prefixed entries (but never "." or ".."); the trailing "; true" keeps the
+                # exitcode at 0 even when a glob does not expand (already-empty directory). This works for any service-image that ships a shell (which all
+                # real stateful images do); images without a shell (distroless/scratch) do not have a resettable bind-mounted data-directory here anyway.
+                clear_command = f"rm -rf \"{target}\"/..?* \"{target}\"/.[!.]* \"{target}\"/* 2>/dev/null; true"
+                self.run_program_argsasarray("docker", ["compose", "-p", project_name] + env_file_arguments + ["run", "--rm", "--no-deps", "--entrypoint", "sh", service_name, "-c", clear_command], example_folder, throw_exception_if_exitcode_is_not_zero=False)
 
     @GeneralUtilities.check_arguments
     def __generate_localhost_ports_override_file(self, docker_compose_file: str) -> str:
