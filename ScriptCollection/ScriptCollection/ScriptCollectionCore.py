@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.115"
+version = "4.2.116"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -3092,7 +3092,11 @@ OCR-content:
             connected_container_ids = [line.strip() for line in inspect_result[1].splitlines() if GeneralUtilities.string_has_content(line)]
             already_connected = any(connected_container_id.startswith(own_container_id) for connected_container_id in connected_container_ids)
             if not already_connected:
-                self.run_program_argsasarray("docker", ["network", "connect", network_name, own_container_id], throw_exception_if_exitcode_is_not_zero=False)
+                # Attaching this build-container to the compose-network is REQUIRED for the test-process to reach the test-service-containers. If it fails,
+                # the tests would otherwise resolve the container-name (via /etc/hosts) but have no network-route to the container-IP and only fail later
+                # with a misleading connection-timeout. Therefore the attach must fail loudly here with the actual docker-error (e.g. "No such container"
+                # or "network not found") instead of being swallowed.
+                self.run_program_argsasarray("docker", ["network", "connect", network_name, own_container_id], throw_exception_if_exitcode_is_not_zero=True)
 
     @GeneralUtilities.check_arguments
     def __register_test_service_containers_in_etc_hosts(self, docker_compose_file: str) -> None:
