@@ -1305,6 +1305,7 @@ class TFCPS_Tools_General:
             GeneralUtilities.assert_file_exists(os.path.join(codeunit_folder, "ReadMe.md"))
             self.__sc.run_program_with_retry("docker-pushrm", target_image_address, codeunit_folder)
 
+    @GeneralUtilities.check_arguments
     def push_docker_build_artifact_as_multi_arch_artifact(self,tar_files: list[tuple[str, str, str]], image_address: str, tag: str):
         """
         tar_files: list of (tar_path, os, arch) tuples
@@ -1458,6 +1459,7 @@ class TFCPS_Tools_General:
 - Updated geo-ip-database.
 """)
 
+    @GeneralUtilities.check_arguments
     def set_latest_version_for_clone_repository_as_resource(self,repository_folder:str, resourcename: str, github_link: str, branch: str = "main"):
         resrepo_commit_id_folder: str = os.path.join(repository_folder, "Other", "Resources", f"{resourcename}Version")
         resrepo_commit_id_file: str = os.path.join(resrepo_commit_id_folder, f"{resourcename}Version.txt")
@@ -1554,6 +1556,7 @@ class TFCPS_Tools_General:
             arguments_for_log=arguments
             self.__sc.run_program_with_retry("docker",arguments,test_service_folder,arguments_for_log=arguments_for_log,print_live_output=self.__sc.log.loglevel==LogLevel.Debug)
 
+    @GeneralUtilities.check_arguments
     def load_deb_control_file_content(self, file: str, codeunitname: str, codeunitversion: str, installedsize: int, maintainername: str, maintaineremail: str, description: str) -> str:
         content = GeneralUtilities.read_text_from_file(file)
         content = GeneralUtilities.replace_variable_in_string(content, "codeunitname", codeunitname)
@@ -1564,6 +1567,7 @@ class TFCPS_Tools_General:
         content = GeneralUtilities.replace_variable_in_string(content, "description", description)
         return content
 
+    @GeneralUtilities.check_arguments
     def calculate_deb_package_size(self, binary_folder: str) -> int:
         size_in_bytes = 0
         for file in GeneralUtilities.get_all_files_of_folder(binary_folder):
@@ -1571,6 +1575,7 @@ class TFCPS_Tools_General:
         result = math.ceil(size_in_bytes/1024)
         return result
 
+    @GeneralUtilities.check_arguments
     def create_deb_package_for_artifact(self,codeunit_folder: str, maintainername: str, maintaineremail: str, description: str) -> None:
         self.assert_is_codeunit_folder(codeunit_folder)
         codeunit_name = os.path.basename(codeunit_folder)
@@ -1591,6 +1596,7 @@ class TFCPS_Tools_General:
         GeneralUtilities.ensure_folder_exists_and_is_empty(target_folder)
         shutil.move(archive_file, target_folder)
 
+    @GeneralUtilities.check_arguments
     def generate_winget_zip_manifest(self, codeunit_folder: str, artifact_name_of_zip: str):
         self.assert_is_codeunit_folder(codeunit_folder)
         codeunit_name = os.path.basename(codeunit_folder)
@@ -1610,7 +1616,8 @@ class TFCPS_Tools_General:
         manifest_content = GeneralUtilities.replace_variable_in_string(manifest_content, "sha256_hashvalue", GeneralUtilities.get_sha256_of_file(artifacts_file))
         GeneralUtilities.write_text_to_file(winget_manifest_file, manifest_content)
 
-    def download_file(self,source:str,target:str):
+    @GeneralUtilities.check_arguments
+    def download_file(self,source:str, target:str):
         GeneralUtilities.ensure_directory_exists(os.path.dirname(target))
         GeneralUtilities.ensure_file_exists(target)
         response = requests.get(source, timeout=30)
@@ -1618,16 +1625,44 @@ class TFCPS_Tools_General:
         with open(target, "wb") as f:
             f.write(response.content)
 
-    def try_update_basic_codeunitreference_from_examples_repository(self,codeunit_folder:str,example_codeunit_name: str):
+    @GeneralUtilities.check_arguments
+    def try_update_basic_codeunitreference_from_examples_repository(self, codeunit_folder:str,example_codeunit_name: str):
         source=f"https://raw.githubusercontent.com/anionDev/CommonProjectStructureExamples/refs/heads/main/{example_codeunit_name}/Other/Reference/ReferenceContent/HowToBuild.md"
         target=f"{codeunit_folder}/Other/Reference/ReferenceContent/HowToBuild.md"
         self.download_file(source,target)   
 
-    def try_update_basic_repositoryreference_from_examples_repository(self,repository_folder:str):
+    @GeneralUtilities.check_arguments
+    def try_update_basic_repositoryreference_from_examples_repository(self, repository_folder:str):
         source=f"https://raw.githubusercontent.com/anionDev/CommonProjectStructureExamples/refs/heads/main/Other/Reference/RepositoryStructure.mdd"
         target=f"{repository_folder}/Other/Reference/RepositoryStructure.md"
         self.download_file(source,target)   
 
-
-    def update_dependent_oci_images(self,repo:str):
+    @GeneralUtilities.check_arguments
+    def update_dependent_oci_images(self, repo:str):
         self.oci_image_manager.update_default_tag_for_images_in_image_definitions_file(repo,True)
+
+    @GeneralUtilities.check_arguments
+    def update_github_actions_image(self, repo_path: str, image_name: str, new_tag: str):
+        """
+        Updates the Docker image name + tag in .github/workflows/buildpipeline.yml
+
+        Args:
+            repo_path (str): Path to repository root
+            image_name (str): Docker image name (e.g. 'aniondev/scbuilder')
+            new_tag (str): New tag (e.g. 'v1.2.3')
+        """
+
+        workflow_file = Path(repo_path) / ".github" / "workflows" / "buildpipeline.yml"
+        if not workflow_file.exists():
+            raise FileNotFoundError(f"Workflow file not found: {workflow_file}")
+        content = workflow_file.read_text(encoding="utf-8")
+        escaped_image = re.escape(image_name)
+        pattern = rf"({escaped_image}:)([^\s\"']+)"
+        new_content, count = re.subn(
+            pattern,
+            rf"\1{new_tag}",
+            content
+        )
+        if count == 0:
+            raise ValueError(f"No matching image '{image_name}' found in workflow file.")
+        workflow_file.write_text(new_content, encoding="utf-8")
