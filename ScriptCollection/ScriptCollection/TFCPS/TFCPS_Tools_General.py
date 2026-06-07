@@ -1534,7 +1534,7 @@ class TFCPS_Tools_General:
         if env_variables is None:
             env_variables={} 
         for image in self.oci_image_manager.get_used_images_in_repository(repository_folder):
-            env_variables[f"image_{image.lower()}"]=self.oci_image_manager.get_registry_address_for_image(repository_folder,image)+":"+self.oci_image_manager.get_tag_for_image(repository_folder,image, True)
+            env_variables[f"image_{image.lower()}"]=self.oci_image_manager.get_registry_address_for_image(repository_folder,image)+":"+self.oci_image_manager.get_tag_for_image(repository_folder,image)
         test_services=GeneralUtilities.get_direct_folders_of_folder(os.path.join(repository_folder,"Other","Resources","LocalTestServices"))
         if len(test_services)==0:
             return

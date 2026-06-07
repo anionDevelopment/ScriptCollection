@@ -40,13 +40,7 @@ class OCIImageManager:
     @GeneralUtilities.check_arguments
     def get_repository_image_definition_file(self,repository:str)->str:
         self.__sc.assert_is_git_repository(repository)
-        sc_folder_in_repo=os.path.join(repository,".ScriptCollection","OCIImages")
-        GeneralUtilities.ensure_directory_exists(sc_folder_in_repo)
-        image_definition_file=os.path.join(sc_folder_in_repo,"ImageDefinition.csv")
-        if not os.path.isfile(image_definition_file):
-            GeneralUtilities.ensure_file_exists(image_definition_file)
-            GeneralUtilities.write_text_to_file(image_definition_file,"ImageName;UpstreamRegistryAddress;DefaultTag")
-        return image_definition_file
+        return os.path.join(repository,".ScriptCollection","OCIImages","ImageDefinition.csv")
     
     @GeneralUtilities.check_arguments
     def get_global_docker_image_registries_file(self)->str:
@@ -77,7 +71,7 @@ class OCIImageManager:
         return False
 
     @GeneralUtilities.check_arguments
-    def get_tag_for_image(self,repository:str,image_name:str,strict_mode:bool)->str:
+    def get_tag_for_image(self,repository:str,image_name:str)->str:
         repository_image_definition_file=self.get_repository_image_definition_file(repository)
         for line in [f.split(";") for f in GeneralUtilities.read_nonempty_lines_from_file(repository_image_definition_file)[1:]]:
             if image_name==line[0]:
@@ -86,7 +80,7 @@ class OCIImageManager:
 
     @GeneralUtilities.check_arguments
     def get_registry_address_for_image(self,repository:str,image_name:str)->str:
-        """if image_name==Debian this function returns something like "myregistry.example.com/debian", always without tag."""
+        """Example: if image_name==Debian this function returns something like "myregistry.example.com/debian", always without tag."""
         if self.custom_registry_is_defined(image_name):
             #return image from custom registry-address
             global_docker_image_registries_file=self.get_global_docker_image_registries_file()
@@ -102,8 +96,8 @@ class OCIImageManager:
         raise ValueError(f"No registry defined for image \"{image_name}\".")
 
     @GeneralUtilities.check_arguments
-    def get_registry_address_for_image_with_default_tag(self,repository:str,image_name:str,strict_mode:bool=True)->str:
-        return f"{self.get_registry_address_for_image(repository,image_name)}:{self.get_tag_for_image(repository,image_name,strict_mode)}"
+    def get_registry_address_for_image_with_default_tag(self,repository:str,image_name:str)->str:
+        return f"{self.get_registry_address_for_image(repository,image_name)}:{self.get_tag_for_image(repository,image_name)}"
 
     @GeneralUtilities.check_arguments
     def update_default_tag_for_images_in_image_definitions_file(self,repository:str,search_in_custom_registry_only_if_available:bool)->None:
