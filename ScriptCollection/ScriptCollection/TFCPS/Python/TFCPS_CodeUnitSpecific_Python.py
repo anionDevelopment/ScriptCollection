@@ -1,5 +1,6 @@
 import os
 import re
+import tempfile
 from ...GeneralUtilities import GeneralUtilities,Dependency
 from ...SCLog import  LogLevel
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_CodeUnitSpecific_Base_CLI
@@ -53,22 +54,33 @@ class TFCPS_CodeUnitSpecific_Python_Functions(TFCPS_CodeUnitSpecific_Base):
     @GeneralUtilities.check_arguments
     def linting(self) -> None:
         codeunitname: str = self.get_codeunit_name()
-        
+
         repository_folder: str = self.get_repository_folder()
+        codeunit_folder = os.path.join(repository_folder, codeunitname)
         errors_found = False
         self._protected_sc.log.log(f"Check for linting-issues in codeunit {codeunitname}.")
-        src_folder = os.path.join(repository_folder, codeunitname, codeunitname)
+        src_folder = os.path.join(codeunit_folder, codeunitname)
         tests_folder = src_folder+"Tests"
-        # TODO check if there are errors in sarif-file
-        for file in GeneralUtilities.get_all_files_of_folder(src_folder)+GeneralUtilities.get_all_files_of_folder(tests_folder):
-            relative_file_path_in_repository = os.path.relpath(file, repository_folder)
-            if file.endswith(".py") and os.path.getsize(file) > 0 and not self._protected_sc.file_is_git_ignored(relative_file_path_in_repository, repository_folder):
-                self._protected_sc.log.log(f"Check for linting-issues in {os.path.relpath(file, os.path.join(repository_folder, codeunitname))}.")
-                linting_result = self._protected_sc.python_file_has_errors(file, repository_folder)
-                if (linting_result[0]):
-                    errors_found = True
-                    for error in linting_result[1]:
-                        self._protected_sc.log.log(error, LogLevel.Warning)
+        # The codeunit gets linted in an isolated folder which only contains this codeunit. This is required because otherwise sibling-codeunit-source-folders of the repository would shadow the installed dependency-packages of the same name during pylint's import-resolution (pylint adds the repository-folder to sys.path due to the package-nesting), which would result in false-positive import-errors. In the isolated folder the declared (and installed) dependency-codeunits are resolved instead.
+        ignored_subfolders = ["Other", "__pycache__", "*.egg-info", "build", "dist", "venv", ".venv", ".pytest_cache", ".git"]
+        with tempfile.TemporaryDirectory() as isolation_folder:
+            isolated_codeunit_folder = os.path.join(isolation_folder, codeunitname)
+            GeneralUtilities.copy_content_of_folder(codeunit_folder, isolated_codeunit_folder, ignored_glob_patterms=ignored_subfolders)
+            pylint_configuration_file = os.path.join(repository_folder, ".pylintrc")
+            if os.path.isfile(pylint_configuration_file):
+                GeneralUtilities.safe_copy(pylint_configuration_file, os.path.join(isolation_folder, ".pylintrc"))
+            # TODO check if there are errors in sarif-file
+            for file in GeneralUtilities.get_all_files_of_folder(src_folder)+GeneralUtilities.get_all_files_of_folder(tests_folder):
+                relative_file_path_in_repository = os.path.relpath(file, repository_folder)
+                if file.endswith(".py") and os.path.getsize(file) > 0 and not self._protected_sc.file_is_git_ignored(relative_file_path_in_repository, repository_folder):
+                    relative_file_path_in_codeunit = os.path.relpath(file, codeunit_folder)
+                    self._protected_sc.log.log(f"Check for linting-issues in {relative_file_path_in_codeunit}.")
+                    isolated_file = os.path.join(isolated_codeunit_folder, relative_file_path_in_codeunit)
+                    linting_result = self._protected_sc.python_file_has_errors(isolated_file, isolation_folder, display_file=file)
+                    if (linting_result[0]):
+                        errors_found = True
+                        for error in linting_result[1]:
+                            self._protected_sc.log.log(error, LogLevel.Warning)
         if errors_found:
             raise ValueError("Linting-issues occurred.")
         else:
