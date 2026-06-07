@@ -14,9 +14,13 @@ class TFCPS_CodeUnitSpecific_Python_Functions(TFCPS_CodeUnitSpecific_Base):
     def build(self) -> None:
         codeunit_folder = self.get_codeunit_folder()
         target_directory = GeneralUtilities.resolve_relative_path("../Artifacts/BuildResult_Wheel", os.path.join(self.get_artifacts_folder()))
+        GeneralUtilities.ensure_directory_does_not_exist(os.path.join(self.get_codeunit_folder(),".pytest_cache"))
+        GeneralUtilities.ensure_directory_does_not_exist(os.path.join(self.get_codeunit_folder(),"__pycache__"))
+        GeneralUtilities.ensure_directory_does_not_exist(os.path.join(self.get_codeunit_folder(),"build"))
+        GeneralUtilities.ensure_directory_does_not_exist(os.path.join(self.get_codeunit_folder(),f"{self.get_codeunit_name()}.egg-info"))
         GeneralUtilities.ensure_directory_exists(target_directory)
         self._protected_sc.run_program(GeneralUtilities.get_python_executable(), f"-m build --wheel --outdir {target_directory}", codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
-        self.generate_bom_for_python_project( )
+        self.generate_bom_for_python_project()
         self.copy_source_files_to_output_directory()
 
     @GeneralUtilities.check_arguments
