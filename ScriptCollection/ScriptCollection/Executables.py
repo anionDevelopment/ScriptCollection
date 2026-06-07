@@ -920,6 +920,18 @@ def AddImageToCustomRegistry()->int:
     sc.add_image_to_custom_docker_image_registry(args.remotehub,args.imagenameonremotehub,args.ownregistryaddress,args.imagenameonownregistry,args.tag,args.username,args.password)
     return 0
 
+def SearchForSecrets() -> int:
+    parser = argparse.ArgumentParser(description="Scans the given repository for secrets using Betterleaks. Fails if unignored findings are present.")
+    parser.add_argument('-r', '--repository', required=False, default=None, help="Path to the repository. Defaults to the current working directory.")
+    verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
+    parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
+    args = parser.parse_args()
+    repository = GeneralUtilities.resolve_relative_path(args.repository, os.getcwd()) if args.repository is not None else os.getcwd()
+    t: TFCPS_CodeUnit_BuildCodeUnits = TFCPS_CodeUnit_BuildCodeUnits(repository, LogLevel(int(args.verbosity)), "QualityCheck", None, True, False, False)
+    t.search_for_secrets()
+    return 0
+
+
 def PrepareBuildPipelineForGitlab() -> int:
     parser = argparse.ArgumentParser(description="Prepares the build-pipeline-configuration for GitLab.")
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)

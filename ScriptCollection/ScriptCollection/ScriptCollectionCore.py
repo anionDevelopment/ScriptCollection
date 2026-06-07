@@ -529,6 +529,11 @@ class ScriptCollectionCore:
         self.run_program("git", f"branch -D {branchname}", folder, throw_exception_if_exitcode_is_not_zero=True)
 
     @GeneralUtilities.check_arguments
+    def git_remove_remote_branch(self, folder: str, remotename: str, branchname: str) -> None:
+        self.assert_is_git_repository(folder)
+        self.run_program_argsasarray("git", ["push", remotename, "--delete", branchname], folder, throw_exception_if_exitcode_is_not_zero=True)
+
+    @GeneralUtilities.check_arguments
     def git_push_with_retry(self, folder: str, remotename: str, localbranchname: str, remotebranchname: str, forcepush: bool = False, pushalltags: bool = True, verbosity: LogLevel = LogLevel.Quiet, amount_of_attempts: int = 5) -> None:
         GeneralUtilities.retry_action(lambda: self.git_push(folder, remotename, localbranchname, remotebranchname, forcepush, pushalltags, verbosity), amount_of_attempts)
 
