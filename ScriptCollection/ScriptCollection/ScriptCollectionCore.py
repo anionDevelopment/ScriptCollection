@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.122"
+version = "4.2.123"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -310,8 +310,10 @@ class ScriptCollectionCore:
         
 
     @GeneralUtilities.check_arguments
-    def python_file_has_errors(self, file: str, working_directory: str, treat_warnings_as_errors: bool = True) -> tuple[bool, list[str]]:
+    def python_file_has_errors(self, file: str, working_directory: str, treat_warnings_as_errors: bool = True, display_file: str = None) -> tuple[bool, list[str]]:
         errors = list()
+        if display_file is None:
+            display_file = file
         filename = os.path.relpath(file, working_directory)
         if treat_warnings_as_errors:
             errorsonly_argument = GeneralUtilities.empty_string
@@ -319,7 +321,7 @@ class ScriptCollectionCore:
             errorsonly_argument = " --errors-only"
         (exit_code, stdout, stderr, _) = self.run_program("pylint", filename + errorsonly_argument, working_directory, throw_exception_if_exitcode_is_not_zero=False)
         if (exit_code != 0):
-            errors.append(f"Linting-issues of {file}:")
+            errors.append(f"Linting-issues of {display_file}:")
             errors.append(f"Pylint-exitcode: {exit_code}")
             for line in GeneralUtilities.string_to_lines(stdout): 
                 errors.append(line)
