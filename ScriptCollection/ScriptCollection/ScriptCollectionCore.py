@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.119"
+version = "4.2.120"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -527,6 +527,11 @@ class ScriptCollectionCore:
     def git_remove_branch(self, folder: str, branchname: str) -> None:
         self.assert_is_git_repository(folder)
         self.run_program("git", f"branch -D {branchname}", folder, throw_exception_if_exitcode_is_not_zero=True)
+
+    @GeneralUtilities.check_arguments
+    def git_remove_remote_branch(self, folder: str, remotename: str, branchname: str) -> None:
+        self.assert_is_git_repository(folder)
+        self.run_program_argsasarray("git", ["push", remotename, "--delete", branchname], folder, throw_exception_if_exitcode_is_not_zero=True)
 
     @GeneralUtilities.check_arguments
     def git_push_with_retry(self, folder: str, remotename: str, localbranchname: str, remotebranchname: str, forcepush: bool = False, pushalltags: bool = True, verbosity: LogLevel = LogLevel.Quiet, amount_of_attempts: int = 5) -> None:

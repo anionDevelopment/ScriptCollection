@@ -1,6 +1,6 @@
 autopep8>=2.3.2
 build>=1.5.0
-coverage>=7.14.0
+coverage>=7.14.1
 cyclonedx-bom>=7.1.0
 defusedxml>=0.7.1
 keyboard>=0.13.5
@@ -13,7 +13,7 @@ pycdlib>=1.16.0
 Pygments>=2.20.0
 pylint>=4.0.5
 pyOpenSSL>=25.3.0
-PyPDF>=6.11.0
+PyPDF>=6.13.0
 pytest>=8.4.2
 PyYAML>=6.0.3
 qrcode>=8.2.0

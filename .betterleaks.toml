@@ -1,0 +1,6 @@
+# Betterleaks configuration
+
+# Example/test certificates and their generation scripts are intentional placeholders
+# (no real secrets). Exclude that directory from scanning.
+# Semantic in Betterleaks 1.4.1: filter must evaluate to TRUE to keep the resource.
+filter = '!attributes["path"].startsWith("Other/ServerMaintenance/Common/GenerateCertificates/")'

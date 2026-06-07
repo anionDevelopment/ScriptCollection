@@ -70,7 +70,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
         self.sc.log.log(GeneralUtilities.get_line())
         self.__search_for_vulnerabilities()
-        self.__search_for_secrets()
+        self.search_for_secrets()
         if self.is_pre_merge():
             self.__translate()
             self.__collect_metrics()
@@ -235,24 +235,17 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         pass#TODO
 
     @GeneralUtilities.check_arguments
-    def __search_for_secrets(self):
-        enabled:bool=False#TODO reenable when a solution is found to ignore false positives
-        if enabled:
-            exe_paths=self.tfcps_tools_general.ensure_trufflehog_is_available()
-            exe_path:str=None
-            if GeneralUtilities.current_system_is_windows():
-                exe_path=exe_paths["Windows"]
-            elif GeneralUtilities.current_system_is_linux():
-                exe_path=exe_paths["Linux"]
-            else:
-                raise ValueError("unsupported")#TODO check for macos
-            result=self.sc.run_program(exe_path,"filesystem . --json",self.repository)
-
-            self.sc.log.log("Secret-scan-result:")#TODO replace this by real analysis
+    def search_for_secrets(self) -> None:
+        self.sc.log.log("Search for secrets...")
+        image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "Betterleaks", True)
+        args = ["run", "--rm", "-v", f"{self.repository}:/repo", image, "git", "/repo"]
+        result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==LogLevel.Debug)
+        if result[0] != 0:
             for line in GeneralUtilities.string_to_lines(result[1]):
-                self.sc.log.log(line)
+                self.sc.log.log(line, LogLevel.Information)
             for line in GeneralUtilities.string_to_lines(result[2]):
-                self.sc.log.log(line,LogLevel.Error)
+                self.sc.log.log(line, LogLevel.Error)
+            raise ValueError(f"Found unignored secret findings (exit code {result[0]}). See {os.path.join(self.repository, '.betterleaks.toml')} to ignore known false positives.")
 
     @GeneralUtilities.check_arguments
     def use_cache(self) -> bool:
