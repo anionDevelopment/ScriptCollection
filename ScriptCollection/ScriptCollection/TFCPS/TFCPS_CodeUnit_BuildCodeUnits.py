@@ -237,7 +237,10 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     @GeneralUtilities.check_arguments
     def search_for_secrets(self) -> None:
         self.sc.log.log("Search for secrets...")
-        image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "Betterleaks", True)
+        try:
+            image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "Betterleaks", True)
+        except Exception as e:
+            image="ghcr.io/betterleaks/betterleaks:latest"
         args = ["run", "--rm", "-v", f"{self.repository}:/repo", image, "git", "/repo"]
         result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==LogLevel.Debug)
         if result[0] != 0:
