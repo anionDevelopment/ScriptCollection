@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.120"
+version = "4.2.121"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2779,7 +2779,7 @@ TXDX
             main_index_file=GeneralUtilities.normalize_path(os.path.join(pip_folder, "MainIndex.txt"))
             if os.path.isfile(main_index_file):
                 lines=GeneralUtilities.read_nonempty_lines_from_file(main_index_file)
-                url=[line for line in lines if line.startswith("IndexURL: ")][0].split(":")[1].strip()
+                url=[line for line in lines if line.startswith("IndexURL: ")][0].split(":", 1)[1].strip()
                 arguments.append("--index-url")
                 arguments.append(url)
             extra_index_folder=GeneralUtilities.normalize_path(os.path.join(pip_folder, "ExtraIndexURLs"))
@@ -2788,7 +2788,7 @@ TXDX
                 if len(index_files) > 0:
                     for indexurl_file in index_files:
                         lines=GeneralUtilities.read_nonempty_lines_from_file(indexurl_file)
-                        url=[line for line in lines if line.startswith("IndexURL: ")][0].split(":")[1].strip()
+                        url=[line for line in lines if line.startswith("IndexURL: ")][0].split(":", 1)[1].strip()
                         arguments.append("--extra-index-url")
                         arguments.append(url)
         return arguments

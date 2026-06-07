@@ -237,8 +237,18 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     @GeneralUtilities.check_arguments
     def search_for_secrets(self) -> None:
         self.sc.log.log("Search for secrets...")
-        image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "Betterleaks", True)
-        args = ["run", "--rm", "-v", f"{self.repository}:/repo", image, "git", "/repo"]
+        try:
+            image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "Betterleaks")
+        except Exception:
+            image="ghcr.io/betterleaks/betterleaks:latest"
+        if os.path.isdir(os.path.join(self.repository, ".git")):
+            scan_args = ["git", "/repo"]
+        if os.path.isfile(os.path.join(self.repository, ".git")):
+            self.sc.log.log("Repository is a Git submodule (.git is a file); scanning working tree only (no history).", LogLevel.Warning)
+            scan_args = ["dir", "/repo"] #usually the git-scan should be used here too but this does not work in a submodule yet, see https://github.com/betterleaks/betterleaks/issues/170
+        else:
+            scan_args = ["dir", "/repo"]
+        args = ["run", "--rm", "-v", f"{self.repository}:/repo", image] + scan_args
         result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==LogLevel.Debug)
         if result[0] != 0:
             for line in GeneralUtilities.string_to_lines(result[1]):
