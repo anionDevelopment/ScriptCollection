@@ -55,8 +55,7 @@ class TFCPS_MergeToStable:
     def merge_to_stable_branch(self):
         self.sc.log.loglevel=self.createRelease_configuration.log_level
         self.sc.log.log("Merge to stable-branch...") 
-        product_name:str=os.path.basename(self.createRelease_configuration.repository)
-
+        product_name:str=self.tFCPS_Tools_General.get_product_name(self.createRelease_configuration.repository)
         if self.sc.git_get_commit_id(self.createRelease_configuration.repository,self.createRelease_configuration.source_branch)==self.sc.git_get_commit_id(self.createRelease_configuration.repository,self.createRelease_configuration.target_branch):
             self.sc.log.log("Source- and target-branch are on the same commit.")
             return
@@ -306,7 +305,7 @@ class TFCPS_MergeToStable_CLI:
         build_repo=GeneralUtilities.resolve_relative_path("../../..",file)
         sc.assert_is_git_repository(build_repo)
 
-        default_product_name=os.path.basename(build_repo)[:-len("Build")]
+        default_product_name=TFCPS_Tools_General(sc).get_product_name(build_repo)
 
         if args.verbosity is not None:
             default_loglevel=LogLevel(int( args.verbosity))

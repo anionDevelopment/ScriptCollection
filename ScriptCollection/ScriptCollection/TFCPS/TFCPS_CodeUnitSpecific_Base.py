@@ -256,7 +256,18 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
     
     @GeneralUtilities.check_arguments
     def get_product_name(self)->str:
-        return os.path.basename(self.get_repository_folder())
+        return self.__read_product_information_property("producttitle")
+
+    @GeneralUtilities.check_arguments
+    def get_remote_address(self)->str:
+        return self.__read_product_information_property("remoteaddress")
+
+    @GeneralUtilities.check_arguments
+    def __read_product_information_property(self, property_name: str) -> str:
+        product_information_file = os.path.join(self.get_repository_folder(), ".ScriptCollection", "ProductInformation.xml")
+        GeneralUtilities.assert_file_exists(product_information_file)
+        root: etree._ElementTree = etree.parse(product_information_file)
+        return str(root.xpath(f'/cps:productinformation/cps:{property_name}/text()', namespaces={'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'})[0])
     
     @GeneralUtilities.check_arguments
     def get_current_folder(self)->str:

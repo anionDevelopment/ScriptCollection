@@ -1,6 +1,7 @@
 import os
 import json
 from datetime import datetime, timedelta,timezone
+import xmlschema
 import yaml
 from ..GeneralUtilities import GeneralUtilities
 from ..ScriptCollectionCore import ScriptCollectionCore
@@ -39,6 +40,12 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.sc.log.log(f"Start building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(start_time,False)}. (Target environment-type: {self.target_environment_type})")
         if self.__assert_no_new_changes:
             self.sc.assert_no_uncommitted_changes(self.repository,"Can not build codeunit: There are uncommitted changes in the repository.")
+
+        product_information_file = os.path.join(self.repository, ".ScriptCollection", "ProductInformation.xml")
+        try:
+            xmlschema.validate(product_information_file, "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/main/Conventions/RepositoryStructure/CommonProjectStructure/projectinformation.xsd")
+        except Exception as exception:
+            self.sc.log.log_exception(f"'{product_information_file}' could not be validated against the XSD:", exception, LogLevel.Warning)
 
         #check if changelog exists
         changelog_file=os.path.join(self.repository,"Other","Resources","Changelog",f"v{self.tfcps_tools_general.get_version_of_project(self.repository)}.md")
@@ -105,7 +112,40 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
     @GeneralUtilities.check_arguments
     def build_codeunits_in_container(self) -> None:
-        raise ValueError("Not implemented.")
+        container_repository_folder = "/Workspace/Repository"
+        image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "SCBuilder")
+
+        #build the scbuildcodeunits-arguments based on the current state (analogous to the arguments accepted by the scbuildcodeunits-executable)
+        scbuildcodeunits_arguments = ["-r", container_repository_folder, "-v", str(int(self.sc.log.loglevel)), "-e", self.target_environment_type]
+        if not self.__use_cache:
+            scbuildcodeunits_arguments.append("-c")
+        if self.__is_pre_merge:
+            scbuildcodeunits_arguments.append("-p")
+        if self.__assert_no_new_changes:
+            scbuildcodeunits_arguments.append("-u")
+        if GeneralUtilities.string_has_content(self.additionalargumentsfile):
+            scbuildcodeunits_arguments = scbuildcodeunits_arguments + ["-a", self.__translate_path_into_container(self.additionalargumentsfile, container_repository_folder)]
+
+        #run scbuildcodeunits inside the SCBuilder-image. the repository is mounted into the container and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
+        docker_arguments = [
+            "run", "--rm",
+            "-v", f"{self.repository}:{container_repository_folder}",
+            "-v", "/var/run/docker.sock:/var/run/docker.sock",
+            "-w", container_repository_folder,
+            image,
+            "scbuildcodeunits",
+        ] + scbuildcodeunits_arguments
+        self.sc.log.log(f"Build codeunits in container using image \"{image}\"...")
+        self.sc.run_program_argsasarray("docker", docker_arguments, print_live_output=True)
+
+    @GeneralUtilities.check_arguments
+    def __translate_path_into_container(self, host_path: str, container_repository_folder: str) -> str:
+        normalized_repository = os.path.normpath(self.repository)
+        normalized_path = os.path.normpath(host_path)
+        if normalized_path.startswith(normalized_repository):
+            relative_path = os.path.relpath(normalized_path, normalized_repository).replace(os.sep, "/")
+            return f"{container_repository_folder}/{relative_path}"
+        return host_path
 
     @GeneralUtilities.check_arguments
     def __translate(self) -> None:

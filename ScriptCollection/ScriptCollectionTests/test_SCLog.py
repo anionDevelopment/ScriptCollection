@@ -29,7 +29,7 @@ class SCLogTests(unittest.TestCase):
             # assert
             lines=GeneralUtilities.read_lines_from_file(log_file)
             assert "Exception: test-message; Exception-details: test-exception; Traceback: Traceback (most recent call last):" == lines[0]
-            assert "ScriptCollectionTests\\test_SCLog.py\", line 23, in test_log_exception" in lines[1]
+            assert "ScriptCollectionTests"+os.sep+"test_SCLog.py\", line 23, in test_log_exception" in lines[1]
             assert "self.__test_function()" in lines[2]
             assert "test_SCLog.py\", line 14, in __test_function" in lines[6] 
             assert "raise ValueError(\"test-exception\")" in lines[7] 

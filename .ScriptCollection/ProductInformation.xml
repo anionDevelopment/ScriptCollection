@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cps:productinformation
+    xmlns:cps="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <cps:producttitle>ScriptCollection</cps:producttitle>
+    <cps:remoteaddress>https://github.com/anionDevelopment/ScriptCollection</cps:remoteaddress>
+</cps:productinformation>
