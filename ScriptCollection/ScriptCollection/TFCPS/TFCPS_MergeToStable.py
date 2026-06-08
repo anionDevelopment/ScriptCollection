@@ -305,7 +305,7 @@ class TFCPS_MergeToStable_CLI:
         build_repo=GeneralUtilities.resolve_relative_path("../../..",file)
         sc.assert_is_git_repository(build_repo)
 
-        default_product_name=TFCPS_Tools_General(sc).get_product_name(build_repo)
+        default_product_name=os.path.basename(build_repo)[:-len("Build")]
 
         if args.verbosity is not None:
             default_loglevel=LogLevel(int( args.verbosity))

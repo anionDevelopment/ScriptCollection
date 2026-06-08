@@ -101,7 +101,7 @@ class TFCPS_MergeToMain_CLI:
         build_repo=GeneralUtilities.resolve_relative_path("../../..",file)
         sc.assert_is_git_repository(build_repo)
 
-        default_product_name=TFCPS_Tools_General(sc).get_product_name(build_repo)
+        default_product_name=os.path.basename(build_repo)[:-len("Build")]
 
         if args.mergesourcebranch is not None: 
             default_merge_source_branch=args.mergesourcebranch#other/next-release

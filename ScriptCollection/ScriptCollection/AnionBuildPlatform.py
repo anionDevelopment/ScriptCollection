@@ -1,7 +1,6 @@
 import argparse
 import os
 from .TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
-from .TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
 from .SCLog import LogLevel
 from .GeneralUtilities import GeneralUtilities
 from .ScriptCollectionCore import ScriptCollectionCore
@@ -56,7 +55,7 @@ class AnionBuildPlatform:
         build_repo_folder:str=self.__configuration.build_repositories_folder
         GeneralUtilities.assert_condition(build_repo_folder.endswith("Build"),f"buildrepositoriesfolder {build_repo_folder} must end with 'Build'")
         self.__sc.assert_is_git_repository(build_repo_folder)
-        product_name = TFCPS_Tools_General(self.__sc).get_product_name(build_repo_folder)
+        product_name = os.path.basename(build_repo_folder)[:-len("Build")]
         repository:str=os.path.join(build_repo_folder,"Submodules",product_name)
         self.__sc.assert_is_git_repository(repository)
         reference_repo:str=os.path.join(build_repo_folder,"Submodules",product_name+"Reference")

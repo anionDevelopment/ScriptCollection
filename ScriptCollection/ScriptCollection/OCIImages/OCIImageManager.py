@@ -1,4 +1,5 @@
 import os
+import yaml
 from packaging.version import Version
 from ..GeneralUtilities import GeneralUtilities
 from ..ScriptCollectionCore import ScriptCollectionCore
@@ -170,15 +171,46 @@ class OCIImageManager:
     @GeneralUtilities.check_arguments
     def get_images_used_in_docker_compose_file(self,docker_compose_file:str)->dict[str,tuple[str,str,str]]:#returns dict[service_name,[image_name,image_address,current_tag]]
         GeneralUtilities.assert_file_exists(docker_compose_file)
-        return {}#TODO implement function
+        result: dict[str, tuple[str, str, str]] = {}
+        with open(docker_compose_file, "r", encoding="utf-8") as f:
+            compose_data = yaml.safe_load(f)
+        services = (compose_data or {}).get("services", {}) or {}
+        for service_name, service_definition in services.items():
+            if not isinstance(service_definition, dict):
+                continue
+            image_value = service_definition.get("image")
+            if not isinstance(image_value, str) or not image_value:
+                continue
+            last_colon = image_value.rfind(":")
+            last_slash = image_value.rfind("/")
+            if last_colon == -1 or last_colon < last_slash:
+                image_address = image_value
+                current_tag = "latest"
+            else:
+                image_address = image_value[:last_colon]
+                current_tag = image_value[last_colon + 1:]
+            image_name = image_address.rsplit("/", 1)[-1]
+            result[service_name] = (image_name, image_address, current_tag)
+        return result
 
     @GeneralUtilities.check_arguments
-    def update_image_in_docker_compose_file(self,docker_compose_file:str)->None:
-        for service,service_information in self.get_images_used_in_docker_compose_file(docker_compose_file).items():#pylint:disable=unused-variable
+    def update_image_in_docker_compose_file(self,docker_compose_file:str,default_echolon:VersionEcholon=None,per_image_echolons:dict[str,VersionEcholon]=None)->None:
+        if per_image_echolons is None:
+            per_image_echolons = {}
+        for service,service_information in self.get_images_used_in_docker_compose_file(docker_compose_file).items():
             image_name=service_information[0]
             image_address=service_information[1]
             current_tag=service_information[2]
             image_handler=self.get_image_handler(image_name)
-            new_versions_for_address=self.get_available_versions_of_image_which_are_newer(image_name,image_address,self.tag_to_version(image_name,current_tag),image_handler.get_default_echolon_for_update())
-            new_tag=self.version_to_tag(image_name,new_versions_for_address)#pylint:disable=unused-variable
-            #TODO update tag for service in docker-compose-file to new_tag
+            effective_echolon=per_image_echolons.get(image_name,default_echolon)
+            if effective_echolon is None:
+                effective_echolon=image_handler.get_default_echolon_for_update()
+            new_versions_for_address=self.get_available_versions_of_image_which_are_newer(image_name,image_address,self.tag_to_version(image_name,current_tag),effective_echolon)
+            new_tag=self.version_to_tag(image_name,new_versions_for_address)
+            if new_tag is not None and new_tag != current_tag:
+                new_image_reference = f"{image_address}:{new_tag}"
+                with open(docker_compose_file, "r", encoding="utf-8") as f:
+                    compose_data = yaml.safe_load(f)
+                compose_data["services"][service]["image"] = new_image_reference
+                with open(docker_compose_file, "w", encoding="utf-8") as f:
+                    yaml.safe_dump(compose_data, f, default_flow_style=False, sort_keys=False)
