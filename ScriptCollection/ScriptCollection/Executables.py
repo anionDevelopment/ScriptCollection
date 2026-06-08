@@ -299,7 +299,7 @@ def UpdateDependencies() -> int:
     parser.add_argument('--targetenvironment', required=False, default="QualityCheck")
     parser.add_argument('--additionalargumentsfile', required=False, default=None)
     parser.add_argument("-c",'--nocache', required=False, default=False, action='store_true')
-    args = parser.parse_args()    
+    args = parser.parse_args()
     verbosity=LogLevel(int(args.verbosity))
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
     t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,False,False) 
