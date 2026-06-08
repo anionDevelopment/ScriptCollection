@@ -289,7 +289,7 @@ def BuildCodeUnitsC() -> int:
     verbosity=LogLevel(int(args.verbosity))
     t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges) 
     t.build_codeunits_in_container()
-    return 1#TODO
+    return 0
 
 def UpdateDependencies() -> int:
     parser = argparse.ArgumentParser()

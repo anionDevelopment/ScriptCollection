@@ -396,6 +396,13 @@ class TFCPS_Tools_General:
         return str(root.xpath('//cps:properties/@description', namespaces={'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'})[0])
 
     @GeneralUtilities.check_arguments
+    def get_product_name(self, repository_folder: str) -> str:
+        product_information_file = os.path.join(repository_folder, ".ScriptCollection", "ProductInformation.xml")
+        GeneralUtilities.assert_file_exists(product_information_file)
+        root: etree._ElementTree = etree.parse(product_information_file)
+        return str(root.xpath('/cps:productinformation/cps:producttitle/text()', namespaces={'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'})[0])
+
+    @GeneralUtilities.check_arguments
     def set_constant(self, codeunit_folder: str, constantname: str, constant_value: str, documentationsummary: str = None, constants_valuefile: str = None) -> None:
         self.assert_is_codeunit_folder(codeunit_folder)
         if documentationsummary is None:
@@ -828,7 +835,7 @@ class TFCPS_Tools_General:
 
     @GeneralUtilities.check_arguments
     def ensure_certificate_authority_for_development_purposes_is_generated(self, product_folder: str):
-        product_name: str = os.path.basename(product_folder)
+        product_name: str = self.get_product_name(product_folder)
         now = GeneralUtilities.get_now()
         ca_name = f"{product_name}CA_{now.year:04}{now.month:02}{now.day:02}{now.hour:02}{now.min:02}{now.second:02}"
         ca_folder = os.path.join(product_folder, "Other", "Resources", "CA")
@@ -848,7 +855,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def generate_certificate_for_development_purposes_for_product(self, repository_folder: str):
         self.__sc.assert_is_git_repository(repository_folder)
-        product_name = os.path.basename(repository_folder)
+        product_name = self.get_product_name(repository_folder)
         ca_folder: str = os.path.join(repository_folder, "Other", "Resources", "CA")
         self.__generate_certificate_for_development_purposes(product_name, os.path.join(repository_folder, "Other", "Resources"), ca_folder, None)
 
