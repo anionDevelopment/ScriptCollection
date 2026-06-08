@@ -6,7 +6,7 @@ import traceback
 import shutil
 import keyboard
 from .ScriptCollectionCore import ScriptCollectionCore
-from .GeneralUtilities import GeneralUtilities
+from .GeneralUtilities import GeneralUtilities, VersionEcholon
 from .SCLog import LogLevel, SCLog
 from .TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
 from .TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
@@ -748,14 +748,34 @@ def OCRAnalysisOfRepository() -> int:
 
 
 def UpdateImagesInDockerComposeFile() -> int:
-    parser = argparse.ArgumentParser(description="This function updates images in a Docker Compose file.")
-    parser.add_argument('-f', '--file', required=False,default="./docker-compose.yml")
-    #TODO add possibility to set version-echolon for each image specifically and pass this information to OCIImageManager
+    echolon_values = ", ".join(f"{e.value}={e.name}" for e in VersionEcholon)
+    parser = argparse.ArgumentParser(
+        description=(
+            "This function updates images in a Docker Compose file.\n"
+            "\n"
+            "Example (default LatestPatch for everything, but override per image):\n"
+            "  scupdateimagesindockercomposefile -f docker-compose.yml -e 0 "
+            "-i Debian=3 -i PostgreSQL=1 -i Syft=5\n"
+            "  -> Debian uses LatestVersion (3), PostgreSQL uses LatestPatchOrLatestMinor (1),\n"
+            "     Syft is not updated (5=NoUpdate), all others use the default LatestPatch (0)."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument('-f', '--file', required=False, default="./docker-compose.yml")
+    parser.add_argument('-e', '--echolon', type=int, required=False, default=None, help=f"Default version-echolon applied to all images that have no specific override. Possible values: {echolon_values}. If not set, the image-handler default is used.")
+    parser.add_argument('-i', '--image-echolon', action='append', default=[], help="Per-image echolon override in the format 'imagename=echolon' (e.g. 'Debian=3'). Can be specified multiple times.")
     args = parser.parse_args()
     sc = ScriptCollectionCore()
-    file=GeneralUtilities.resolve_relative_path(args.file, os.getcwd())
-    oci=OCIImageManager(sc)
-    oci.update_image_in_docker_compose_file(file)
+    file = GeneralUtilities.resolve_relative_path(args.file, os.getcwd())
+    default_echolon: VersionEcholon = VersionEcholon(args.echolon) if args.echolon is not None else None
+    per_image_echolons: dict[str, VersionEcholon] = {}
+    for item in args.image_echolon:
+        if "=" not in item:
+            raise ValueError(f"Invalid value for --image-echolon: '{item}'. Expected format: 'imagename=echolon'.")
+        name_part, echolon_part = item.split("=", 1)
+        per_image_echolons[name_part.strip()] = VersionEcholon(int(echolon_part.strip()))
+    oci = OCIImageManager(sc)
+    oci.update_image_in_docker_compose_file(file, default_echolon, per_image_echolons)
     return 0
 
 
