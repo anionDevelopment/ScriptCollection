@@ -6,13 +6,13 @@ from .GeneralUtilities import GeneralUtilities
 from .ScriptCollectionCore import ScriptCollectionCore
 
 class AnionBuildPlatformConfiguration:
-    build_repositories_folder:str
-    additional_arguments_file:str
-    verbosity:LogLevel
-    source_branch:str#other/next-release
-    common_remote_name:str
-    update_dependencies:bool
-    lazy_mode:bool
+    build_repositories_folder:str = None
+    additional_arguments_file:str = None
+    verbosity:LogLevel = None
+    source_branch:str = None  #other/next-release
+    common_remote_name:str = None
+    update_dependencies:bool = None
+    lazy_mode:bool = None
 
     def __init__(self,
                  build_repositories_folder:str,
@@ -32,8 +32,8 @@ class AnionBuildPlatformConfiguration:
 
 class AnionBuildPlatform:
 
-    __configuration: AnionBuildPlatformConfiguration
-    __sc:ScriptCollectionCore
+    __configuration: AnionBuildPlatformConfiguration = None
+    __sc:ScriptCollectionCore = None
 
     def __init__(self, configuration: AnionBuildPlatformConfiguration):
         self.__configuration = configuration

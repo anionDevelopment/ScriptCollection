@@ -17,8 +17,8 @@ class ProcessStartInformation:
 
 
 class ProcessesRunner:
-    sc: ScriptCollectionCore
-    processes: list[ProcessStartInformation]
+    sc: ScriptCollectionCore = None
+    processes: list[ProcessStartInformation] = None
 
     def __init__(self, processes: list[ProcessStartInformation]):
         self.sc = ScriptCollectionCore()

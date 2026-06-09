@@ -176,7 +176,7 @@ class TFCPS_Tools_General:
                                 percent = downloaded / total_size * 100
                                 sys.stdout.write(f"\rDownload: {percent:.2f}%")
                                 sys.stdout.flush()
-            self.__sc.log.log(f"Downloaded \"{url}\".", LogLevel.Diagnostic)
+            self.__sc.log.log(f"Downloaded \"{link}\".", LogLevel.Debug)
             if not GeneralUtilities.current_system_is_windows():
                 # Downloaded binaries (e.g. cyclonedx-linux-x64) are written without the
                 # executable bit; make them runnable so they can be executed directly.

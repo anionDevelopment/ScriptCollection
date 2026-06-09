@@ -38,16 +38,16 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.130"
+version = "4.2.131"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
-    label:str
-    description:str#nullable
-    work_dir:str#nullable
-    command:str
-    aliases:list[str]
-    allow_custom_arguments:bool
+    label:str = None
+    description:str = None  #nullable
+    work_dir:str = None  #nullable
+    command:str = None
+    aliases:list[str] = None
+    allow_custom_arguments:bool = None
 
     def __init__(self,label:str,description:str,work_dir:str,command:str,aliases:list[str],allow_custom_arguments:bool):
         GeneralUtilities.assert_not_null(label,"label")
@@ -93,13 +93,13 @@ class VSCodeWorkspaceShellTask:
         return result
 
 class VSCodeWorkspaceMariaDBConnection:
-    name:str
+    name:str = None
     previewLimit:int=50
-    server:str
-    port:int
-    database:str
-    username:str
-    password:str
+    server:str = None
+    port:int = None
+    database:str = None
+    username:str = None
+    password:str = None
     
     def __init__(self,name:str,server,port,database,username,password):
         GeneralUtilities.assert_not_null(name,"name")
@@ -135,8 +135,8 @@ class VSCodeWorkspaceMariaDBConnection:
 
 
 class VSCodeWorkspaceMongoDBConnection:
-    name:str
-    connection_string:str
+    name:str = None
+    connection_string:str = None
 
     def __init__(self,name:str,connection_string:str):
         GeneralUtilities.assert_not_null(name,"name")
@@ -2115,13 +2115,13 @@ class ScriptCollectionCore:
 
     @GeneralUtilities.check_arguments
     class __MockProgramCall:
-        program: str
-        argument: str
-        workingdirectory: str
-        exit_code: int
-        stdout: str
-        stderr: str
-        pid: int
+        program: str = None
+        argument: str = None
+        workingdirectory: str = None
+        exit_code: int = None
+        stdout: str = None
+        stderr: str = None
+        pid: int = None
 
     @GeneralUtilities.check_arguments
     def run_with_epew_with_retry(self, program: str, argument: str = "", working_directory: str = None, print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = 600, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  str =None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False,print_live_output:bool=False,encode_argument_in_base64:bool=False, amount_of_attempts: int = 3, delay_in_seconds: int = 2) -> tuple[int, str, str, int]:
@@ -2499,7 +2499,7 @@ chmod {permission} {link_file}
 
     @GeneralUtilities.check_arguments
     def generate_arc42_reference_template(self, repository: str, productname: str = None, subfolder: str = None):
-        productname: str
+        productname: str = None
         if productname is None:
             productname = os.path.basename(repository)
         if subfolder is None:

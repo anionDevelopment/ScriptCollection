@@ -4,14 +4,14 @@ from ..SCLog import  LogLevel
 from .TFCPS_Tools_General import TFCPS_Tools_General
 
 class TFCPS_Generic_Functions:
-    script_file:str
+    script_file:str = None
     repository_folder:str=None
-    targetenvironmenttype:str
-    additionalargumentsfile:str
-    verbosity:LogLevel
-    sc:ScriptCollectionCore
-    tfcps_Tools_General:TFCPS_Tools_General
-    __use_cache:bool
+    targetenvironmenttype:str = None
+    additionalargumentsfile:str = None
+    verbosity:LogLevel = None
+    sc:ScriptCollectionCore = None
+    tfcps_Tools_General:TFCPS_Tools_General = None
+    __use_cache:bool = None
     
     def __init__(self,script_file:str,targetenvironmenttype:str,additionalargumentsfile:str,verbosity:LogLevel,use_cache:bool):
         self.verbosity=verbosity

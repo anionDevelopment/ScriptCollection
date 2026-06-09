@@ -8,15 +8,15 @@ from .TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
 from .TFCPS_Generic import TFCPS_Generic_Functions
 
 class MergeToMainConfiguration:
-    product_name: str
-    merge_source_branch:str
-    additional_arguments_file:str
-    log_level:LogLevel
-    main_branch:str
-    repository_folder:str
-    tFCPS_Generic_Functions:TFCPS_Generic_Functions
-    common_remote_name:str
-    build_repo:str
+    product_name: str = None
+    merge_source_branch:str = None
+    additional_arguments_file:str = None
+    log_level:LogLevel = None
+    main_branch:str = None
+    repository_folder:str = None
+    tFCPS_Generic_Functions:TFCPS_Generic_Functions = None
+    common_remote_name:str = None
+    build_repo:str = None
     sc:ScriptCollectionCore=ScriptCollectionCore()
 
     def __init__(self, current_file: str,repository:str, product_name: str,merge_source_branch:str,log_level:LogLevel,additional_arguments_file:str,main_branch:str,common_remote_name:str,build_repo:str):
@@ -32,8 +32,8 @@ class MergeToMainConfiguration:
 
 class TFCPS_MergeToMain:
 
-    sc:ScriptCollectionCore
-    tFCPS_Tools_General:TFCPS_Tools_General
+    sc:ScriptCollectionCore = None
+    tFCPS_Tools_General:TFCPS_Tools_General = None
     generic_prepare_new_release_arguments:MergeToMainConfiguration=None
 
     def __init__(self,generic_prepare_new_release_arguments:MergeToMainConfiguration):

@@ -50,8 +50,8 @@ class SudoPopen:
 
 
 class ProgramRunnerSudo(ProgramRunnerBase):
-    __sc: ScriptCollectionCore
-    __password: str
+    __sc: ScriptCollectionCore = None
+    __password: str = None
 
     @GeneralUtilities.check_arguments
     def __init__(self,user_password:str):

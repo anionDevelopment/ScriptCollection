@@ -45,8 +45,8 @@ class Platform(Enum):
 
 
 class Dependency:
-    dependencyname:str
-    current_version:str
+    dependencyname:str = None
+    current_version:str = None
 
     def __init__(self,dependencyname:str,current_version:str):
         self.dependencyname=dependencyname
@@ -594,7 +594,7 @@ class GeneralUtilities:
             return
         is_first_line = True
         for line in lines:
-            insert_linebreak: bool
+            insert_linebreak: bool = None
             if is_first_line:
                 insert_linebreak = GeneralUtilities.file_ends_with_content(file)
             else:
@@ -1055,7 +1055,7 @@ class GeneralUtilities:
         if ignore_first_line:
             lines = lines[1:]
         result = list()
-        line: str
+        line: str = None
         for line_loopvariable in lines:
             use_line = True
             line = line_loopvariable

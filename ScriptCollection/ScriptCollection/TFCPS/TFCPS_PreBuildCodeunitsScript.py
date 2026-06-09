@@ -5,13 +5,13 @@ from ..ScriptCollectionCore import ScriptCollectionCore
 from .TFCPS_Tools_General import TFCPS_Tools_General
 
 class TFCPS_PreBuildCodeunitsScriptConfiguration:
-    targetenvironmenttype:str
-    additionalargumentsfile:str
-    verbosity:LogLevel
-    use_cache:str
+    targetenvironmenttype:str = None
+    additionalargumentsfile:str = None
+    verbosity:LogLevel = None
+    use_cache:str = None
     repository_folder:str=None
     sc:ScriptCollectionCore=None
-    tfcps_Tools_General:TFCPS_Tools_General
+    tfcps_Tools_General:TFCPS_Tools_General = None
 
     def __init__(self,script_file:str,targetenvironmenttype:str,additionalargumentsfile:str,verbosity:LogLevel,use_cache:bool):
         self.targetenvironmenttype=targetenvironmenttype
@@ -24,7 +24,7 @@ class TFCPS_PreBuildCodeunitsScriptConfiguration:
         self.tfcps_Tools_General=TFCPS_Tools_General(self.sc)
 
 class TFCPS_PreBuildCodeunitsScript:
-    configuration:TFCPS_PreBuildCodeunitsScriptConfiguration
+    configuration:TFCPS_PreBuildCodeunitsScriptConfiguration = None
 
     def __init__(self,configuration:TFCPS_PreBuildCodeunitsScriptConfiguration):
         self.configuration=configuration
