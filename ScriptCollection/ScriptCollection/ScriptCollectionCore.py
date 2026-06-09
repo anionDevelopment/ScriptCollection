@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.128"
+version = "4.2.129"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2221,9 +2221,10 @@ class ScriptCollectionCore:
 
     @GeneralUtilities.check_arguments
     def get_version_from_gitversion(self, folder: str, variable: str) -> str:
+        # /nofetch and /nonormalize: avoid network calls / branch normalization (no auth, no DNS, deterministic in containers and offline).
         # called twice as workaround for issue 1877 in gitversion ( https://github.com/GitTools/GitVersion/issues/1877 )
-        result = self.run_program_argsasarray("gitversion", ["/showVariable", variable], folder)
-        result = self.run_program_argsasarray("gitversion", ["/showVariable", variable], folder)
+        result = self.run_program_argsasarray("gitversion", ["/nofetch", "/nonormalize", "/showVariable", variable], folder)
+        result = self.run_program_argsasarray("gitversion", ["/nofetch", "/nonormalize", "/showVariable", variable], folder)
         result = GeneralUtilities.strip_new_line_character(result[1])
 
         return result
