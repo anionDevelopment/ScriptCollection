@@ -20,7 +20,7 @@ jobs:
       - name: update apt (temporary)
         run: apt update
       - name: install graphviz (temporary)
-        run: apt install graphviz
+        run: apt install graphviz -y
       - name: Update scriptcollection (temporary)
         run: pip3 install scriptcollection --upgrade
       - name: Show scversion (temporary)
