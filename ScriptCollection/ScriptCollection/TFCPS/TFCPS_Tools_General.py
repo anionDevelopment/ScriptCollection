@@ -123,9 +123,23 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def ensure_file_from_github_assets_is_available(self,githubuser: str, githubprojectname: str, local_resource_name: str, local_filename: str, get_filename_on_github,enforce_update:bool,pinned_version:str=None) -> str:
         #TODO use or remove target_folder-parameter
-        resource_folder =os.path.join( self.__sc.get_global_cache_folder(),"Tools",local_resource_name)
+        resource_folder = os.path.join(self.__sc.get_global_cache_folder(), "Tools", local_resource_name)
         file = f"{resource_folder}/{local_filename}"
+        version_file = os.path.join(resource_folder, "Version.txt")
+        cached_version: str = None
+        if os.path.isfile(version_file):
+            cached_version = GeneralUtilities.read_text_from_file(version_file).strip()
         file_exists = os.path.isfile(file)
+        # If a specific version is requested but the cache holds a different one, drop the cache entirely.
+        if pinned_version is not None and cached_version is not None and cached_version != pinned_version:
+            self.__sc.log.log(f"Cached version of '{local_resource_name}' is '{cached_version}' but pinned version is '{pinned_version}'. Removing cache and re-downloading.", LogLevel.Information)
+            GeneralUtilities.ensure_directory_does_not_exist(resource_folder)
+            file_exists = False
+            cached_version = None
+        if enforce_update:
+            GeneralUtilities.ensure_directory_does_not_exist(resource_folder)
+            file_exists = False
+            cached_version = None
         if not file_exists:
             self.__sc.log.log(f"Download Asset \"{githubuser}/{githubprojectname}: {local_resource_name}\" from GitHub to global cache...", LogLevel.Information)
             # Only ensure the folder exists; do NOT empty it. Several assets (e.g. the
@@ -167,6 +181,9 @@ class TFCPS_Tools_General:
                 # Downloaded binaries (e.g. cyclonedx-linux-x64) are written without the
                 # executable bit; make them runnable so they can be executed directly.
                 os.chmod(file, 0o755)
+            # Record the requested version state: the pinned tag if one was given, otherwise the literal "latest".
+            recorded_version = pinned_version if pinned_version is not None else "latest"
+            GeneralUtilities.write_text_to_file(version_file, recorded_version)
         GeneralUtilities.assert_file_exists(file)
         return file
 
