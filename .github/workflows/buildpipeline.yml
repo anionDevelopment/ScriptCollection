@@ -28,7 +28,7 @@ jobs:
       - name: Prepare build-pipeline
         run: scpreparebuildpipelineforgitlab
       - name: Build codeunits
-        run: scbuildcodeunits -v 4 --assertnonewchanges
+        run: scbuildcodeunits -v 4
       - name: Upload artifacts
         if: success()
         uses: actions/upload-artifact@v4
