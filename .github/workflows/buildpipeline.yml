@@ -6,10 +6,10 @@ on:
       - other/next-release
   workflow_dispatch:
 jobs:
-  run-script:
+  build-pipeline:
     runs-on: [self-hosted, scriptcollection]
     container:
-      image: aniondev/scbuilder:v1.0.0
+      image: aniondev/scbuilder:v1.1.0
       volumes:
         - /var/run/docker.sock:/var/run/docker.sock
     steps:
@@ -20,7 +20,7 @@ jobs:
       - name: Prepare build-pipeline
         run: scpreparebuildpipelineforgitlab
       - name: Build codeunits
-        run: scbuildcodeunits -v 4
+        run: scbuildcodeunits -v 4 --assertnonewchanges
       - name: Upload artifacts
         if: success()
         uses: actions/upload-artifact@v4
