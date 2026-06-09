@@ -6,7 +6,7 @@ on:
       - other/next-release
   workflow_dispatch:
 jobs:
-  run-script:
+  build-pipeline:
     runs-on: [self-hosted, scriptcollection]
     container:
       image: aniondev/scbuilder:v1.0.0
