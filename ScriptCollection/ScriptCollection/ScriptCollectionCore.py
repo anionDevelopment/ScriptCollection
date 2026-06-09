@@ -997,6 +997,9 @@ class ScriptCollectionCore:
     @GeneralUtilities.check_arguments
     def assert_no_uncommitted_changes(self, repository_folder: str,custom_message:str=None) -> None:
         if self.git_repository_has_uncommitted_changes(repository_folder):
+            status_result = self.run_program("git", "status --porcelain=v1", repository_folder, throw_exception_if_exitcode_is_not_zero=False)
+            GeneralUtilities.write_message_to_stderr(f"Uncommitted changes in '{repository_folder}':")
+            GeneralUtilities.write_message_to_stderr(status_result[1])
             if custom_message:
                 raise ValueError(f"Repository '{repository_folder}' has uncommitted changes: "+custom_message)
             else:
