@@ -358,11 +358,14 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         history_folder = f"{codeunitname}/Other/Resources/TestCoverageHistory"
         history_folder_full = os.path.join(repository_folder, history_folder)
         GeneralUtilities.ensure_directory_exists(history_folder_full)
+        files_before = set(GeneralUtilities.get_direct_files_of_folder(history_folder_full))
         history_argument = f" -historydir:{history_folder}"
         argument = f"-reports:{codeunitname}/Other/Artifacts/TestCoverage/TestCoverage.xml -targetdir:{codeunitname}/Other/Artifacts/TestCoverageReport --verbosity:{verbose_argument_for_reportgenerator}{history_argument} -title:{codeunitname} -tag:v{codeunit_version}"
         self._protected_sc.run_program("reportgenerator", argument, repository_folder)
         if not add_testcoverage_history_entry:
-            os.remove(GeneralUtilities.get_direct_files_of_folder(history_folder_full)[-1])
+            files_after = set(GeneralUtilities.get_direct_files_of_folder(history_folder_full))
+            for new_file in files_after - files_before:
+                GeneralUtilities.ensure_file_does_not_exist(new_file)
 
         # Generating badges
         if generate_badges:

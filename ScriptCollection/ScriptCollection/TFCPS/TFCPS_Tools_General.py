@@ -117,11 +117,11 @@ class TFCPS_Tools_General:
         self.ensure_androidappbundletool_is_available(self.__sc.get_global_cache_folder(), enforce_update)
 
     @GeneralUtilities.check_arguments
-    def ensure_file_from_github_assets_is_available_with_retry(self, githubuser: str, githubprojectname: str, local_resource_name: str, local_filename: str, get_filename_on_github, amount_of_attempts: int = 5,enforce_update:bool=False) -> str:
-        return GeneralUtilities.retry_action(lambda: self.ensure_file_from_github_assets_is_available(githubuser, githubprojectname, local_resource_name, local_filename, get_filename_on_github,enforce_update), amount_of_attempts)
+    def ensure_file_from_github_assets_is_available_with_retry(self, githubuser: str, githubprojectname: str, local_resource_name: str, local_filename: str, get_filename_on_github, amount_of_attempts: int = 5,enforce_update:bool=False,pinned_version:str=None) -> str:
+        return GeneralUtilities.retry_action(lambda: self.ensure_file_from_github_assets_is_available(githubuser, githubprojectname, local_resource_name, local_filename, get_filename_on_github,enforce_update,pinned_version), amount_of_attempts)
 
     @GeneralUtilities.check_arguments
-    def ensure_file_from_github_assets_is_available(self,githubuser: str, githubprojectname: str, local_resource_name: str, local_filename: str, get_filename_on_github,enforce_update:bool) -> str:
+    def ensure_file_from_github_assets_is_available(self,githubuser: str, githubprojectname: str, local_resource_name: str, local_filename: str, get_filename_on_github,enforce_update:bool,pinned_version:str=None) -> str:
         #TODO use or remove target_folder-parameter
         resource_folder =os.path.join( self.__sc.get_global_cache_folder(),"Tools",local_resource_name)
         file = f"{resource_folder}/{local_filename}"
@@ -135,14 +135,18 @@ class TFCPS_Tools_General:
             GeneralUtilities.ensure_directory_exists(resource_folder)
             headers = { 'User-Agent': 'Mozilla/5.0'}
             self.__add_github_api_key_if_available(headers)
-            url = f"https://api.github.com/repos/{githubuser}/{githubprojectname}/releases/latest"
-            self.__sc.log.log(f"Download \"{url}\"...", LogLevel.Debug)
-            time.sleep(2)
-            response = requests.get(url, headers=headers, allow_redirects=True, timeout=(10, 10))
-            response_json=response.json()
-            latest_version = response_json["tag_name"]
-            filename_on_github = get_filename_on_github(latest_version)
-            link = f"https://github.com/{githubuser}/{githubprojectname}/releases/download/{latest_version}/{filename_on_github}"
+            if pinned_version is not None:
+                version_to_download = pinned_version
+                self.__sc.log.log(f"Using pinned version '{version_to_download}' for {local_resource_name}.", LogLevel.Debug)
+            else:
+                url = f"https://api.github.com/repos/{githubuser}/{githubprojectname}/releases/latest"
+                self.__sc.log.log(f"Download \"{url}\"...", LogLevel.Debug)
+                time.sleep(2)
+                response = requests.get(url, headers=headers, allow_redirects=True, timeout=(10, 10))
+                response_json=response.json()
+                version_to_download = response_json["tag_name"]
+            filename_on_github = get_filename_on_github(version_to_download)
+            link = f"https://github.com/{githubuser}/{githubprojectname}/releases/download/{version_to_download}/{filename_on_github}"
             time.sleep(2)
             with requests.get(link, headers=headers, stream=True, allow_redirects=True,  timeout=(5, 600)) as r:
                 r.raise_for_status()
@@ -594,20 +598,25 @@ class TFCPS_Tools_General:
     def generate_svg_files_from_plantuml_files_for_repository(self, repository_folder: str,use_cache:bool) -> None:
         self.__sc.log.log("Generate svg-files from plantuml-files...")
         self.__sc.assert_is_git_repository(repository_folder)
-        plantuml_jar_file=self.ensure_plantuml_is_available(not use_cache)
+        plantuml_jar_file=self.ensure_plantuml_is_available(not use_cache, repository_folder)
         target_folder = os.path.join(repository_folder, "Other",  "Reference")
         self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file)
 
     @GeneralUtilities.check_arguments
     def generate_svg_files_from_plantuml_files_for_codeunit(self, codeunit_folder: str,use_cache:bool) -> None:
         self.assert_is_codeunit_folder(codeunit_folder)
-        plantuml_jar_file=self.ensure_plantuml_is_available(not use_cache)
+        plantuml_jar_file=self.ensure_plantuml_is_available(not use_cache, os.path.dirname(codeunit_folder))
         target_folder = os.path.join(codeunit_folder, "Other", "Reference")
         self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file)
 
     @GeneralUtilities.check_arguments
-    def ensure_plantuml_is_available(self,enforce_update:bool) -> str:
-        return self.ensure_file_from_github_assets_is_available_with_retry("plantuml", "plantuml", "PlantUML", "plantuml.jar", lambda latest_version: "plantuml.jar",enforce_update=enforce_update)
+    def ensure_plantuml_is_available(self, enforce_update: bool, repository_folder: str = None) -> str:
+        pinned_version: str = None
+        if repository_folder is not None:
+            version_file = os.path.join(repository_folder, "Other", "Resources", "Dependencies", "PlantUML", "Version.txt")
+            if os.path.isfile(version_file):
+                pinned_version = GeneralUtilities.read_text_from_file(version_file).strip()
+        return self.ensure_file_from_github_assets_is_available_with_retry("plantuml", "plantuml", "PlantUML", "plantuml.jar", lambda latest_version: "plantuml.jar", enforce_update=enforce_update, pinned_version=pinned_version)
 
     @GeneralUtilities.check_arguments
     def __generate_svg_files_from_plantuml(self, diagrams_files_folder: str, plantuml_jar_file: str) -> None:
