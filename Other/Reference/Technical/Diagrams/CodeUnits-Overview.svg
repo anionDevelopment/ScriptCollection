@@ -1,18 +1,19 @@
 <?xml version='1.0' encoding='utf-8'?>
-<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" contentStyleType="text/css" data-diagram-type="DESCRIPTION" height="194px" preserveAspectRatio="none" style="width:318px;height:194px;background:#FFFFFF;" version="1.1" viewBox="0 0 318 194" width="318px" zoomAndPan="magnify">
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" contentStyleType="text/css" data-diagram-type="DESCRIPTION" height="186px" preserveAspectRatio="none" style="width:310px;height:186px;background:#FFFFFF;" version="1.1" viewBox="0 0 310 186" width="310px" zoomAndPan="magnify">
+  <ns0:title>CodeUnits of ScriptCollection</ns0:title>
   <ns0:defs />
   <ns0:g>
     <ns0:g class="title" data-source-line="1">
-      <ns0:text fill="#000000" font-family="sans-serif" font-size="14" font-weight="700" lengthAdjust="spacing" textLength="198.3379" x="56.6973" y="24.5332">CodeUnits of ScriptCollection</ns0:text>
+      <ns0:text fill="#000000" font-family="sans-serif" font-size="14" font-weight="bold" lengthAdjust="spacing" textLength="198.3379" x="49.1973" y="24.5332">CodeUnits of ScriptCollection</ns0:text>
     </ns0:g>
-    <ns0:g class="entity" data-qualified-name="ScriptCollection" data-source-line="3" id="ent0001">
+    <ns0:g class="entity" data-entity="ScriptCollection" data-source-line="3" data-uid="ent0002" id="entity_ScriptCollection">
       <ns0:rect fill="#F1F1F1" height="47.6094" rx="2.5" ry="2.5" style="stroke:#181818;stroke-width:0.5;" width="137.2617" x="86.5" y="45.6094" />
       <ns0:rect fill="#F1F1F1" height="10" style="stroke:#181818;stroke-width:0.5;" width="15" x="203.7617" y="50.6094" />
       <ns0:rect fill="#F1F1F1" height="2" style="stroke:#181818;stroke-width:0.5;" width="4" x="201.7617" y="52.6094" />
       <ns0:rect fill="#F1F1F1" height="2" style="stroke:#181818;stroke-width:0.5;" width="4" x="201.7617" y="56.6094" />
       <ns0:text fill="#000000" font-family="sans-serif" font-size="14" lengthAdjust="spacing" textLength="97.2617" x="101.5" y="80.1426">ScriptCollection</ns0:text>
     </ns0:g>
-    <ns0:g class="entity" data-qualified-name="ScriptCollectionNote" data-source-line="5" id="ent0002">
+    <ns0:g class="entity" data-entity="ScriptCollectionNote" data-source-line="5" data-uid="ent0003" id="entity_ScriptCollectionNote">
       <ns0:path d="M6,153.6094 L6,179.9609 A0,0 0 0 0 6,179.9609 L303.7324,179.9609 A0,0 0 0 0 303.7324,179.9609 L303.7324,163.6094 L293.7324,153.6094 L159,153.6094 L155,94.0894 L151,153.6094 L6,153.6094 A0,0 0 0 0 6,153.6094" fill="#FEFFDD" style="stroke:#181818;stroke-width:0.5;" />
       <ns0:path d="M293.7324,153.6094 L293.7324,163.6094 L303.7324,163.6094 L293.7324,153.6094" fill="#FEFFDD" style="stroke:#181818;stroke-width:0.5;" />
       <ns0:text fill="#000000" font-family="sans-serif" font-size="13" lengthAdjust="spacing" textLength="276.7324" x="12" y="172.1045">ScriptCollection is the place for reusable scripts.</ns0:text>
