@@ -123,9 +123,23 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def ensure_file_from_github_assets_is_available(self,githubuser: str, githubprojectname: str, local_resource_name: str, local_filename: str, get_filename_on_github,enforce_update:bool,pinned_version:str=None) -> str:
         #TODO use or remove target_folder-parameter
-        resource_folder =os.path.join( self.__sc.get_global_cache_folder(),"Tools",local_resource_name)
+        resource_folder = os.path.join(self.__sc.get_global_cache_folder(), "Tools", local_resource_name)
         file = f"{resource_folder}/{local_filename}"
+        version_file = os.path.join(resource_folder, "Version.txt")
+        cached_version: str = None
+        if os.path.isfile(version_file):
+            cached_version = GeneralUtilities.read_text_from_file(version_file).strip()
         file_exists = os.path.isfile(file)
+        # If a specific version is requested but the cache holds a different one, drop the cache entirely.
+        if pinned_version is not None and cached_version is not None and cached_version != pinned_version:
+            self.__sc.log.log(f"Cached version of '{local_resource_name}' is '{cached_version}' but pinned version is '{pinned_version}'. Removing cache and re-downloading.", LogLevel.Information)
+            GeneralUtilities.ensure_directory_does_not_exist(resource_folder)
+            file_exists = False
+            cached_version = None
+        if enforce_update:
+            GeneralUtilities.ensure_directory_does_not_exist(resource_folder)
+            file_exists = False
+            cached_version = None
         if not file_exists:
             self.__sc.log.log(f"Download Asset \"{githubuser}/{githubprojectname}: {local_resource_name}\" from GitHub to global cache...", LogLevel.Information)
             # Only ensure the folder exists; do NOT empty it. Several assets (e.g. the
@@ -167,6 +181,9 @@ class TFCPS_Tools_General:
                 # Downloaded binaries (e.g. cyclonedx-linux-x64) are written without the
                 # executable bit; make them runnable so they can be executed directly.
                 os.chmod(file, 0o755)
+            # Record the requested version state: the pinned tag if one was given, otherwise the literal "latest".
+            recorded_version = pinned_version if pinned_version is not None else "latest"
+            GeneralUtilities.write_text_to_file(version_file, recorded_version)
         GeneralUtilities.assert_file_exists(file)
         return file
 
@@ -1095,7 +1112,7 @@ class TFCPS_Tools_General:
 
     @GeneralUtilities.check_arguments
     def generate_api_client_from_dependent_codeunit(self, codeunit_folder:str, name_of_api_providing_codeunit: str, target_subfolder_in_codeunit: str,language:str,use_cache:bool,properties:list[str]) -> None:
-        openapigenerator_jar_file = self.ensure_openapigenerator_is_available(use_cache)
+        openapigenerator_jar_file = self.ensure_openapigenerator_is_available(use_cache, os.path.dirname(codeunit_folder))
         openapi_spec_file = os.path.join(codeunit_folder, "Other", "Resources", "DependentCodeUnits", name_of_api_providing_codeunit, "APISpecification", f"{name_of_api_providing_codeunit}.latest.api.json")
         target_folder = os.path.join(codeunit_folder, target_subfolder_in_codeunit)
         GeneralUtilities.ensure_folder_exists_and_is_empty(target_folder)
@@ -1115,19 +1132,40 @@ class TFCPS_Tools_General:
         GeneralUtilities.write_text_to_file(packagejson_file, GeneralUtilities.read_text_from_file(packagejson_file).replace("\r", ""))
 
     @GeneralUtilities.check_arguments
-    def ensure_openapigenerator_is_available(self,use_cache:bool) -> None:
+    def ensure_openapigenerator_is_available(self, use_cache: bool, repository_folder: str = None) -> str:
         openapigenerator_folder = os.path.join(self.__sc.get_global_cache_folder(), "Tools", "OpenAPIGenerator")
         filename = "open-api-generator.jar"
         jar_file = f"{openapigenerator_folder}/{filename}"
+        cache_version_file = os.path.join(openapigenerator_folder, "Version.txt")
+        # Resolve the desired version from the repo's Version.txt (analogous to PlantUML).
+        pinned_version: str = None
+        if repository_folder is not None:
+            pinned_version = self.get_latest_version_of_openapigenerator(repository_folder)
+        # Read what version is currently in the cache.
+        cached_version: str = None
+        if os.path.isfile(cache_version_file):
+            cached_version = GeneralUtilities.read_text_from_file(cache_version_file).strip()
         jar_file_exists = os.path.isfile(jar_file)
-        update:bool=not jar_file_exists or not use_cache
-        if update:
-            self.__sc.log.log("Download OpenAPIGeneratorCLI...",LogLevel.Debug)
-            used_version ="7.16.0"#TODO retrieve latest version
-            download_link = f"https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/{used_version}/openapi-generator-cli-{used_version}.jar"
+        # Mismatch: a different version is pinned than what's cached — drop the cache so the right one gets downloaded.
+        if pinned_version is not None and cached_version is not None and cached_version != pinned_version:
+            self.__sc.log.log(f"Cached OpenAPIGenerator version is '{cached_version}' but pinned version is '{pinned_version}'. Removing cache and re-downloading.", LogLevel.Information)
             GeneralUtilities.ensure_directory_does_not_exist(openapigenerator_folder)
+            jar_file_exists = False
+            cached_version = None
+        # Caller explicitly asked to bypass the cache.
+        if not use_cache:
+            GeneralUtilities.ensure_directory_does_not_exist(openapigenerator_folder)
+            jar_file_exists = False
+            cached_version = None
+        if not jar_file_exists:
+            self.__sc.log.log("Download OpenAPIGeneratorCLI...", LogLevel.Debug)
+            if pinned_version is None:
+                raise ValueError(f"OpenAPIGenerator version is not pinned for this repository. Expected '<repo>/Other/Resources/Dependencies/OpenAPIGenerator/Version.txt' to exist and contain a Maven-format version (e.g. '7.23.0').")
+            version_to_download = pinned_version
+            download_link = f"https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/{version_to_download}/openapi-generator-cli-{version_to_download}.jar"
             GeneralUtilities.ensure_directory_exists(openapigenerator_folder)
             urllib.request.urlretrieve(download_link, jar_file)
+            GeneralUtilities.write_text_to_file(cache_version_file, version_to_download)
         GeneralUtilities.assert_file_exists(jar_file)
         return jar_file
 
@@ -1153,12 +1191,10 @@ class TFCPS_Tools_General:
         GeneralUtilities.write_text_to_file(version_file, used_version)
 
     @GeneralUtilities.check_arguments
-    def get_latest_version_of_openapigenerator(self) -> None:
-        headers = {'Cache-Control': 'no-cache'}
-        self.__add_github_api_key_if_available(headers)
-        response = requests.get(f"https://api.github.com/repos/OpenAPITools/openapi-generator/releases", headers=headers, timeout=(10, 10))
-        latest_version = response.json()["tag_name"]
-        return latest_version
+    def get_latest_version_of_openapigenerator(self, repository_folder: str) -> str:
+        version_file = os.path.join(repository_folder, "Other", "Resources", "Dependencies", "OpenAPIGenerator", "Version.txt")
+        GeneralUtilities.assert_file_exists(version_file)
+        return GeneralUtilities.read_text_from_file(version_file).strip()
 
     @GeneralUtilities.check_arguments
     def update_images_in_example_with_default_excluded(self, codeunit_folder: str,custom_updater:AbstractImageHandler):
