@@ -16,7 +16,7 @@ from .ConcreteImageHandlers.ImageHandlerGitlabEE import ImageHandlerGitlabEE
 class OCIImageManager:
 
     __sc:ScriptCollectionCore=None
-    image_handler:list[AbstractImageHandler]
+    image_handler:list[AbstractImageHandler] = None
 
     def __init__(self,sc:ScriptCollectionCore):
         if sc is None:

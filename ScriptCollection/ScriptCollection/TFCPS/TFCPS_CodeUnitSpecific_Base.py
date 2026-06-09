@@ -18,14 +18,14 @@ from .TFCPS_Tools_General import TFCPS_Tools_General
 class TFCPS_CodeUnitSpecific_Base(ABC):
 
     __current_file:str=None
-    __target_environment_type:str
+    __target_environment_type:str = None
     __repository_folder:str=None
     __codeunit_folder:str=None
     __current_folder:str=None
     __verbosity:LogLevel=None
     __use_cache:bool=None
-    tfcps_Tools_General:TFCPS_Tools_General
-    _protected_sc:ScriptCollectionCore
+    tfcps_Tools_General:TFCPS_Tools_General = None
+    _protected_sc:ScriptCollectionCore = None
     __is_pre_merge:bool=False#TODO must be setable to true
     __validate_developers_of_repository:bool=True#TODO must be setable to false
 

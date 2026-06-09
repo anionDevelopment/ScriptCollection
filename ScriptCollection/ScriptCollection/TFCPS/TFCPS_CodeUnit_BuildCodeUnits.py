@@ -15,9 +15,9 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     sc:ScriptCollectionCore=None
     target_environment_type:str=None
     additionalargumentsfile:str=None
-    __use_cache:bool
-    __is_pre_merge:bool
-    __assert_no_new_changes:bool
+    __use_cache:bool = None
+    __is_pre_merge:bool = None
+    __assert_no_new_changes:bool = None
 
     def __init__(self,repository:str,loglevel:LogLevel,target_environment_type:str,additionalargumentsfile:str,use_cache:bool,is_pre_merge:bool,assertnonewchanges:bool):
         self.sc=ScriptCollectionCore()

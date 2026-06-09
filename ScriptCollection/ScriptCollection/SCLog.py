@@ -17,12 +17,12 @@ class LogLevel(Enum):
 
 
 class SCLog:
-    loglevel: LogLevel#minimum loglevel
-    log_file: str
-    add_overhead_to_console: bool
-    add_overhead_to_logfile: bool
-    print_as_color: bool
-    add_milliseconds_to_logfile_entry: bool
+    loglevel: LogLevel = None  #minimum loglevel
+    log_file: str = None
+    add_overhead_to_console: bool = None
+    add_overhead_to_logfile: bool = None
+    print_as_color: bool = None
+    add_milliseconds_to_logfile_entry: bool = None
 
     def __init__(self, log_file: str = None, loglevel: LogLevel = None, print_as_color: bool = True):
         self.log_file = log_file

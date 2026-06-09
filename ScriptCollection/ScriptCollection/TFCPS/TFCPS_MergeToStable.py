@@ -11,19 +11,19 @@ from .TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
  
 
 class MergeToStableConfiguration:
-    log_level:LogLevel
-    source_branch:str#main
-    target_branch:str#stable
-    repository:str
-    build_repo:str
-    common_remote_name:str
-    build_repo_main_branch_name:str
-    reference_repo_main_branch_name:str
-    reference_remote_name:str
-    build_repo_remote_name:str
-    artifacts_target_folder:str
-    common_remote_url:str
-    additional_arguments_file:str
+    log_level:LogLevel = None
+    source_branch:str = None  #main
+    target_branch:str = None  #stable
+    repository:str = None
+    build_repo:str = None
+    common_remote_name:str = None
+    build_repo_main_branch_name:str = None
+    reference_repo_main_branch_name:str = None
+    reference_remote_name:str = None
+    build_repo_remote_name:str = None
+    artifacts_target_folder:str = None
+    common_remote_url:str = None
+    additional_arguments_file:str = None
 
     def __init__(self,loglevel:LogLevel,source_branch:str,target_branch:str,repository:str,build_repo:str,common_remote_name:str,build_repo_main_branch_name:str,reference_repo_main_branch_name:str,reference_remote_name:str,build_repo_remote_name:str,artifacts_target_folder:str,common_remote_url:str,additional_arguments_file:str):
         self.log_level=loglevel
@@ -42,9 +42,9 @@ class MergeToStableConfiguration:
 
 class TFCPS_MergeToStable:
 
-    sc:ScriptCollectionCore
-    tFCPS_Tools_General:TFCPS_Tools_General
-    createRelease_configuration: MergeToStableConfiguration
+    sc:ScriptCollectionCore = None
+    tFCPS_Tools_General:TFCPS_Tools_General = None
+    createRelease_configuration: MergeToStableConfiguration = None
 
     def __init__(self, createRelease_configuration: MergeToStableConfiguration):
         self.sc=ScriptCollectionCore()

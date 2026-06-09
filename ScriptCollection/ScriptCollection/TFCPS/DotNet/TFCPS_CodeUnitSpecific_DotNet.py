@@ -14,8 +14,8 @@ from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_Code
 
 class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
  
-    is_library:bool
-    csproj_file:bool
+    is_library:bool = None
+    csproj_file:bool = None
 
     def __init__(self,current_file:str,verbosity:LogLevel,targetenvironmenttype:str,use_cache:bool,is_pre_merge:bool):
         super().__init__(current_file, verbosity,targetenvironmenttype,use_cache,is_pre_merge)

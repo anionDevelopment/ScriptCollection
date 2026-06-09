@@ -9,22 +9,22 @@ from .TFCPS_MergeToStable import TFCPS_MergeToStable,MergeToStableConfiguration
 
 class TFCPS_CreateReleaseConfiguration:
     
-    product_name: str
-    branch_to_be_released:str
-    additional_arguments_file:str
-    log_level:LogLevel
-    main_branch:str
-    stable_branch:str
-    build_repository:str
-    repository:str
-    reference_repository:str
-    common_remote_name:str
-    build_repo_main_branch_name:str
-    reference_repo_main_branch_name:str
-    reference_remote_name:str
-    build_repo_remote_name:str
-    artifacts_target_folder:str
-    common_remote_url:str
+    product_name: str = None
+    branch_to_be_released:str = None
+    additional_arguments_file:str = None
+    log_level:LogLevel = None
+    main_branch:str = None
+    stable_branch:str = None
+    build_repository:str = None
+    repository:str = None
+    reference_repository:str = None
+    common_remote_name:str = None
+    build_repo_main_branch_name:str = None
+    reference_repo_main_branch_name:str = None
+    reference_remote_name:str = None
+    build_repo_remote_name:str = None
+    artifacts_target_folder:str = None
+    common_remote_url:str = None
     
     def __init__(self, current_file: str, product_name: str,branch_to_be_released:str,log_level:LogLevel,additional_arguments_file:str,main_branch:str,stable_branch:str,common_remote_name:str,build_repo_main_branch_name:str,reference_repo_main_branch_name:str,reference_remote_name:str,build_repo_remote_name:str,artifacts_target_folder:str,common_remote_url:str):
         self.product_name = product_name
@@ -46,8 +46,8 @@ class TFCPS_CreateReleaseConfiguration:
 
 class TFCPS_CreateRelease:
 
-    sc:ScriptCollectionCore
-    tFCPS_Tools_General:TFCPS_Tools_General
+    sc:ScriptCollectionCore = None
+    tFCPS_Tools_General:TFCPS_Tools_General = None
 
     def __init__(self):
         self.sc=ScriptCollectionCore()

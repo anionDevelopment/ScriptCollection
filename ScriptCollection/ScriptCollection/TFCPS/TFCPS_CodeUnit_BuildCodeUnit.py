@@ -8,15 +8,15 @@ from .TFCPS_Tools_General import TFCPS_Tools_General
 
 class TFCPS_CodeUnit_BuildCodeUnit:
 
-    codeunit_folder: str
-    repository_folder: str
+    codeunit_folder: str = None
+    repository_folder: str = None
     sc: ScriptCollectionCore = ScriptCollectionCore()
-    codeunit_name: str
-    tFCPS_Tools: TFCPS_Tools_General
-    target_environment_type: str
-    additionalargumentsfile: str
-    use_cache: bool
-    is_pre_merge: bool
+    codeunit_name: str = None
+    tFCPS_Tools: TFCPS_Tools_General = None
+    target_environment_type: str = None
+    additionalargumentsfile: str = None
+    use_cache: bool = None
+    is_pre_merge: bool = None
 
     def __init__(self, codeunit_folder: str, verbosity: LogLevel, target_environment_type: str, additionalargumentsfile: str, use_cache: bool,is_pre_merge:bool):
         self.sc = ScriptCollectionCore()
