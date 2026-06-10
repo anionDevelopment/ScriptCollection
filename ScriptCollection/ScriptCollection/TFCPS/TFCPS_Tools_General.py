@@ -665,6 +665,9 @@ class TFCPS_Tools_General:
         GeneralUtilities.ensure_directory_exists(target_folder)
         target_file = os.path.join(target_folder, "CodeUnits-Overview.plantuml")
         lines = ["@startuml CodeUnits-Overview"]
+        # Pin font so the rendered SVG is byte-identical across machines (Java/PlantUML's
+        # default 'sans-serif' otherwise resolves to different host fonts on Windows vs Linux).
+        lines.append('skinparam defaultFontName "DejaVu Sans"')
         lines.append(f"title CodeUnits of {project_name}")
 
         codeunits = self.get_codeunits(repository_folder)
