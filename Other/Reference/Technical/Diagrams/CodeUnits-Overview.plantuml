@@ -1,4 +1,5 @@
 @startuml CodeUnits-Overview
+skinparam defaultFontName "DejaVu Sans"
 title CodeUnits of ScriptCollection
 
 [ScriptCollection]
