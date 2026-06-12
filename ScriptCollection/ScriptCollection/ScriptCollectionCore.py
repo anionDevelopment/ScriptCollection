@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.133"
+version = "4.2.134"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -598,7 +598,7 @@ class ScriptCollectionCore:
     @GeneralUtilities.check_arguments
     def git_clone(self, clone_target_folder: str, remote_repository_path: str, include_submodules: bool = True, mirror: bool = False) -> None:
         if (os.path.isdir(clone_target_folder)):
-            pass  # TODO throw error
+            raise ValueError(f"Can not clone repository. Target folder '{clone_target_folder}' already exists as folder.")
         else:
             args = ["clone", remote_repository_path, clone_target_folder]
             if include_submodules:
@@ -1093,6 +1093,19 @@ class ScriptCollectionCore:
             base64_bytes = base64.b64encode(content_bytes)
             base64_string = base64_bytes.decode('utf-8')
             self.run_program_argsasarray("scsetfilecontent", ["--path", path, "--argumentisinbase64", "--content", base64_string])  # works platform-indepent
+
+    @GeneralUtilities.check_arguments
+    def file_contains_content(self, path: str, content: str, treat_content_as_regex: bool = False, case_sensitive: bool = True, encoding: str = "utf-8") -> bool:
+        """Returns True if `content` appears in the file at `path`. With treat_content_as_regex=True
+        the search is done via re.search, otherwise plain substring containment is checked."""
+        GeneralUtilities.assert_file_exists(path)
+        file_content = GeneralUtilities.read_text_from_file(path, encoding)
+        if treat_content_as_regex:
+            flags = 0 if case_sensitive else re.IGNORECASE
+            return re.search(content, file_content, flags) is not None
+        if case_sensitive:
+            return content in file_content
+        return content.lower() in file_content.lower()
 
     @GeneralUtilities.check_arguments
     def remove(self, path: str) -> None:

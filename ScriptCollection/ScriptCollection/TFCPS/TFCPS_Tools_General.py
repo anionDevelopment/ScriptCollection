@@ -443,7 +443,7 @@ class TFCPS_Tools_General:
         # TODO implement usage of self.reference_latest_version_of_xsd_when_generating_xml
         GeneralUtilities.write_text_to_file(constants_metafile, f"""<?xml version="1.0" encoding="UTF-8" ?>
 <cps:constant xmlns:cps="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure" constantspecificationversion="1.1.0"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/main/Conventions/RepositoryStructure/CommonProjectStructure/constant.xsd">
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/main/Conventions/RepositoryStructure/CommonProjectStructure/constant.xsd">
     <cps:name>{constantname}</cps:name>
     <cps:documentationsummary>{documentationsummary}</cps:documentationsummary>
     <cps:path>{constants_valuefiler_reference}</cps:path>
@@ -985,7 +985,7 @@ class TFCPS_Tools_General:
         grylibrary_dll_file_exists = os.path.isfile(grylibrary_dll_file)
         if not os.path.isfile(grylibrary_dll_file):
             self.__sc.log.log("Download GRYLibrary to global cache...",LogLevel.Information)
-            grylibrary_latest_codeunit_file = "https://raw.githubusercontent.com/anionDev/GRYLibrary/stable/GRYLibrary/GRYLibrary.codeunit.xml"
+            grylibrary_latest_codeunit_file = "https://raw.githubusercontent.com/anionDevelopment/GRYLibrary/stable/GRYLibrary/GRYLibrary.codeunit.xml"
             with urllib.request.urlopen(grylibrary_latest_codeunit_file) as url_result:
                 grylibrary_latest_version = self.get_version_of_codeunit_filecontent(url_result.read().decode("utf-8"))
             if grylibrary_dll_file_exists:
@@ -996,7 +996,7 @@ class TFCPS_Tools_General:
             GeneralUtilities.ensure_directory_does_not_exist(grylibrary_folder)
             GeneralUtilities.ensure_directory_exists(grylibrary_folder)
             archive_name = f"GRYLibrary.v{grylibrary_latest_version}.Artifacts.zip"
-            archive_download_link = f"https://github.com/anionDev/GRYLibrary/releases/download/v{grylibrary_latest_version}/{archive_name}"
+            archive_download_link = f"https://github.com/anionDevelopment/GRYLibrary/releases/download/v{grylibrary_latest_version}/{archive_name}"
             archive_file = os.path.join(grylibrary_folder, archive_name)
             urllib.request.urlretrieve(archive_download_link, archive_file)
             with zipfile.ZipFile(archive_file, 'r') as zip_ref:
@@ -1022,6 +1022,7 @@ class TFCPS_Tools_General:
                 GeneralUtilities.ensure_directory_exists(ffmpeg_temp_folder)
                 zip_file_on_disk = os.path.join(ffmpeg_temp_folder, "ffmpeg.zip")
                 original_zip_filename = "ffmpeg-master-latest-win64-gpl-shared"
+                #TODO make version configurable instead of always using "latest"
                 zip_link = f"https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/{original_zip_filename}.zip"
                 urllib.request.urlretrieve(zip_link, zip_file_on_disk)
                 shutil.unpack_archive(zip_file_on_disk, ffmpeg_temp_folder)
@@ -1682,13 +1683,13 @@ class TFCPS_Tools_General:
 
     @GeneralUtilities.check_arguments
     def try_update_basic_codeunitreference_from_examples_repository(self, codeunit_folder:str,example_codeunit_name: str):
-        source=f"https://raw.githubusercontent.com/anionDev/CommonProjectStructureExamples/refs/heads/main/{example_codeunit_name}/Other/Reference/ReferenceContent/HowToBuild.md"
+        source=f"https://raw.githubusercontent.com/anionDevelopment/CommonProjectStructureExamples/refs/heads/main/{example_codeunit_name}/Other/Reference/ReferenceContent/HowToBuild.md"
         target=f"{codeunit_folder}/Other/Reference/ReferenceContent/HowToBuild.md"
         self.download_file(source,target)   
 
     @GeneralUtilities.check_arguments
     def try_update_basic_repositoryreference_from_examples_repository(self, repository_folder:str):
-        source=f"https://raw.githubusercontent.com/anionDev/CommonProjectStructureExamples/refs/heads/main/Other/Reference/RepositoryStructure.mdd"
+        source=f"https://raw.githubusercontent.com/anionDevelopment/CommonProjectStructureExamples/refs/heads/main/Other/Reference/RepositoryStructure.mdd"
         target=f"{repository_folder}/Other/Reference/RepositoryStructure.md"
         self.download_file(source,target)   
 

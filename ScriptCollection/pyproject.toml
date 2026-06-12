@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.2.133"
+version = "4.2.134"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
@@ -127,6 +127,7 @@ scshowversion = "ScriptCollection.Executables:ShowVersion"
 scshowprojectversion = "ScriptCollection.Executables:ShowProjectVersion"
 scpreparebuildpipelineforgitlab = "ScriptCollection.Executables:PrepareBuildPipelineForGitlab"
 scsearchforsecrets = "ScriptCollection.Executables:SearchForSecrets"
+scgeneratetaskfilefromworkspacefile = "ScriptCollection.Executables:GenerateTaskfileFromWorkspacefile"
 
 [tool.setuptools]
 zip-safe = false

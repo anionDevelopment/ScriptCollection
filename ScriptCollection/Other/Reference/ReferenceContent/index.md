@@ -2,6 +2,7 @@
 
 The following articles are available in the documentation
 
-- [Required tools for CommonProjectStructure](./Articles/RequiredToolsForCommonProjectStructure.md)
 - [Configuration-folder](./Articles/ConfigurationFolder.md)
 - [Downloadable tools](./Articles/DownloadableTools.md)
+- [Platform-independent CLI-commands](./Articles/PlatformIndependentCLICommands.md)
+- [Required tools for CommonProjectStructure](./Articles/RequiredToolsForCommonProjectStructure.md)

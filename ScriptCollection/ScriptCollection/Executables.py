@@ -1,5 +1,8 @@
 import base64
 import os
+import re
+import subprocess
+import fnmatch
 import argparse
 import time
 import traceback
@@ -466,17 +469,52 @@ def CreateFolder() -> int:
 
 
 def AppendLineToFile() -> int:
-    GeneralUtilities.write_message_to_stderr("This function is not implemented yet.")
-    # TODO implement function
-    # TODO add switch to set if adding new line at begin of line should be skipped if the file already ends with a new-line-character
-    # TODO add switch to enable/disable appending another new-line-character at the end of the file
-    return 1
+    parser = argparse.ArgumentParser(description="Appends a line to a file. By default a leading newline is inserted before the line and a trailing newline after it (POSIX-line-ended files).")
+    parser.add_argument('-p', '--path', required=True)
+    parser.add_argument('-l', '--line', required=True, help='Line content to append (without trailing newline).')
+    parser.add_argument('-e', '--encoding', default="utf-8")
+    parser.add_argument('--skip-leading-newline-if-file-already-ends-with-newline', action='store_true', default=False, help='If the file already ends with a newline character, do not insert another leading newline (avoids an empty line).')
+    parser.add_argument('--no-trailing-newline', action='store_true', default=False, help='Do not append a trailing newline character after the line.')
+    args = parser.parse_args()
+    if not os.path.isfile(args.path):
+        GeneralUtilities.write_message_to_stderr(f"File '{args.path}' does not exist.")
+        return 1
+    existing = GeneralUtilities.read_text_from_file(args.path, args.encoding)
+    if not existing:
+        prefix = ""
+    elif existing.endswith("\n") and args.skip_leading_newline_if_file_already_ends_with_newline:
+        prefix = ""
+    else:
+        prefix = "\n"
+    suffix = "" if args.no_trailing_newline else "\n"
+    GeneralUtilities.write_text_to_file(args.path, existing + prefix + args.line + suffix, args.encoding)
+    return 0
 
 
 def RegexReplaceInFile() -> int:
-    GeneralUtilities.write_message_to_stderr("This function is not implemented yet.")
-    # TODO implement function
-    return 1
+    parser = argparse.ArgumentParser(description="Performs a regex-based replacement in a file and writes the result back. Supports backreferences (e.g. \\1) in the replacement string.")
+    parser.add_argument('-p', '--path', required=True)
+    parser.add_argument('-r', '--pattern', required=True, help='Regular expression to match.')
+    parser.add_argument('-w', '--replacement', required=True, help='Replacement string (supports backreferences such as \\1).')
+    parser.add_argument('-e', '--encoding', default="utf-8")
+    parser.add_argument('-i', '--case-insensitive', action='store_true', default=False)
+    parser.add_argument('-m', '--multiline', action='store_true', default=False, help='Enable re.MULTILINE (^ and $ match at line boundaries).')
+    parser.add_argument('-d', '--dotall', action='store_true', default=False, help='Enable re.DOTALL (. matches newlines).')
+    args = parser.parse_args()
+    if not os.path.isfile(args.path):
+        GeneralUtilities.write_message_to_stderr(f"File '{args.path}' does not exist.")
+        return 1
+    flags = 0
+    if args.case_insensitive:
+        flags |= re.IGNORECASE
+    if args.multiline:
+        flags |= re.MULTILINE
+    if args.dotall:
+        flags |= re.DOTALL
+    content = GeneralUtilities.read_text_from_file(args.path, args.encoding)
+    new_content = re.sub(args.pattern, args.replacement, content, flags=flags)
+    GeneralUtilities.write_text_to_file(args.path, new_content, args.encoding)
+    return 0
 
 
 def PrintFileSize() -> int:
@@ -494,10 +532,19 @@ def PrintFileSize() -> int:
 
 
 def FileContainsContent() -> int:
-    GeneralUtilities.write_message_to_stderr("This function is not implemented yet.")
-    # TODO implement function
-    # TODO add switch to set if the input pattern should be treated as regex
-    return 1
+    parser = argparse.ArgumentParser(description="Returns exit-code 0 if the file contains the given content, 2 if not. 1 on error (e.g. file does not exist).")
+    parser.add_argument('-p', '--path', required=True)
+    parser.add_argument('-c', '--content', required=True, help='Substring (or regex if --regex is set) to search for.')
+    parser.add_argument('-r', '--regex', action='store_true', default=False, help='Treat --content as a regular expression.')
+    parser.add_argument('-i', '--case-insensitive', action='store_true', default=False, help='Match case-insensitively.')
+    parser.add_argument('-e', '--encoding', default="utf-8")
+    args = parser.parse_args()
+    if not os.path.isfile(args.path):
+        GeneralUtilities.write_message_to_stderr(f"File '{args.path}' does not exist.")
+        return 1
+    sc = ScriptCollectionCore()
+    found = sc.file_contains_content(args.path, args.content, args.regex, not args.case_insensitive, args.encoding)
+    return 0 if found else 2
 
 
 def RemoveFile() -> int:
@@ -602,31 +649,116 @@ def ListFolderContent() -> int:
     parser.add_argument('-f', '--excludefiles', action='store_true', required=False, default=False)
     parser.add_argument('-d', '--excludedirectories', action='store_true', required=False, default=False)
     parser.add_argument('-n', '--printonlynamewithoutpath', action='store_true', required=False, default=False)
-    # TODO add option to also list transitively list subfolder
-    # TODO add option to show only content which matches a filter by extension or regex or glob-pattern
+    parser.add_argument('-t', '--transitive', action='store_true', required=False, default=False, help='Recurse into subfolders.')
+    filter_group = parser.add_mutually_exclusive_group()
+    filter_group.add_argument('--extension', help='Comma-separated list of file extensions (without dot) to include, e.g. "py,md".')
+    filter_group.add_argument('--glob', help='Glob pattern matched against entry basename, e.g. "*.py" or "test_*".')
+    filter_group.add_argument('--regex', help='Regex pattern matched against entry basename.')
     args = parser.parse_args()
     folder = args.path
     if not os.path.isabs(folder):
         folder = GeneralUtilities.resolve_relative_path(folder, os.getcwd())
-    content = []
-    if not args.excludefiles:
-        content = content+GeneralUtilities.get_direct_files_of_folder(folder)
-    if not args.excludedirectories:
-        content = content+GeneralUtilities.get_direct_folders_of_folder(folder)
-    for contentitem in content:
-        content_to_print: str = None
-        if args.printonlynamewithoutpath:
-            content_to_print = os.path.basename(contentitem)
-        else:
-            content_to_print = contentitem
+    if not os.path.isdir(folder):
+        GeneralUtilities.write_message_to_stderr(f"Folder '{folder}' does not exist.")
+        return 1
+    if args.excludefiles and args.excludedirectories:
+        GeneralUtilities.write_message_to_stderr("Nothing to list: both files and folders are excluded.")
+        return 1
+    extensions: set[str] = None
+    if args.extension is not None:
+        extensions = {e.strip().lower().lstrip(".") for e in args.extension.split(",") if e.strip()}
+
+    def matches_filter(entry_path: str) -> bool:
+        basename = os.path.basename(entry_path)
+        if extensions is not None:
+            ext = os.path.splitext(basename)[1].lstrip(".").lower()
+            return ext in extensions
+        if args.glob is not None:
+            return fnmatch.fnmatch(basename, args.glob)
+        if args.regex is not None:
+            return re.search(args.regex, basename) is not None
+        return True
+
+    entries: list[str] = []
+    if args.transitive:
+        for current_root, subfolders, files in os.walk(folder):
+            if not args.excludedirectories:
+                for subfolder in subfolders:
+                    entries.append(os.path.join(current_root, subfolder))
+            if not args.excludefiles:
+                for file in files:
+                    entries.append(os.path.join(current_root, file))
+    else:
+        if not args.excludefiles:
+            entries = entries + GeneralUtilities.get_direct_files_of_folder(folder)
+        if not args.excludedirectories:
+            entries = entries + GeneralUtilities.get_direct_folders_of_folder(folder)
+
+    for entry in entries:
+        if not matches_filter(entry):
+            continue
+        content_to_print = os.path.basename(entry) if args.printonlynamewithoutpath else entry
         GeneralUtilities.write_message_to_stdout(content_to_print)
     return 0
 
 
 def ForEach() -> int:
-    GeneralUtilities.write_message_to_stderr("This function is not implemented yet.")
-    # TODO implement function
-    return 1
+    parser = argparse.ArgumentParser(
+        description=(
+            "Iterates the entries of a folder and runs a command for each one. The placeholder '{path}' "
+            "in the command template is replaced with the entry's absolute path before execution. "
+            "By default only direct child entries are processed; with --transitive the whole subtree is walked. "
+            "By default only files are processed; use --include-folders to also process folders.\n"
+            "\n"
+            "Example: scforeach -f . -c \"git -C \\\"{path}\\\" status -s\" --include-folders --skip-files"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument('-f', '--folder', required=True, help='Folder whose entries should be iterated.')
+    parser.add_argument('-c', '--command', required=True, help='Command template. Use "{path}" as placeholder for the entry path.')
+    parser.add_argument('-t', '--transitive', action='store_true', default=False, help='Recurse into subfolders.')
+    parser.add_argument('--include-folders', action='store_true', default=False, help='Also process folder entries (default: only files).')
+    parser.add_argument('--skip-files', action='store_true', default=False, help='Skip file entries (useful in combination with --include-folders).')
+    parser.add_argument('--continue-on-error', action='store_true', default=False, help='Continue with the next entry even if a command returns a non-zero exit-code.')
+    args = parser.parse_args()
+    if not os.path.isdir(args.folder):
+        GeneralUtilities.write_message_to_stderr(f"Folder '{args.folder}' does not exist.")
+        return 1
+    process_files = not args.skip_files
+    process_folders = args.include_folders
+    if not process_files and not process_folders:
+        GeneralUtilities.write_message_to_stderr("Nothing to do: both files and folders are excluded.")
+        return 1
+    entries: list[str] = []
+    if args.transitive:
+        for current_root, subfolders, files in os.walk(args.folder):
+            if process_folders:
+                for subfolder in subfolders:
+                    entries.append(os.path.join(current_root, subfolder))
+            if process_files:
+                for file in files:
+                    entries.append(os.path.join(current_root, file))
+    else:
+        for entry_name in os.listdir(args.folder):
+            entry_path = os.path.join(args.folder, entry_name)
+            if os.path.isfile(entry_path) and process_files:
+                entries.append(entry_path)
+            elif os.path.isdir(entry_path) and process_folders:
+                entries.append(entry_path)
+    aggregate_exit_code = 0
+    for entry_path in entries:
+        absolute_entry_path = os.path.abspath(entry_path)
+        rendered_command = args.command.replace("{path}", absolute_entry_path)
+        completed = subprocess.run(rendered_command, shell=True, capture_output=True, text=True, check=False)
+        if completed.stdout:
+            GeneralUtilities.write_message_to_stdout(completed.stdout.rstrip("\n"))
+        if completed.stderr:
+            GeneralUtilities.write_message_to_stderr(completed.stderr.rstrip("\n"))
+        if completed.returncode != 0:
+            aggregate_exit_code = completed.returncode
+            if not args.continue_on_error:
+                return aggregate_exit_code
+    return aggregate_exit_code
 
 
 def NpmI() -> int:
@@ -798,13 +930,19 @@ def SetFileContent() -> int:
 
 
 def GenerateTaskfileFromWorkspacefile() -> int:
-    parser = argparse.ArgumentParser(description="Generates a taskfile.yml-file from a .code-workspace-file")
-    parser.add_argument('-f', '--repositoryfolder', required=True)
-    #args = parser.parse_args()
-    #t = TasksForCommonProjectStructure()
-    #t.generate_tasksfile_from_workspace_file(args.repositoryfolder)
-    #return 0
-    return 1#TODO
+    parser = argparse.ArgumentParser(description="Generates a Taskfile.yml file from a .code-workspace file.")
+    parser.add_argument('-f', '--repositoryfolder', required=True, help='Repository folder containing the .code-workspace file.')
+    parser.add_argument('--appendcliargs', action='store_true', default=False, help='Append "{{.CLI_ARGS}}" to each generated task command so extra CLI-args can be forwarded.')
+    args = parser.parse_args()
+    repository_folder = args.repositoryfolder
+    if not os.path.isabs(repository_folder):
+        repository_folder = GeneralUtilities.resolve_relative_path(repository_folder, os.getcwd())
+    if not os.path.isdir(repository_folder):
+        GeneralUtilities.write_message_to_stderr(f"Folder '{repository_folder}' does not exist.")
+        return 1
+    sc = ScriptCollectionCore()
+    TFCPS_Tools_General(sc).generate_tasksfile_from_workspace_file(repository_folder, args.appendcliargs)
+    return 0
 
 
 def UpdateTimestampInFile() -> int:
