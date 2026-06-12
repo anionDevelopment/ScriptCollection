@@ -1,36 +1,30 @@
-<?xml version="1.0" encoding="UTF-8" ?>
-<cps:codeunit xmlns:cps="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure" codeunitspecificationversion="2.9.4"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v2.9.4/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd" enabled="true">
+<?xml version="1.0" encoding="UTF-8"?>
+<cps:codeunit
+    xmlns:cps="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure"
+    codeunitspecificationversion="2.9.4"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v2.9.4/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd" enabled="true">
     <cps:name>ScriptCollection</cps:name>
-    <cps:version>4.2.133</cps:version>
+    <cps:version>4.2.134</cps:version>
     <cps:codeunitownername>Marius Göcke</cps:codeunitownername>
     <cps:codeunitowneremailaddress>marius.goecke@gmail.com</cps:codeunitowneremailaddress>
-    <cps:properties codeunithastestablesourcecode="true" codeunithasupdatabledependencies="true" throwexceptionifcodeunitfilecannotbevalidated="true" developmentstate="Active development" description="ScriptCollection is the place for reusable scripts.">
-        <cps:testsettings minimalcodecoverageinpercent="20"/>
+    <cps:properties codeunithastestablesourcecode="true" codeunithasupdatabledependencies="true"
+        throwexceptionifcodeunitfilecannotbevalidated="true" developmentstate="Active development"
+        description="ScriptCollection is the place for reusable scripts.">
+        <cps:testsettings minimalcodecoverageinpercent="20" />
         <cps:pipelinedemands>
         </cps:pipelinedemands>
         <cps:updatesettings>
             <cps:ignoreddependencies>
-            <cps:ignoreddependency>cyclonedx-bom</cps:ignoreddependency>
-            <cps:ignoreddependency>lxml</cps:ignoreddependency>
+                <cps:ignoreddependency>cyclonedx-bom</cps:ignoreddependency>
+                <cps:ignoreddependency>lxml</cps:ignoreddependency>
             </cps:ignoreddependencies>
         </cps:updatesettings>
     </cps:properties>
-    <cps:dependentcodeunits/>
+    <cps:dependentcodeunits />
     <cps:developerteam>
         <cps:developer>
             <cps:developername>Marius Göcke</cps:developername>
             <cps:developeremailaddress>marius.goecke@gmail.com</cps:developeremailaddress>
         </cps:developer>
     </cps:developerteam>
-    <!--
-    <cps:demands>
-        <cps:demandstool name="python" version="3.11"/>
-        <cps:demandstool name="pip3" version="22"/>
-        <cps:demandstool name="git" version="2.39"/>
-        <cps:demandstool name="gitversion" version="5"/>
-        <cps:demandstool name="docfx" version="2"/>
-        <cps:demandstool name="reportgenerator" version="5"/>
-    </cps:demands>
-    -->
 </cps:codeunit>

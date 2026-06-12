@@ -4,11 +4,11 @@
 
 [![Supported Python versions](https://img.shields.io/pypi/pyversions/ScriptCollection.svg)](https://pypi.org/project/ScriptCollection/)
 ![PyPI](https://img.shields.io/pypi/v/ScriptCollection)
-![Dependencies](https://img.shields.io/librariesio/github/anionDev/ScriptCollection)
+![Dependencies](https://img.shields.io/librariesio/github/anionDevevlopment/ScriptCollection)
 
-[![CodeFactor](https://www.codefactor.io/repository/github/aniondev/scriptcollection/badge/main)](https://www.codefactor.io/repository/github/aniondev/scriptcollection/overview/main)
+[![CodeFactor](https://www.codefactor.io/repository/github/anionDevevlopment/scriptcollection/badge/main)](https://www.codefactor.io/repository/github/anionDevevlopment/scriptcollection/overview/main)
 [![Downloads](https://pepy.tech/badge/scriptcollection)](https://pepy.tech/project/scriptcollection)
-![Coverage](https://raw.githubusercontent.com/anionDev/ScriptCollection/main/ScriptCollection/Other/Resources/TestCoverageBadges/badge_shieldsio_linecoverage_blue.svg)
+![Coverage](https://raw.githubusercontent.com/anionDevevlopment/ScriptCollection/main/ScriptCollection/Other/Resources/TestCoverageBadges/badge_shieldsio_linecoverage_blue.svg)
 
 The ScriptCollection is the place for reusable scripts.
 
@@ -38,13 +38,13 @@ See the [PyPI-site for ScriptCollection](https://pypi.org/project/ScriptCollecti
 
 You can simply git-clone the ScriptCollection and then use the scripts under the provided license.
 
-`git clone https://github.com/anionDev/ScriptCollection.git`
+`git clone https://github.com/anionDevevlopment/ScriptCollection.git`
 
-It may be more easy to pip-install the ScriptCollection but technically pip is not required. Actually you need to git-clone (or download as zip-file from [GitHub](https://github.com/anionDev/ScriptCollection) the ScriptCollection to use the scripts in this repository which are not written in python.
+It may be more easy to pip-install the ScriptCollection but technically pip is not required. Actually you need to git-clone (or download as zip-file from [GitHub](https://github.com/anionDevevlopment/ScriptCollection) the ScriptCollection to use the scripts in this repository which are not written in python.
 
 ## Troubleshooting
 
-It is recommended to always use only the newest version of the ScriptCollection. If you have an older version: Update it (e. g. using `pip3 install ScriptCollection --upgrade` if you installed the ScriptCollection via pip). If you still have problems, then feel free to create an [issue](https://github.com/anionDev/ScriptCollection/issues).
+It is recommended to always use only the newest version of the ScriptCollection. If you have an older version: Update it (e. g. using `pip3 install ScriptCollection --upgrade` if you installed the ScriptCollection via pip). If you still have problems, then feel free to create an [issue](https://github.com/anionDevevlopment/ScriptCollection/issues).
 
 If you have installed the ScriptCollection as pip-package you can simply check the version using Python with the following commands:
 
@@ -59,11 +59,11 @@ Or you can simply run `pip3 freeze` folder to get information about (all) curren
 
 ### Branching-system
 
-This repository applies the [GitFlowSimplified](https://github.com/anionDev/ProjectTemplates/blob/main/Templates/Conventions/BranchingSystem/GitFlowSimplified.md)-branching-system.
+This repository applies the [GitFlowSimplified](https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/blob/main/Conventions/BranchingSystem/GitFlowSimplified/GitFlowSimplified.md)-branching-system.
 
 ### Repository-structure
 
-This repository applies the [CommonProjectStructure](https://github.com/anionDev/ProjectTemplates/blob/main/Templates/Conventions/RepositoryStructure/CommonProjectStructure/CommonProjectStructure.md)-branching-system.
+This repository applies the [CommonProjectStructure](https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/blob/main/Conventions/RepositoryStructure/CommonProjectStructure/CommonProjectStructure.md)-branching-system.
 
 ### Install dependencies
 
@@ -120,4 +120,4 @@ This tools must be available on the system where the functions should be execute
 
 ## License
 
-See [License.txt](https://raw.githubusercontent.com/anionDev/ScriptCollection/main/License.txt) for license-information.
+See [License.txt](https://raw.githubusercontent.com/anionDevevlopment/ScriptCollection/main/License.txt) for license-information.

@@ -203,6 +203,8 @@ class GeneralUtilities:
                 raise  ValueError("not implemented")#TODO
             case VersionEcholon.LatestVersion:
                 return GeneralUtilities.get_latest_version(available_versions)
+            case VersionEcholon.NoUpdate:
+                return current_version
             case _:
                 raise  ValueError("Unknown echolon-value: "+str(echolon))
     
@@ -1140,7 +1142,7 @@ class GeneralUtilities:
     def generate_password(length: int = 16, alphabet: str = None) -> None:
         if alphabet is None:
             alphabet = strin.ascii_letters + strin.digits+"_"
-        return ''.join(secrets.choice(alphabet) for i in range(length))
+        return GeneralUtilities.empty_string.join(secrets.choice(alphabet) for i in range(length))
 
     @staticmethod
     @check_arguments
@@ -1202,12 +1204,20 @@ class GeneralUtilities:
     @staticmethod
     @check_arguments
     def internet_connection_is_available() -> bool:
-        # TODO add more hosts to check to return true if at least one is available
-        try:
-            with urllib.request.urlopen("https://www.google.com") as url_result:
-                return (url_result.code // 100) == 2
-        except:
-            pass
+        """Returns True as soon as any of a small set of well-known public hosts can be reached.
+        Returns False only when none of the hosts answered (= no internet connectivity)."""
+        hosts: list[str] = [
+            "https://www.google.com",
+            "https://www.wikipedia.org",
+            "https://www.github.com",
+            "https://www.cloudflare.com",
+        ]
+        for host in hosts:
+            try:
+                with urllib.request.urlopen(host, timeout=10):
+                    return True
+            except Exception:
+                continue
         return False
 
     @staticmethod
