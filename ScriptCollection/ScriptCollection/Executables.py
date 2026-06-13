@@ -432,18 +432,23 @@ def FolderExists() -> int:
 
 
 def PrintFileContent() -> int:
-    parser = argparse.ArgumentParser(description="This function prints the size of a file")
+    parser = argparse.ArgumentParser(description="This function prints the content of a file. With --excludedfolder you can forbid reading files inside certain folders even though reading is allowed in general.")
     parser.add_argument('-p', '--path', required=True)
     parser.add_argument('-e', '--encoding', required=False, default="utf-8")
+    parser.add_argument('-b', '--basefolder', required=False, default=".", help="Base-folder the excludedfolder-entries are relative to. Defaults to the current working-directory.")
+    parser.add_argument('-x', '--excludedfolder', action='append', default=[], help="A folder (relative to basefolder) whose files must not be read. Can be specified multiple times. Example: --excludedfolder .git --excludedfolder .claude --excludedfolder Other/Secrets")
     args = parser.parse_args()
     file = args.path
     encoding = args.encoding
-    if os.path.isfile(file):
-        GeneralUtilities.write_message_to_stdout(GeneralUtilities.read_text_from_file(file, encoding))
-        return 0
-    else:
+    if not os.path.isfile(file):
         GeneralUtilities.write_exception_to_stderr(f"File '{file}' does not exist.")
         return 1
+    sc = ScriptCollectionCore()
+    if sc.path_is_inside_one_of_the_folders(file, args.basefolder, args.excludedfolder):
+        GeneralUtilities.write_message_to_stderr(f"Reading '{file}' is not allowed because it is located inside an excluded folder.")
+        return 1
+    GeneralUtilities.write_message_to_stdout(GeneralUtilities.read_text_from_file(file, encoding))
+    return 0
 
 
 def CreateFile() -> int:
@@ -1118,6 +1123,18 @@ def ShowProjectVersion() -> int:
     sc: ScriptCollectionCore = ScriptCollectionCore()
     GeneralUtilities.write_message_to_stdout(sc.get_semver_version_from_gitversion(repository))
     return 0
+
+
+def RunCommandInFolder() -> int:
+    parser = argparse.ArgumentParser(description="Runs a command in a folder if (and only if) the folder is located inside the allowed folder.")
+    parser.add_argument('-b', '--basefolder', required=True, help="Folder in which the command is  executed in.")
+    parser.add_argument('-c', '--command', required=True, help="Command which should be executed.")
+    parser.add_argument('-a', '--arguments', required=False, default="", help="Arguments which should be passed to the command.")
+    parser.add_argument('-e', '--excludedfolder', action='append', default=[], help="A folder (relative to basefolder) which is not allowed even if it lies inside basefolder. Can be specified multiple times. Example: --excludedfolder .git --excludedfolder .claude --excludedfolder Other/Secrets")
+    parser.add_argument('-f', '--actualfolder', required=True, help="Folder-argument.")
+    args = parser.parse_args()
+    sc = ScriptCollectionCore()
+    return sc.run_command_in_folder(args.basefolder, args.command, args.arguments, args.actualfolder, args.excludedfolder)
 
 
 def SyncXlfFiles()->int:

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scprintfilecontent -b . -x .git -x .claude -x Other/Secrets -p *)"
+    ]
+  }
+}

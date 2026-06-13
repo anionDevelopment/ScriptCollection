@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.134"
+version = "4.2.135"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -163,6 +163,9 @@ class ScriptCollectionCore:
     program_runner: ProgramRunnerBase = None
     call_program_runner_directly: bool = None
     log: SCLog = None
+    # Magic string which can be used inside the arguments of run_command_in_folder. Every occurrence of it will be replaced by the (resolved) actual_folder.
+    run_command_in_folder_actual_folder_placeholder: str = "{actual_folder}"
+
 
     def __init__(self):
         self.program_runner = ProgramRunnerPopen()
@@ -2034,6 +2037,39 @@ class ScriptCollectionCore:
         if self.call_program_runner_directly:
             return self.program_runner.run_program(program, arguments, working_directory, custom_argument, interactive, env_vars)
         return self.run_program_argsasarray(program, GeneralUtilities.arguments_to_array(arguments), working_directory,  print_errors_as_information, log_file, timeoutInSeconds, addLogOverhead, title, log_namespace, GeneralUtilities.arguments_to_array(arguments_for_log), throw_exception_if_exitcode_is_not_zero, custom_argument, interactive, print_live_output, env_vars)
+
+    @GeneralUtilities.check_arguments
+    def path_is_inside_one_of_the_folders(self, path: str, base_folder: str, folders: list[str]) -> bool:
+        """Returns whether path (a file or folder) is equal to or located inside one of the given folders. path and base_folder are resolved against the current working-directory; the entries of folders must be relative to base_folder."""
+        resolved_path = GeneralUtilities.resolve_relative_path(path, os.getcwd())
+        resolved_base_folder = GeneralUtilities.resolve_relative_path(base_folder, os.getcwd())
+        normalized_path = os.path.normcase(os.path.normpath(resolved_path))
+        normalized_base_folder = os.path.normcase(os.path.normpath(resolved_base_folder))
+        for folder in folders:
+            if os.path.isabs(folder):
+                raise ValueError(f"The folder '{folder}' must be relative to the base-folder, but it is an absolute path.")
+            normalized_folder = os.path.normcase(os.path.normpath(os.path.join(normalized_base_folder, folder)))
+            if normalized_path == normalized_folder or normalized_path.startswith(normalized_folder + os.sep):
+                return True
+        return False
+
+    @GeneralUtilities.check_arguments
+    def run_command_in_folder(self, base_folder: str, command: str, arguments: str, actual_folder: str, excluded_folders: list[str] = None) -> int:
+        """Runs the given command with the given arguments in base_folder, but only if actual_folder is equal to base_folder or a subfolder of it and not located inside one of the excluded_folders. The entries of excluded_folders must be relative to base_folder. actual_folder can be used in arguments by using the placeholder "{actual_folder}"."""
+        if excluded_folders is None:
+            excluded_folders = []
+        resolved_actual_folder = GeneralUtilities.resolve_relative_path(actual_folder, os.getcwd())
+        base_folder = GeneralUtilities.resolve_relative_path(base_folder, os.getcwd())
+        normalized_actual_folder = os.path.normcase(os.path.normpath(resolved_actual_folder))
+        normalized_base_folder = os.path.normcase(os.path.normpath(base_folder))
+        actual_folder_is_allowed = normalized_actual_folder == normalized_base_folder or normalized_actual_folder.startswith(normalized_base_folder + os.sep)
+        if not actual_folder_is_allowed:
+            raise ValueError(f"The folder '{resolved_actual_folder}' is not allowed because it is neither equal to nor a subfolder of the allowed folder '{base_folder}'.")
+        if self.path_is_inside_one_of_the_folders(actual_folder, base_folder, excluded_folders):
+            raise ValueError(f"The folder '{resolved_actual_folder}' is not allowed because it is located inside one of the excluded folders (relative to the base-folder '{base_folder}').")
+        effective_arguments = arguments.replace(ScriptCollectionCore.run_command_in_folder_actual_folder_placeholder, resolved_actual_folder)
+        result = self.run_program(command, effective_arguments, base_folder)
+        return result[0]
 
     # Return-values program_runner: Exitcode, StdOut, StdErr, Pid
     @GeneralUtilities.check_arguments
