@@ -26,6 +26,9 @@ class TFCPS_Tools_General:
 
     __sc:ScriptCollectionCore=None
     oci_image_manager:OCIImageManager=None
+    # Relative path (inside the source-repository and inside the ScriptCollection.Resources-package) of the
+    # file that pins the OpenAPIGenerator-version used as default when no repository-specific version is given.
+    __openapigenerator_version_resource_relative_path:str="Dependencies/OpenAPIGenerator/Version.txt"
 
     def __init__(self,sc:ScriptCollectionCore):
         self.__sc=sc
@@ -985,6 +988,7 @@ class TFCPS_Tools_General:
         grylibrary_dll_file_exists = os.path.isfile(grylibrary_dll_file)
         if not os.path.isfile(grylibrary_dll_file):
             self.__sc.log.log("Download GRYLibrary to global cache...",LogLevel.Information)
+            #TODO make version configurable instead of always using "latest"
             grylibrary_latest_codeunit_file = "https://raw.githubusercontent.com/anionDevelopment/GRYLibrary/stable/GRYLibrary/GRYLibrary.codeunit.xml"
             with urllib.request.urlopen(grylibrary_latest_codeunit_file) as url_result:
                 grylibrary_latest_version = self.get_version_of_codeunit_filecontent(url_result.read().decode("utf-8"))
@@ -1164,7 +1168,13 @@ class TFCPS_Tools_General:
         if not jar_file_exists:
             self.__sc.log.log("Download OpenAPIGeneratorCLI...", LogLevel.Debug)
             if pinned_version is None:
-                raise ValueError(f"OpenAPIGenerator version is not pinned for this repository. Expected '<repo>/Other/Resources/Dependencies/OpenAPIGenerator/Version.txt' to exist and contain a Maven-format version (e.g. '7.23.0').")
+                # No repository-specific version is pinned. This happens when the global cache is warmed
+                # without a repository-context (e.g. scdownloadcachabletools in a build-image). Fall back
+                # to the default version that ships with the ScriptCollection-package instead of failing.
+                # Actual codeunit-builds always pass a repository_folder and therefore use the version
+                # pinned in their own '<repo>/Other/Resources/Dependencies/OpenAPIGenerator/Version.txt'.
+                pinned_version = self.get_default_openapigenerator_version()
+                self.__sc.log.log(f"No repository-specific OpenAPIGenerator version pinned; falling back to default version '{pinned_version}'.", LogLevel.Debug)
             version_to_download = pinned_version
             download_link = f"https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/{version_to_download}/openapi-generator-cli-{version_to_download}.jar"
             GeneralUtilities.ensure_directory_exists(openapigenerator_folder)
@@ -1199,6 +1209,23 @@ class TFCPS_Tools_General:
         version_file = os.path.join(repository_folder, "Other", "Resources", "Dependencies", "OpenAPIGenerator", "Version.txt")
         GeneralUtilities.assert_file_exists(version_file)
         return GeneralUtilities.read_text_from_file(version_file).strip()
+
+    @GeneralUtilities.check_arguments
+    def get_default_openapigenerator_version(self) -> str:
+        """Returns the OpenAPIGenerator-version used when no repository-specific version is pinned
+        (for example when warming the global cache via scdownloadcachabletools). The value is read from
+        '<repo>/Other/Resources/Dependencies/OpenAPIGenerator/Version.txt', which the build copies into the
+        ScriptCollection.Resources-package so it is available at runtime from the installed wheel."""
+        try:
+            # Default case: read the version-file that ships inside the installed package (wheel, build-image, ...).
+            content = GeneralUtilities._internal_load_resource(TFCPS_Tools_General.__openapigenerator_version_resource_relative_path)
+            return content.decode("utf-8").strip()
+        except (FileNotFoundError, ModuleNotFoundError):
+            # Fallback for running from an unbuilt source-checkout where the file has not been copied into the
+            # package-resources yet: read the human-editable source-file directly from the repository.
+            source_version_file = GeneralUtilities.resolve_relative_path(f"../../../Other/Resources/{TFCPS_Tools_General.__openapigenerator_version_resource_relative_path}", os.path.dirname(__file__))
+            GeneralUtilities.assert_file_exists(source_version_file)
+            return GeneralUtilities.read_text_from_file(source_version_file).strip()
 
     @GeneralUtilities.check_arguments
     def update_images_in_example_with_default_excluded(self, codeunit_folder: str,custom_updater:AbstractImageHandler):

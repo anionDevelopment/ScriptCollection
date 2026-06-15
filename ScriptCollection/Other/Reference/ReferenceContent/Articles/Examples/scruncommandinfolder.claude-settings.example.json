@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scruncommandinfolder -b /work/myrepo -c dotnet -a \"build {actual_folder} --configuration Release\" *)",
+      "Bash(scruncommandinfolder -b /work/myrepo -c dotnet -a \"test {actual_folder}\" *)"
+    ]
+  }
+}
