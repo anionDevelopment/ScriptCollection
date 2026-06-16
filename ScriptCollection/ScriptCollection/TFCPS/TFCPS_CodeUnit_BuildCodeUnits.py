@@ -277,11 +277,22 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     @GeneralUtilities.check_arguments
     def search_for_secrets(self) -> None:
         self.sc.log.log("Search for secrets...")
+        self.sc.run_program("ls","-la",self.repository,print_live_output=True)
+        self.sc.run_program("git","status",self.repository,print_live_output=True)
+        self.sc.run_program("cat",".betterleaks.toml",self.repository,print_live_output=True)
         try:
             image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "Betterleaks")
         except Exception:
             image="ghcr.io/betterleaks/betterleaks:latest"
+        config_file = os.path.join(self.repository, ".betterleaks.toml")
         scan_args = ["dir", "/repo", "-v"]
+        if os.path.isfile(config_file):
+            # Pass the config explicitly instead of relying on auto-detection, because betterleaks
+            # silently falls back to the default ruleset (logging "no config found in path /repo")
+            # when it does not find the config at the scan-root, which results in false positives.
+            scan_args = scan_args + ["-c", "/repo/.betterleaks.toml"]
+        else:
+            self.sc.log.log(f"No betterleaks-config found at '{config_file}'; scanning with default ruleset only.", LogLevel.Warning)
         args = ["run", "--rm", "-v", f"{self.repository}:/repo", image] + scan_args
         result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==LogLevel.Debug)
         if result[0] != 0:
