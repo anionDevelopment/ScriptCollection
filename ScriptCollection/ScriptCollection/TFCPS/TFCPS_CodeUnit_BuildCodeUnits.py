@@ -1,5 +1,7 @@
 import os
 import json
+import re
+import socket
 from datetime import datetime, timedelta,timezone
 import xmlschema
 import yaml
@@ -277,23 +279,36 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     @GeneralUtilities.check_arguments
     def search_for_secrets(self) -> None:
         self.sc.log.log("Search for secrets...")
-        self.sc.run_program("ls","-la",self.repository,print_live_output=True)
-        self.sc.run_program("git","status",self.repository,print_live_output=True)
-        self.sc.run_program("cat",".betterleaks.toml",self.repository,print_live_output=True)
         try:
             image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "Betterleaks")
         except Exception:
             image="ghcr.io/betterleaks/betterleaks:latest"
         config_file = os.path.join(self.repository, ".betterleaks.toml")
-        scan_args = ["dir", "/repo", "-v"]
+        if self.sc.is_running_in_build_container():
+            # We run inside the build-container with the docker-socket forwarded to the host-daemon.
+            # A bind-mount of our in-container repository-path (e.g. "/__w/<repo>/<repo>" on a
+            # GitHub-runner or "/Workspace/Repository" when the pipeline is run locally) would be
+            # resolved by the host-daemon, where that path does not exist or points to unrelated
+            # data (for example test-service-volumes written there by other sibling-containers).
+            # The sibling betterleaks-container would then scan the wrong directory - without the
+            # repository-content and without ".betterleaks.toml", which causes false positives.
+            # Sharing our own volumes instead exposes the repository to betterleaks at the same path.
+            mount_arguments = ["--volumes-from", self.__get_own_container_id()]
+            repository_in_scan_container = self.repository
+        else:
+            # Running directly on the host: a normal bind-mount works because the path is resolved
+            # on the same filesystem the docker-daemon uses.
+            mount_arguments = ["-v", f"{self.repository}:/repo"]
+            repository_in_scan_container = "/repo"
+        scan_args = ["dir", repository_in_scan_container, "-v"]
         if os.path.isfile(config_file):
             # Pass the config explicitly instead of relying on auto-detection, because betterleaks
-            # silently falls back to the default ruleset (logging "no config found in path /repo")
-            # when it does not find the config at the scan-root, which results in false positives.
-            scan_args = scan_args + ["-c", "/repo/.betterleaks.toml"]
+            # silently falls back to the default ruleset when it does not find the config at the
+            # scan-root, which results in false positives.
+            scan_args = scan_args + ["-c", f"{repository_in_scan_container}/.betterleaks.toml"]
         else:
             self.sc.log.log(f"No betterleaks-config found at '{config_file}'; scanning with default ruleset only.", LogLevel.Warning)
-        args = ["run", "--rm", "-v", f"{self.repository}:/repo", image] + scan_args
+        args = ["run", "--rm"] + mount_arguments + [image] + scan_args
         result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==LogLevel.Debug)
         if result[0] != 0:
             for line in GeneralUtilities.string_to_lines(result[1]):
@@ -301,6 +316,23 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             for line in GeneralUtilities.string_to_lines(result[2]):
                 self.sc.log.log(line, LogLevel.Error)
             raise ValueError(f"Found unignored secret findings (exit code {result[0]}). See {os.path.join(self.repository, '.betterleaks.toml')} to ignore known false positives.")
+
+    @GeneralUtilities.check_arguments
+    def __get_own_container_id(self) -> str:
+        # Determine the id of the container this process runs in so its volumes can be shared with
+        # sibling-containers via "docker run --volumes-from". The id is read from the proc-filesystem
+        # (most reliable) and falls back to the hostname, which equals the short container-id for
+        # containers that were started without an explicit hostname.
+        for proc_file in ["/proc/self/mountinfo", "/proc/self/cgroup"]:
+            try:
+                with open(proc_file, "r", encoding="utf-8") as file_handle:
+                    content = file_handle.read()
+            except Exception:
+                continue
+            match = re.search(r"[0-9a-f]{64}", content)
+            if match is not None:
+                return match.group(0)
+        return socket.gethostname()
 
     @GeneralUtilities.check_arguments
     def use_cache(self) -> bool:
