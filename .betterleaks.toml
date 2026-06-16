@@ -8,5 +8,5 @@ useDefault = true
 [[allowlists]]
 description = "Example/test certificates and their generation scripts (intentional placeholders, no real secrets, not used in production)."
 paths = [
-    '''Other/ServerMaintenance/Common/GenerateCertificates/''',
+    '''Other/Resources/OtherScripts/ServerMaintenance/Common/GenerateCertificates/''',
 ]
