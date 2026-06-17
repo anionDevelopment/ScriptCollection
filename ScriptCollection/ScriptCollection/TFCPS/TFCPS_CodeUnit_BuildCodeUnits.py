@@ -284,7 +284,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         except Exception:
             image="ghcr.io/betterleaks/betterleaks:latest"
         config_file = os.path.join(self.repository, ".betterleaks.toml")
-        if self.sc.is_running_in_build_container():
+        running_in_container = os.path.exists("/.dockerenv") or self.sc.is_running_in_build_container()
+        if running_in_container:
             # We run inside the build-container with the docker-socket forwarded to the host-daemon.
             # A bind-mount of our in-container repository-path (e.g. "/__w/<repo>/<repo>" on a
             # GitHub-runner or "/Workspace/Repository" when the pipeline is run locally) would be
@@ -320,18 +321,28 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     @GeneralUtilities.check_arguments
     def __get_own_container_id(self) -> str:
         # Determine the id of the container this process runs in so its volumes can be shared with
-        # sibling-containers via "docker run --volumes-from". The id is read from the proc-filesystem
-        # (most reliable) and falls back to the hostname, which equals the short container-id for
-        # containers that were started without an explicit hostname.
-        for proc_file in ["/proc/self/mountinfo", "/proc/self/cgroup"]:
-            try:
-                with open(proc_file, "r", encoding="utf-8") as file_handle:
-                    content = file_handle.read()
-            except Exception:
-                continue
-            match = re.search(r"[0-9a-f]{64}", content)
-            if match is not None:
-                return match.group(0)
+        # sibling-containers via "docker run --volumes-from".
+        # In mountinfo the own container-id only appears reliably in the source-path of the
+        # "/etc/hostname"/"/etc/hosts"/"/etc/resolv.conf"-mounts (".../containers/<id>/..."). A plain
+        # 64-hex-match there would also hit overlay-layer-hashes (which are not containers), so the
+        # "containers/"-prefix must be matched explicitly.
+        try:
+            with open("/proc/self/mountinfo", "r", encoding="utf-8") as file_handle:
+                match = re.search(r"/containers/([0-9a-f]{64})/", file_handle.read())
+                if match is not None:
+                    return match.group(1)
+        except Exception:
+            pass
+        # cgroup (v1): the container-id is part of the cgroup-path; here a plain 64-hex-match is safe.
+        try:
+            with open("/proc/self/cgroup", "r", encoding="utf-8") as file_handle:
+                match = re.search(r"[0-9a-f]{64}", file_handle.read())
+                if match is not None:
+                    return match.group(0)
+        except Exception:
+            pass
+        # Fallback: the hostname equals the short container-id for containers started without an
+        # explicit hostname.
         return socket.gethostname()
 
     @GeneralUtilities.check_arguments
