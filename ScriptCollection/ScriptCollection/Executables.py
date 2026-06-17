@@ -522,6 +522,17 @@ def RegexReplaceInFile() -> int:
     return 0
 
 
+def NormalizeLineEndings() -> int:
+    parser = argparse.ArgumentParser(description="Normalizes all physical line-endings of a file to LF (replaces CRLF and lone CR by LF).")
+    parser.add_argument('-p', '--path', required=True)
+    args = parser.parse_args()
+    if not os.path.isfile(args.path):
+        GeneralUtilities.write_message_to_stderr(f"File '{args.path}' does not exist.")
+        return 1
+    ScriptCollectionCore().normalize_line_endings(args.path)
+    return 0
+
+
 def PrintFileSize() -> int:
     parser = argparse.ArgumentParser(description="This function prints the size of a file")
     parser.add_argument('-p', '--path', required=True)

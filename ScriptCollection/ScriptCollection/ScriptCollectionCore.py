@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.138"
+version = "4.2.139"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -821,6 +821,31 @@ class ScriptCollectionCore:
         if (exit_code == 1):
             return False
         raise ValueError(f"Unable to calculate whether '{file_in_repository}' in repository '{repositorybasefolder}' is ignored due to git-exitcode {exit_code}.")
+
+    @GeneralUtilities.check_arguments
+    def get_not_git_ignored_files_of_folder(self, folder: str, file_extension: str = None) -> list[str]:
+        """Returns the absolute paths of all files inside 'folder' (which must lie within a git-repository)
+        that are not git-ignored, i.e. tracked files and untracked-but-not-ignored files; git-ignored content
+        like 'node_modules', 'bin' or 'obj' is excluded. When 'file_extension' is set (e.g. '.cs') only files
+        with that extension are returned."""
+        if not os.path.isdir(folder):
+            return []
+        # Run git from within 'folder' so the listing is limited to that subtree. "--cached" lists tracked
+        # files, "--others" untracked ones and "--exclude-standard" drops git-ignored files. "core.quotePath=false"
+        # keeps non-ascii paths unquoted. The resulting paths are relative to 'folder'.
+        lines = GeneralUtilities.string_to_lines(self.run_program_argsasarray("git", ["-c", "core.quotePath=false", "ls-files", "--cached", "--others", "--exclude-standard"], folder, throw_exception_if_exitcode_is_not_zero=True)[1], False)
+        result: list[str] = []
+        for line in lines:
+            if not GeneralUtilities.string_has_content(line):
+                continue
+            absolute_path = GeneralUtilities.resolve_relative_path(line.strip(), folder)
+            if file_extension is not None and not absolute_path.endswith(file_extension):
+                continue
+            if not os.path.isfile(absolute_path):  # a tracked-but-deleted file would still be listed by "--cached"
+                continue
+            if absolute_path not in result:
+                result.append(absolute_path)
+        return result
 
     @GeneralUtilities.check_arguments
     def git_discard_all_changes(self, repository: str) -> None:
@@ -2717,6 +2742,7 @@ TXDX
         ET.indent(element)
         content = ET.tostring(element, xml_declaration=add_xml_declaration, encoding="unicode")
         GeneralUtilities.write_text_to_file(file, content.rstrip("\n") + "\n", encoding)
+        self.normalize_line_endings(file)
 
     @GeneralUtilities.check_arguments
     def format_html_file(self, file: str, add_html_declaration: bool = False) -> None:
@@ -2724,6 +2750,17 @@ TXDX
         content = GeneralUtilities.read_text_from_file(file, encoding)
         content=self.format_html_content(content, add_html_declaration)
         GeneralUtilities.write_text_to_file(file, content, encoding)
+        self.normalize_line_endings(file)
+
+    @GeneralUtilities.check_arguments
+    def normalize_line_endings(self, file: str) -> None:
+        # Normalizes all physical line-endings of the given file to LF (replaces CRLF and lone CR by LF).
+        # Operates on the raw bytes so no character-encoding is assumed and only the line-ending-bytes are
+        # touched; the file is only rewritten when its content actually changes.
+        content = GeneralUtilities.read_binary_from_file(file)
+        normalized_content = content.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        if normalized_content != content:
+            GeneralUtilities.write_binary_to_file(file, normalized_content)
 
     @GeneralUtilities.check_arguments
     def format_html_content(self, content: str, add_html_declaration: bool = False) -> str:
@@ -3671,6 +3708,7 @@ OCR-content:
         xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
         with open(file, "wb") as f:
             f.write(xml_bytes)
+        self.format_xml_file(file)
 
     @GeneralUtilities.check_arguments
     def translate(self, content: str, source_language: str, target_language: str, libre_translate_api_server: str) -> str:
