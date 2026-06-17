@@ -24,11 +24,21 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def linting(self) -> None:
-        src_folder = os.path.join(self.get_codeunit_folder(), "src")
-        for file in GeneralUtilities.get_all_files_of_folder(src_folder):
-            if file.endswith(".html"):
-                self._protected_sc.format_html_file(file, os.path.basename(file) == "index.html")
-        self._protected_sc.run_with_epew("npm", "run lint", self.get_codeunit_folder(),print_live_output=self.get_verbosity()==LogLevel.Debug,encode_argument_in_base64=True)
+        codeunit_folder = self.get_codeunit_folder()
+        for ts_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".ts"):
+            self._protected_sc.normalize_line_endings(ts_file)
+        for js_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".js"):
+            self._protected_sc.normalize_line_endings(js_file)
+        for css_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".css"):
+            self._protected_sc.normalize_line_endings(css_file)
+        for scss_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".scss"):
+            self._protected_sc.normalize_line_endings(scss_file)
+        for sass_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".sass"):
+            self._protected_sc.normalize_line_endings(sass_file)
+        for html_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".html"):
+            self._protected_sc.normalize_line_endings(html_file)
+            self._protected_sc.format_html_file(html_file, os.path.basename(html_file) == "index.html")
+        self._protected_sc.run_with_epew("npm", "run lint", codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug,encode_argument_in_base64=True)
 
     @GeneralUtilities.check_arguments
     def do_common_tasks(self,current_codeunit_version:str)-> None:
@@ -37,10 +47,7 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
         self.do_common_tasks_base(current_codeunit_version)
         self.tfcps_Tools_General.replace_version_in_packagejson_file(GeneralUtilities.resolve_relative_path("./package.json", codeunit_folder), codeunit_version)
         self.tfcps_Tools_General.do_npm_install(codeunit_folder, True,self.use_cache())
-        #if generateAPIClientBase.generate_api_client():
-        #    generateAPIClientGenerate:GenerateAPIClientGenerate=generateAPIClientBase
-        #    self.tfcps_Tools_General.generate_api_client_from_dependent_codeunit_in_angular(codeunit_folder, generateAPIClientGenerate.name_of_api_providing_codeunit,generateAPIClientGenerate.generate_api_client)
-  
+
     @GeneralUtilities.check_arguments
     def generate_reference(self) -> None:
         self.generate_reference_using_docfx()

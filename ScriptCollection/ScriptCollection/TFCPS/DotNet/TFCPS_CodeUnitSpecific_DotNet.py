@@ -114,6 +114,13 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         versioned_api_spec_file = f"APISpecification/{codeunitname}.v{codeunit_version}.api.json"
         self._protected_sc.run_program("swagger", f"tofile --output {versioned_api_spec_file} BuildResult_DotNet_{runtime}/{codeunitname}.dll {swagger_document_name}", artifacts_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
         api_file: str = os.path.join(artifacts_folder, versioned_api_spec_file)
+
+        with open(api_file, encoding="utf-8") as api_file_content:
+            reloaded_json = json.load(api_file_content)
+        reloaded_json = self.__remove_carriage_returns_recursively(reloaded_json)
+        json_content: str = json.dumps(reloaded_json, indent=2, ensure_ascii=False).replace("\r\n", "\n").replace("\r", "\n")
+        GeneralUtilities.write_text_to_file(api_file, json_content)
+
         shutil.copyfile(api_file, os.path.join(artifacts_folder, f"APISpecification/{codeunitname}.latest.api.json"))
 
         resources_folder = os.path.join(codeunit_folder, "Other", "Resources")
@@ -124,22 +131,28 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         GeneralUtilities.ensure_file_does_not_exist(resource_target_file)
         shutil.copyfile(api_file, resource_target_file)
 
-        with open(api_file, encoding="utf-8") as api_file_content:
-            reloaded_json = json.load(api_file_content)
+        yamlfile1: str = str(os.path.join(artifacts_folder, f"APISpecification/{codeunitname}.v{codeunit_version}.api.yaml"))
+        GeneralUtilities.ensure_file_does_not_exist(yamlfile1)
+        
+        yaml_content: str = yaml.dump(reloaded_json, allow_unicode=True).replace("\r\n", "\n").replace("\r", "\n")
+        GeneralUtilities.write_text_to_file(yamlfile1, yaml_content)
 
-            yamlfile1: str = str(os.path.join(artifacts_folder, f"APISpecification/{codeunitname}.v{codeunit_version}.api.yaml"))
-            GeneralUtilities.ensure_file_does_not_exist(yamlfile1)
-            GeneralUtilities.ensure_file_exists(yamlfile1)
-            with open(yamlfile1, "w+", encoding="utf-8") as yamlfile:
-                yaml.dump(reloaded_json, yamlfile, allow_unicode=True)
- 
-            yamlfile2: str = str(os.path.join(artifacts_folder, f"APISpecification/{codeunitname}.latest.api.yaml"))
-            GeneralUtilities.ensure_file_does_not_exist(yamlfile2)
-            shutil.copyfile(yamlfile1, yamlfile2)
+        yamlfile2: str = str(os.path.join(artifacts_folder, f"APISpecification/{codeunitname}.latest.api.yaml"))
+        GeneralUtilities.ensure_file_does_not_exist(yamlfile2)
+        shutil.copyfile(yamlfile1, yamlfile2)
 
-            yamlfile3: str = str(os.path.join(resources_apispec_folder, f"{codeunitname}.api.yaml"))
-            GeneralUtilities.ensure_file_does_not_exist(yamlfile3)
-            shutil.copyfile(yamlfile1, yamlfile3)
+        yamlfile3: str = str(os.path.join(resources_apispec_folder, f"{codeunitname}.api.yaml"))
+        GeneralUtilities.ensure_file_does_not_exist(yamlfile3)
+        shutil.copyfile(yamlfile1, yamlfile3)
+
+    def __remove_carriage_returns_recursively(self, value):
+        if isinstance(value, str):
+            return value.replace("\r\n", "\n").replace("\r", "\n")
+        if isinstance(value, dict):
+            return {self.__remove_carriage_returns_recursively(key): self.__remove_carriage_returns_recursively(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [self.__remove_carriage_returns_recursively(item) for item in value]
+        return value
 
     @GeneralUtilities.check_arguments
     def __standardized_tasks_build_for_dotnet_build(self, csproj_file: str, originaloutputfolder: str, files_to_sign: dict[str, str], commitid: str, runtimes: list[str],  target_environmenttype_mapping:  dict[str, str], copy_license_file_to_target_folder: bool, repository_folder: str, codeunit_name: str) -> None:
@@ -285,11 +298,6 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             GeneralUtilities.ensure_directory_does_not_exist(temp_output_folder)
         diagnostics: list[tuple[LogLevel, str, str | None, int | None]] = []
         pattern = re.compile(r"^\s*(?:(.+?)\((\d+),\d+\): )?(error|warning|message|info) [^:]+: (.+?)(?:\s*\[.+\])?\s*$", re.IGNORECASE)
-        #TODO fix this function. this does not work. fyi output looks like this:
-        #E:\Data\Projects\GRYLibrary\GRYLibrary>dotnet build GRYLibrary.sln -nologo -v minimal
-        #Restore succeeded with 11 warning(s) in 0,9s
-        #    E:\Data\Projects\GRYLibrary\GRYLibrary\GRYLibrary\GRYLibrary.csproj : warning NU1510: PackageReference Microsoft.CSharp will not be pruned. Consider removing this package from your dependencies, as it is likely unnecessary.
-        #    E:\Data\Projects\GRYLibrary\GRYLibrary\GRYLibraryTests\GRYLibraryTests.csproj : warning NU1510: PackageReference Microsoft.Win32.Registry will not be pruned. Consider removing this package from your dependencies, as it is likely unnecessary.
         for line in GeneralUtilities.string_to_lines(run_result[1] + "\n" + run_result[2]):
             m = pattern.match(line)
             if m:
@@ -310,6 +318,10 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
     def linting(self) -> None:
         codeunit_name = self.get_codeunit_name()
         codeunit_folder = self.get_codeunit_folder()
+        # Normalize the line-endings of all non-git-ignored *.cs-files in the codeunit- and the test-project to LF.
+        for cs_source_folder in [os.path.join(codeunit_folder, codeunit_name), os.path.join(codeunit_folder, codeunit_name + "Tests")]:
+            for cs_file in self._protected_sc.get_not_git_ignored_files_of_folder(cs_source_folder, ".cs"):
+                self._protected_sc.normalize_line_endings(cs_file)
         self._protected_sc.format_xml_file(os.path.join(codeunit_folder, codeunit_name, codeunit_name + ".csproj"), add_xml_declaration=False)
         self._protected_sc.format_xml_file(os.path.join(codeunit_folder, codeunit_name + "Tests", codeunit_name + "Tests.csproj"), add_xml_declaration=False)
         self.standardized_task_verify_standard_format_csproj_files()
