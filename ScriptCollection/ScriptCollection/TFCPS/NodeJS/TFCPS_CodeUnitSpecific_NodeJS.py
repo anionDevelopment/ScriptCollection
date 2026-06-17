@@ -36,7 +36,6 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
         for sass_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".sass"):
             self._protected_sc.normalize_line_endings(sass_file)
         for html_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".html"):
-            self._protected_sc.normalize_line_endings(html_file)
             self._protected_sc.format_html_file(html_file, os.path.basename(html_file) == "index.html")
         self._protected_sc.run_with_epew("npm", "run lint", codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug,encode_argument_in_base64=True)
 

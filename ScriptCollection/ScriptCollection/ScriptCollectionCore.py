@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.138"
+version = "4.2.139"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2742,6 +2742,7 @@ TXDX
         ET.indent(element)
         content = ET.tostring(element, xml_declaration=add_xml_declaration, encoding="unicode")
         GeneralUtilities.write_text_to_file(file, content.rstrip("\n") + "\n", encoding)
+        self.normalize_line_endings(file)
 
     @GeneralUtilities.check_arguments
     def format_html_file(self, file: str, add_html_declaration: bool = False) -> None:
@@ -2749,6 +2750,7 @@ TXDX
         content = GeneralUtilities.read_text_from_file(file, encoding)
         content=self.format_html_content(content, add_html_declaration)
         GeneralUtilities.write_text_to_file(file, content, encoding)
+        self.normalize_line_endings(file)
 
     @GeneralUtilities.check_arguments
     def normalize_line_endings(self, file: str) -> None:
@@ -3706,6 +3708,7 @@ OCR-content:
         xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
         with open(file, "wb") as f:
             f.write(xml_bytes)
+        self.format_xml_file(file)
 
     @GeneralUtilities.check_arguments
     def translate(self, content: str, source_language: str, target_language: str, libre_translate_api_server: str) -> str:

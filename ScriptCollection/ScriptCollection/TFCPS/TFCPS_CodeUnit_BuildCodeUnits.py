@@ -78,8 +78,9 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()
 
         self.sc.log.log(GeneralUtilities.get_line())
-        self.__search_for_vulnerabilities()
         self.search_for_secrets()
+        self.__search_for_vulnerabilities()
+        self.__normalize_md_and_txt_line_endings()
         if self.is_pre_merge():
             self.__translate()
             self.__collect_metrics()
@@ -92,6 +93,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         duration=end_time-start_time
         self.sc.log.log(f"Finished building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(end_time,False)}. (Duration: {GeneralUtilities.timedelta_to_simple_string(duration)})")
         self.sc.log.log(GeneralUtilities.get_line())
+
+    @GeneralUtilities.check_arguments
+    def __normalize_md_and_txt_line_endings(self) -> None:
+        #TODO add option do define exceptions (means: files which should not be normalized).
+        for text_file_extension in [".txt", ".md"]:
+            for text_file in self.sc.get_not_git_ignored_files_of_folder(self.repository, text_file_extension):
+                self.sc.normalize_line_endings(text_file)
 
     @GeneralUtilities.check_arguments
     def run_prepare_script(self):
@@ -215,6 +223,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
                 loc=splitted[2]
                 csv_lines.append(f"{v},{t},{loc}")
         GeneralUtilities.write_lines_to_file(loc_data_file,csv_lines)
+        self.sc.normalize_line_endings(loc_data_file)  # ensure the generated LoC-diagram-csv always uses LF line-endings
         diagram_json = {
     "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
     "description": "Lines of Code over time",
