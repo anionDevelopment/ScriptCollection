@@ -1044,9 +1044,10 @@ class TFCPS_Tools_General:
     def set_constants_for_certificate_private_information(self, codeunit_folder: str) -> None:
         """Expects a certificate-resource and generates a constant for its sensitive information in hex-format"""
         self.assert_is_codeunit_folder(codeunit_folder)
-        repo_name:str=os.path.basename(GeneralUtilities.resolve_relative_path("..",codeunit_folder))
+        repository_folder:str=GeneralUtilities.resolve_relative_path("..",codeunit_folder)
+        product_name:str=self.get_product_name(repository_folder)
         resource_name: str = "DevelopmentCertificate"
-        filename: str = repo_name+"DevelopmentCertificate"
+        filename: str = product_name+"DevelopmentCertificate"
         self.generate_constant_from_resource_by_filename(codeunit_folder, resource_name, f"{filename}.pfx", "PFX")
         self.generate_constant_from_resource_by_filename(codeunit_folder, resource_name, f"{filename}.password", "Password")
 
