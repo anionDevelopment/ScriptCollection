@@ -663,7 +663,7 @@ class TFCPS_Tools_General:
     def generate_codeunits_overview_diagram(self, repository_folder: str) -> None:
         self.__sc.log.log("Generate Codeunits-overview-diagram...")
         self.__sc.assert_is_git_repository(repository_folder)
-        project_name: str = os.path.basename(repository_folder)
+        project_name: str = self.get_product_name(repository_folder)
         target_folder = os.path.join(repository_folder, "Other", "Reference", "Technical", "Diagrams")
         GeneralUtilities.ensure_directory_exists(target_folder)
         target_file = os.path.join(target_folder, "CodeUnits-Overview.plantuml")
