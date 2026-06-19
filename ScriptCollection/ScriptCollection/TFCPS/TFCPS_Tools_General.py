@@ -29,6 +29,11 @@ class TFCPS_Tools_General:
     # Relative path (inside the source-repository and inside the ScriptCollection.Resources-package) of the
     # file that pins the OpenAPIGenerator-version used as default when no repository-specific version is given.
     __openapigenerator_version_resource_relative_path:str="Dependencies/OpenAPIGenerator/Version.txt"
+    # Font used for rendering all PlantUML-diagrams. Pinning it makes the resulting SVG identical across machines
+    # (PlantUML's default 'sans-serif' otherwise resolves to different host-fonts on Windows vs Linux, which changes
+    # the computed text-lengths and coordinates and thus produces spurious diffs). The font is available in the
+    # build-image via the apt-package 'fonts-dejavu'.
+    __default_diagram_font_name:str="DejaVu Sans"
 
     def __init__(self,sc:ScriptCollectionCore):
         self.__sc=sc
@@ -640,15 +645,23 @@ class TFCPS_Tools_General:
 
     @GeneralUtilities.check_arguments
     def __generate_svg_files_from_plantuml(self, diagrams_files_folder: str, plantuml_jar_file: str) -> None:
-        for file in GeneralUtilities.get_all_files_of_folder(diagrams_files_folder):
-            if file.endswith(".plantuml"):
-                output_filename = self.get_output_filename_for_plantuml_filename(file)
-                argument = ['-jar',plantuml_jar_file, '-tsvg', os.path.basename(file)]
-                folder = os.path.dirname(file)
-                self.__sc.run_program_argsasarray("java", argument, folder)
-                result_file = folder+"/" + output_filename
-                GeneralUtilities.assert_file_exists(result_file)
-                self.__sc.format_xml_file(result_file)
+        # Pin the font for all rendered diagrams via a PlantUML-config-file so the resulting SVG is identical across
+        # machines, without having to add a skinparam to every (also hand-written) .plantuml-file. See the comment at
+        # __default_diagram_font_name for the reason.
+        font_config_file = os.path.join(tempfile.gettempdir(), f"plantuml-font-config-{uuid.uuid4()}.cfg")
+        GeneralUtilities.write_text_to_file(font_config_file, f'skinparam defaultFontName "{TFCPS_Tools_General.__default_diagram_font_name}"')
+        try:
+            for file in GeneralUtilities.get_all_files_of_folder(diagrams_files_folder):
+                if file.endswith(".plantuml"):
+                    output_filename = self.get_output_filename_for_plantuml_filename(file)
+                    argument = ['-jar',plantuml_jar_file, '-tsvg', '-config', font_config_file, os.path.basename(file)]
+                    folder = os.path.dirname(file)
+                    self.__sc.run_program_argsasarray("java", argument, folder)
+                    result_file = folder+"/" + output_filename
+                    GeneralUtilities.assert_file_exists(result_file)
+                    self.__sc.format_xml_file(result_file)
+        finally:
+            GeneralUtilities.ensure_file_does_not_exist(font_config_file)
 
     @GeneralUtilities.check_arguments
     def get_output_filename_for_plantuml_filename(self, plantuml_file: str) -> str:
@@ -670,7 +683,7 @@ class TFCPS_Tools_General:
         lines = ["@startuml CodeUnits-Overview"]
         # Pin font so the rendered SVG is byte-identical across machines (Java/PlantUML's
         # default 'sans-serif' otherwise resolves to different host fonts on Windows vs Linux).
-        lines.append('skinparam defaultFontName "DejaVu Sans"')
+        lines.append(f'skinparam defaultFontName "{TFCPS_Tools_General.__default_diagram_font_name}"')
         lines.append(f"title CodeUnits of {project_name}")
 
         codeunits = self.get_codeunits(repository_folder)
