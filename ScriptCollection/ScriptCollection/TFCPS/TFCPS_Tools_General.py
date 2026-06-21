@@ -34,6 +34,8 @@ class TFCPS_Tools_General:
     # the computed text-lengths and coordinates and thus produces spurious diffs). The font is available in the
     # build-image via the apt-package 'fonts-dejavu'.
     __default_diagram_font_name:str="DejaVu Sans"
+    # Font-files (all faces of the diagram-font) bundled with the package and forced via the JVM-font-path when rendering.
+    __bundled_diagram_font_filenames:list[str]=["DejaVuSans.ttf","DejaVuSans-Bold.ttf","DejaVuSans-Oblique.ttf","DejaVuSans-BoldOblique.ttf"]
 
     def __init__(self,sc:ScriptCollectionCore):
         self.__sc=sc
@@ -650,11 +652,19 @@ class TFCPS_Tools_General:
         # __default_diagram_font_name for the reason.
         font_config_file = os.path.join(tempfile.gettempdir(), f"plantuml-font-config-{uuid.uuid4()}.cfg")
         GeneralUtilities.write_text_to_file(font_config_file, f'skinparam defaultFontName "{TFCPS_Tools_General.__default_diagram_font_name}"')
+        # Force the JVM to use the DejaVu-fonts bundled with ScriptCollection (via the font-path) instead of whatever
+        # font-version happens to be installed on the host. This makes the text-measurement - and thus the resulting
+        # SVG-geometry - identical across machines (e.g. a Windows-client and the Debian-build-container), because the
+        # exact same font-files are used everywhere.
+        java_font_arguments: list[str] = []
+        bundled_fonts_folder = self.__extract_bundled_fonts_to_temp_folder()
+        if bundled_fonts_folder is not None:
+            java_font_arguments.append(f"-Dsun.java2d.fontpath=prepend:{bundled_fonts_folder}")
         try:
             for file in GeneralUtilities.get_all_files_of_folder(diagrams_files_folder):
                 if file.endswith(".plantuml"):
                     output_filename = self.get_output_filename_for_plantuml_filename(file)
-                    argument = ['-jar',plantuml_jar_file, '-tsvg', '-config', font_config_file, os.path.basename(file)]
+                    argument = java_font_arguments + ['-jar',plantuml_jar_file, '-tsvg', '-config', font_config_file, os.path.basename(file)]
                     folder = os.path.dirname(file)
                     self.__sc.run_program_argsasarray("java", argument, folder)
                     result_file = folder+"/" + output_filename
@@ -662,6 +672,26 @@ class TFCPS_Tools_General:
                     self.__sc.format_xml_file(result_file)
         finally:
             GeneralUtilities.ensure_file_does_not_exist(font_config_file)
+            if bundled_fonts_folder is not None:
+                GeneralUtilities.ensure_directory_does_not_exist(bundled_fonts_folder)
+
+    @GeneralUtilities.check_arguments
+    def __extract_bundled_fonts_to_temp_folder(self) -> str:
+        # Extracts the DejaVu-fonts bundled with the ScriptCollection-package into a temporary folder and returns its path
+        # (the JVM needs a real folder for its font-path; see __default_diagram_font_name). The bytes are read via
+        # GeneralUtilities._internal_load_resource so this also works when the package is stored as a zip-archive. Returns
+        # None if the fonts are not available (e.g. an older installation without the bundled fonts). The caller is
+        # responsible for removing the returned folder afterwards.
+        temp_folder = os.path.join(tempfile.gettempdir(), f"scriptcollection-diagram-fonts-{uuid.uuid4()}")
+        try:
+            GeneralUtilities.ensure_directory_exists(temp_folder)
+            for font_filename in TFCPS_Tools_General.__bundled_diagram_font_filenames:
+                font_bytes = GeneralUtilities._internal_load_resource(f"Fonts/{font_filename}")
+                GeneralUtilities.write_binary_to_file(os.path.join(temp_folder, font_filename), font_bytes)
+        except (FileNotFoundError, ModuleNotFoundError):
+            GeneralUtilities.ensure_directory_does_not_exist(temp_folder)
+            return None
+        return temp_folder
 
     @GeneralUtilities.check_arguments
     def get_output_filename_for_plantuml_filename(self, plantuml_file: str) -> str:
@@ -1174,6 +1204,12 @@ class TFCPS_Tools_General:
             GeneralUtilities.ensure_directory_does_not_exist(openapigenerator_folder)
             jar_file_exists = False
             cached_version = None
+        # Untrusted cache: a jar exists but has no version-marker (e.g. downloaded by an older ScriptCollection-version).
+        # Its actual version is unknown, so it cannot be matched against the pinned version — drop it and re-download.
+        if pinned_version is not None and cached_version is None and jar_file_exists:
+            self.__sc.log.log(f"Cached OpenAPIGenerator-jar has no version-marker and can not be trusted. Removing cache and re-downloading pinned version '{pinned_version}'.", LogLevel.Information)
+            GeneralUtilities.ensure_directory_does_not_exist(openapigenerator_folder)
+            jar_file_exists = False
         # Caller explicitly asked to bypass the cache.
         if not use_cache:
             GeneralUtilities.ensure_directory_does_not_exist(openapigenerator_folder)
