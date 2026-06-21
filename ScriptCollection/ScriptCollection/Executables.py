@@ -1148,6 +1148,17 @@ def RunCommandInFolder() -> int:
     return sc.run_command_in_folder(args.basefolder, args.command, args.arguments, args.actualfolder, args.excludedfolder)
 
 
+def RemoveTrailingLinebreak() -> int:
+    parser = argparse.ArgumentParser(description="Removes the trailing linebreak from a file. If the last character is not a linebreak, the file is not modified.")
+    parser.add_argument('-p', '--path', required=True, help="Path to the file.")
+    args = parser.parse_args()
+    if not os.path.isfile(args.path):
+        GeneralUtilities.write_message_to_stderr(f"File '{args.path}' does not exist.")
+        return 1
+    ScriptCollectionCore().remove_trailing_linebreak(args.path)
+    return 0
+
+
 def SyncXlfFiles()->int:
     parser = argparse.ArgumentParser(description="This function syncs the content of xlf-files in a folder. This is useful to keep the content of xlf-files in sync which are used for translations in software projects.")
     parser.add_argument('-p', '--prefix',  required=True, help="File prefix. Example: 'message' when the files are named 'message.xlf', 'message.fr.xlf', etc.")
