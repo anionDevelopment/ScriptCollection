@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.2.142"
+version = "4.2.143"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
@@ -28,7 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "build>=1.5.0",
-    "coverage>=7.14.1",
+    "coverage>=7.14.2",
     "cyclonedx-bom>=7.1.0",
     "defusedxml>=0.7.1",
     "keyboard>=0.13.5",
@@ -41,7 +41,7 @@ dependencies = [
     "Pygments>=2.20.0",
     "pylint>=4.0.6",
     "pyOpenSSL>=25.3.0",
-    "PyPDF>=6.13.2",
+    "PyPDF>=6.13.3",
     "pytest>=8.4.2",
     "PyYAML>=6.0.3",
     "qrcode>=8.2.0",
@@ -106,6 +106,7 @@ scprintfilesize = "ScriptCollection.Executables:PrintFileSize"
 scfilecontainscontent = "ScriptCollection.Executables:FileContainsContent"
 scremovefile = "ScriptCollection.Executables:RemoveFile"
 scremovefolder = "ScriptCollection.Executables:RemoveFolder"
+scremovetrailinglinebreak = "ScriptCollection.Executables:RemoveTrailingLinebreak"
 screname = "ScriptCollection.Executables:Rename"
 sccopy = "ScriptCollection.Executables:Copy"
 scgetsize = "ScriptCollection.Executables:GetSize"

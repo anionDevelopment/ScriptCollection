@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.142"
+version = "4.2.143"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2761,6 +2761,14 @@ TXDX
         normalized_content = content.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
         if normalized_content != content:
             GeneralUtilities.write_binary_to_file(file, normalized_content)
+
+    @GeneralUtilities.check_arguments
+    def remove_trailing_linebreak(self, file: str) -> None:
+        content = GeneralUtilities.read_binary_from_file(file)
+        if content.endswith(b"\r\n"):
+            GeneralUtilities.write_binary_to_file(file, content[:-2])
+        elif content.endswith(b"\n") or content.endswith(b"\r"):
+            GeneralUtilities.write_binary_to_file(file, content[:-1])
 
     @GeneralUtilities.check_arguments
     def format_html_content(self, content: str, add_html_declaration: bool = False) -> str:
