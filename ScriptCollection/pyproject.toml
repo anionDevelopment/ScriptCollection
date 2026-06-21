@@ -28,7 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "build>=1.5.0",
-    "coverage>=7.14.1",
+    "coverage>=7.14.2",
     "cyclonedx-bom>=7.1.0",
     "defusedxml>=0.7.1",
     "keyboard>=0.13.5",
@@ -41,7 +41,7 @@ dependencies = [
     "Pygments>=2.20.0",
     "pylint>=4.0.6",
     "pyOpenSSL>=25.3.0",
-    "PyPDF>=6.13.2",
+    "PyPDF>=6.13.3",
     "pytest>=8.4.2",
     "PyYAML>=6.0.3",
     "qrcode>=8.2.0",
