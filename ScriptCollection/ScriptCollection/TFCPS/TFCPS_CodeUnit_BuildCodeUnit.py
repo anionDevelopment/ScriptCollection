@@ -53,7 +53,7 @@ class TFCPS_CodeUnit_BuildCodeUnit:
 
         self.sc.log.log("Do common tasks...")
         self.sc.run_program(GeneralUtilities.get_python_executable(), f"CommonTasks.py {arguments}", os.path.join(self.codeunit_folder, "Other"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
-        self.verify_artifact_exists(self.codeunit_folder, dict[str, bool]({"License": True, "DiffReport": True}))
+        self.verify_artifact_exists(self.codeunit_folder, dict[str, bool]({"License": True}))
 
         self.sc.log.log("Build...")
         self.sc.run_program(GeneralUtilities.get_python_executable(), f"Build.py {arguments}", os.path.join(self.codeunit_folder, "Other", "Build"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
