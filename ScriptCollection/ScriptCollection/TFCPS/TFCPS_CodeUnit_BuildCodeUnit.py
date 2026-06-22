@@ -26,7 +26,7 @@ class TFCPS_CodeUnit_BuildCodeUnit:
         self.codeunit_folder = codeunit_folder
         self.codeunit_name = os.path.basename(self.codeunit_folder)
         self.repository_folder =os.path.dirname(codeunit_folder)
-        self.tFCPS_Tools.assert_is_codeunit_folder(self.repository_folder)
+        self.sc.assert_is_git_repository(self.repository_folder)
         self.target_environment_type = target_environment_type
         self.additionalargumentsfile = additionalargumentsfile
         self.use_cache = use_cache
