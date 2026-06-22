@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.144"
+version = "4.2.145"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -1102,14 +1102,7 @@ class ScriptCollectionCore:
                 return False
             raise ValueError(f"Fatal error occurrs while checking whether folder '{path}' exists. StdErr: '{stderr}'")
 
-    @GeneralUtilities.check_arguments
-    def get_file_content(self, path: str, encoding: str = "utf-8") -> str:
-        """This function works platform-independent also for non-local-executions if the ScriptCollection commandline-commands are available as global command on the target-system."""
-        if self.program_runner.will_be_executed_locally():
-            return GeneralUtilities.read_text_from_file(path, encoding)
-        else:
-            result = self.run_program_argsasarray("scprintfilecontent", ["--path", path, "--encofing", encoding])  # works platform-indepent
-            return result[1].replace("\\n", "\n")
+
 
     @GeneralUtilities.check_arguments
     def set_file_content(self, path: str, content: str, encoding: str = "utf-8") -> None:
@@ -1180,6 +1173,50 @@ class ScriptCollectionCore:
             exit_code, stdout, stderr, _ = self.run_program_argsasarray("sccopy", ["--source", source, "--target", target], throw_exception_if_exitcode_is_not_zero=False)  # works platform-indepent
             if exit_code != 0:
                 raise ValueError(f"Fatal error occurrs while copying '{source}' to '{target}'; Exitcode: '{exit_code}'; StdOut: '{stdout}'. StdErr: '{stderr}'")
+
+    @GeneralUtilities.check_arguments
+    def get_file_content(self, file: str, encoding: str = "utf-8", from_line: int = None, to_line: int = None) -> str:
+        """Returns the content of the file. With from_line and/or to_line (both 1-based and inclusive) the returned
+        content can be restricted to a range of lines."""
+        content = GeneralUtilities.read_text_from_file(file, encoding)
+        if from_line is None and to_line is None:
+            return content
+        lines = content.splitlines()
+        start_index = 0 if from_line is None else max(from_line - 1, 0)
+        end_index = len(lines) if to_line is None else min(to_line, len(lines))
+        return "\n".join(lines[start_index:end_index])
+
+    @GeneralUtilities.check_arguments
+    def create_skill(self, skill_name: str, description: str, repository_folder: str = None, tags: list[str] = None, priority: str = None, triggers: list[str] = None) -> str:
+        """Generates a skill-folder ('skills/<skill_name>/' with a lightweight 'skill.json' and a lazy-loaded 'detail.md').
+        The skill is created in the given repository-folder, or - if none is given - in the current working-directory when
+        that is a git-repository, otherwise in the user's ScriptCollection-configuration-folder. Returns the skill-folder."""
+        if tags is None:
+            tags = []
+        if triggers is None:
+            triggers = []
+        if priority is None:
+            priority = "medium"
+        if repository_folder is not None:
+            base_folder = repository_folder
+        elif self.is_git_repository(os.getcwd()):
+            base_folder = os.getcwd()
+        else:
+            base_folder = GeneralUtilities.get_scriptcollection_configuration_folder()
+        skill_folder = os.path.join(base_folder, "skills", skill_name)
+        GeneralUtilities.ensure_directory_exists(skill_folder)
+        skill_definition = {
+            "name": skill_name,
+            "description": description,
+            "triggers": triggers,
+            "tags": tags,
+            "priority": priority,
+        }
+        GeneralUtilities.write_text_to_file(os.path.join(skill_folder, "skill.json"), json.dumps(skill_definition, indent=2))
+        detail_file = os.path.join(skill_folder, "detail.md")
+        detail_content = f"# {skill_name}\n\n{description}\n\n## Details\n\n<!-- Add the detailed (lazy-loaded) instructions for this skill here. -->\n"
+        GeneralUtilities.write_text_to_file(detail_file, detail_content)
+        return skill_folder
 
     @GeneralUtilities.check_arguments
     def create_file(self, path: str, error_if_already_exists: bool, create_necessary_folder: bool) -> None:
@@ -2064,36 +2101,44 @@ class ScriptCollectionCore:
         return self.run_program_argsasarray(program, GeneralUtilities.arguments_to_array(arguments), working_directory,  print_errors_as_information, log_file, timeoutInSeconds, addLogOverhead, title, log_namespace, GeneralUtilities.arguments_to_array(arguments_for_log), throw_exception_if_exitcode_is_not_zero, custom_argument, interactive, print_live_output, env_vars)
 
     @GeneralUtilities.check_arguments
-    def path_is_inside_one_of_the_folders(self, path: str, base_folder: str, folders: list[str]) -> bool:
-        """Returns whether path (a file or folder) is equal to or located inside one of the given folders. path and base_folder are resolved against the current working-directory; the entries of folders must be relative to base_folder."""
-        resolved_path = GeneralUtilities.resolve_relative_path(path, os.getcwd())
+    def path_is_allowed_within_base_folder(self, path: str, base_folder: str, excluded_folders: list[str]) -> bool:
+        """Returns True if and only if 'path' is located within 'base_folder' (equal to 'base_folder' or a subpath of it)
+        AND 'path' is NOT located within any of the 'excluded_folders' (neither equal to nor a subpath of any of them).
+        Returns False if 'path' is outside 'base_folder', or if 'path' is equal to or located inside one of the
+        'excluded_folders'.
+        Path-resolution: a relative 'base_folder' is resolved against the current working-directory; a relative 'path' and
+        relative entries of 'excluded_folders' are resolved against 'base_folder'."""
         resolved_base_folder = GeneralUtilities.resolve_relative_path(base_folder, os.getcwd())
-        normalized_path = os.path.normcase(os.path.normpath(resolved_path))
+        resolved_path = GeneralUtilities.resolve_relative_path(path, resolved_base_folder)
         normalized_base_folder = os.path.normcase(os.path.normpath(resolved_base_folder))
-        for folder in folders:
-            if os.path.isabs(folder):
-                raise ValueError(f"The folder '{folder}' must be relative to the base-folder, but it is an absolute path.")
-            normalized_folder = os.path.normcase(os.path.normpath(os.path.join(normalized_base_folder, folder)))
-            if normalized_path == normalized_folder or normalized_path.startswith(normalized_folder + os.sep):
-                return True
-        return False
+        normalized_path = os.path.normcase(os.path.normpath(resolved_path))
+        # 1. path must be equal to or located inside base_folder
+        if not (normalized_path == normalized_base_folder or normalized_path.startswith(normalized_base_folder + os.sep)):
+            return False
+        # 2. path must not be equal to or located inside any excluded folder
+        for excluded_folder in excluded_folders:
+            resolved_excluded_folder = GeneralUtilities.resolve_relative_path(excluded_folder, resolved_base_folder)
+            normalized_excluded_folder = os.path.normcase(os.path.normpath(resolved_excluded_folder))
+            if normalized_path == normalized_excluded_folder or normalized_path.startswith(normalized_excluded_folder + os.sep):
+                return False
+        # 3. path is inside base_folder and not inside any excluded folder
+        return True
 
     @GeneralUtilities.check_arguments
     def run_command_in_folder(self, base_folder: str, command: str, arguments: str, actual_folder: str, excluded_folders: list[str] = None) -> int:
-        """Runs the given command with the given arguments in base_folder, but only if actual_folder is equal to base_folder or a subfolder of it and not located inside one of the excluded_folders. The entries of excluded_folders must be relative to base_folder. actual_folder can be used in arguments by using the placeholder "{actual_folder}"."""
+        """Runs the given command with the given arguments in base_folder, but only if actual_folder is allowed according to
+        path_is_allowed_within_base_folder, i.e. actual_folder is equal to base_folder or a subfolder of it and is not located
+        inside one of the excluded_folders. A relative base_folder is resolved against the current working-directory; a
+        relative actual_folder and relative entries of excluded_folders are resolved against base_folder. actual_folder can be
+        used in arguments by using the placeholder "{actual_folder}"."""
         if excluded_folders is None:
             excluded_folders = []
-        resolved_actual_folder = GeneralUtilities.resolve_relative_path(actual_folder, os.getcwd())
-        base_folder = GeneralUtilities.resolve_relative_path(base_folder, os.getcwd())
-        normalized_actual_folder = os.path.normcase(os.path.normpath(resolved_actual_folder))
-        normalized_base_folder = os.path.normcase(os.path.normpath(base_folder))
-        actual_folder_is_allowed = normalized_actual_folder == normalized_base_folder or normalized_actual_folder.startswith(normalized_base_folder + os.sep)
-        if not actual_folder_is_allowed:
-            raise ValueError(f"The folder '{resolved_actual_folder}' is not allowed because it is neither equal to nor a subfolder of the allowed folder '{base_folder}'.")
-        if self.path_is_inside_one_of_the_folders(actual_folder, base_folder, excluded_folders):
-            raise ValueError(f"The folder '{resolved_actual_folder}' is not allowed because it is located inside one of the excluded folders (relative to the base-folder '{base_folder}').")
+        resolved_base_folder = GeneralUtilities.resolve_relative_path(base_folder, os.getcwd())
+        resolved_actual_folder = GeneralUtilities.resolve_relative_path(actual_folder, resolved_base_folder)
+        if not self.path_is_allowed_within_base_folder(actual_folder, base_folder, excluded_folders):
+            raise ValueError(f"The folder '{resolved_actual_folder}' is not allowed: it must be equal to or a subfolder of the base-folder '{resolved_base_folder}' and must not be located inside one of the excluded folders.")
         effective_arguments = arguments.replace(ScriptCollectionCore.run_command_in_folder_actual_folder_placeholder, resolved_actual_folder)
-        result = self.run_program(command, effective_arguments, base_folder)
+        result = self.run_program(command, effective_arguments, resolved_base_folder)
         return result[0]
 
     # Return-values program_runner: Exitcode, StdOut, StdErr, Pid

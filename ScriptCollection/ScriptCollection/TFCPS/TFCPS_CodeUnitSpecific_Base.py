@@ -224,8 +224,18 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         # Copy license-file
         self.tfcps_Tools_General.copy_licence_file(self.get_codeunit_folder())
 
-        # Generate diff-report
-        self.tfcps_Tools_General.generate_diff_report(repository_folder, codeunit_name, self.tfcps_Tools_General.get_version_of_codeunit(self.get_codeunit_file()))
+        # Propagate the repository-level dependency-version-pins (e.g. PlantUML, OpenAPIGenerator, JRE) into the codeunit
+        # so each codeunit carries its own copy of the versions that are defined once at repository-level.
+        repository_dependencies_folder = os.path.join(repository_folder, "Other", "Resources", "Dependencies")
+        if os.path.isdir(repository_dependencies_folder):
+            for dependency_folder in GeneralUtilities.get_direct_folders_of_folder(repository_dependencies_folder):
+                dependency_name = os.path.basename(dependency_folder)
+                source_version_file = os.path.join(dependency_folder, "Version.txt")
+                if os.path.isfile(source_version_file):
+                    target_version_file = os.path.join(codeunit_folder, "Other", "Resources", "Dependencies", dependency_name, "Version.txt")
+                    GeneralUtilities.ensure_directory_exists(os.path.dirname(target_version_file))
+                    shutil.copyfile(source_version_file, target_version_file)
+
 
     @GeneralUtilities.check_arguments
     def generate_reference_using_docfx(self):

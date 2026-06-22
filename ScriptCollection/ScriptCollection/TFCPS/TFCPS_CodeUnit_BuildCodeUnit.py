@@ -85,9 +85,13 @@ class TFCPS_CodeUnit_BuildCodeUnit:
             self.sc.log.log('Finalize building codeunits...')
             self.sc.run_program(GeneralUtilities.get_python_executable(), f"OnBuildingFinished.py {arguments}", os.path.join(self.codeunit_folder, "Other"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
 
+        codeunit_version = self.tFCPS_Tools.get_version_of_codeunit(codeunit_file)
+        
+        # Generate diff-report
+        self.tFCPS_Tools.generate_diff_report(self.repository_folder, self.codeunit_name, codeunit_version)
+
         artifacts_folder = os.path.join(self.codeunit_folder, "Other", "Artifacts")
         artifactsinformation_file = os.path.join(artifacts_folder, f"{self.codeunit_name}.artifactsinformation.xml")
-        codeunit_version = self.tFCPS_Tools.get_version_of_codeunit(codeunit_file)
         GeneralUtilities.ensure_file_exists(artifactsinformation_file)
         artifacts_list = []
         for artifact_folder in GeneralUtilities.get_direct_folders_of_folder(artifacts_folder):

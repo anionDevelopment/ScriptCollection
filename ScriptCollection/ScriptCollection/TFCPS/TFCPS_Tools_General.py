@@ -36,6 +36,17 @@ class TFCPS_Tools_General:
     __default_diagram_font_name:str="DejaVu Sans"
     # Font-files (all faces of the diagram-font) bundled with the package and forced via the JVM-font-path when rendering.
     __bundled_diagram_font_filenames:list[str]=["DejaVuSans.ttf","DejaVuSans-Bold.ttf","DejaVuSans-Oblique.ttf","DejaVuSans-BoldOblique.ttf"]
+    # Relative path (in the source-repository and in the ScriptCollection.Resources-package) of the file that pins the
+    # default Eclipse-Temurin-JRE-version used to render the PlantUML-diagrams when a repository does not pin its own
+    # version in '<repo>/Other/Resources/Dependencies/JRE/Version.txt'. The file contains a build like "21.0.6+7" (the
+    # feature-version is derived from it). Pinning the exact JDK-build (not just the major-version) makes the AWT-font-
+    # metrics - and thus the computed SVG-geometry - byte-identical across machines: PlantUML computes the SVG purely as
+    # vector-math from the font-metrics, and different JDK-builds (e.g. a Windows-client vs. the Debian-build-container)
+    # round these metrics slightly differently. Together with the bundled DejaVu-font (see __default_diagram_font_name)
+    # this makes the rendered SVG fully deterministic. The PlantUML-rendering uses this pinned JRE instead of the host's
+    # 'java' on the PATH. When the pinned version is bumped, the committed diagram-SVGs must be regenerated and re-committed
+    # once so they match the new build's metrics.
+    __jre_version_resource_relative_path:str="Dependencies/JRE/Version.txt"
 
     def __init__(self,sc:ScriptCollectionCore):
         self.__sc=sc
@@ -88,6 +99,7 @@ class TFCPS_Tools_General:
             self.__sc.log.loglevel = LogLevel.Debug
         self.download_cyclonedx(enforce_update)
         self.download_plantuml(enforce_update)
+        self.download_jre(enforce_update)
         self.download_mediamtx(enforce_update)
         self.download_trufflehog(enforce_update)
         self.download_openapigenerator(enforce_update)
@@ -102,6 +114,13 @@ class TFCPS_Tools_General:
     def download_plantuml(self, enforce_update: bool = False) -> None:
         self.__sc.log.log("Download cachable tool \"PlantUML\" into global cache...", LogLevel.Debug)
         self.ensure_plantuml_is_available(enforce_update)
+
+    @GeneralUtilities.check_arguments
+    def download_jre(self, enforce_update: bool = False) -> None:
+        self.__sc.log.log("Download cachable tool \"JRE\" into global cache...", LogLevel.Debug)
+        # Only the executing platform is warmed (unlike e.g. MediaMTX): a JDK-archive is large (~200MB), and the
+        # build-image is built per-platform, so warming foreign platforms would only bloat the image without benefit.
+        self.ensure_jre_is_available(enforce_update)
 
     @GeneralUtilities.check_arguments
     def download_mediamtx(self, enforce_update: bool = False) -> None:
@@ -626,15 +645,17 @@ class TFCPS_Tools_General:
         self.__sc.log.log("Generate svg-files from plantuml-files...")
         self.__sc.assert_is_git_repository(repository_folder)
         plantuml_jar_file=self.ensure_plantuml_is_available(not use_cache, repository_folder)
+        java_executable=self.ensure_jre_is_available(not use_cache, repository_folder)
         target_folder = os.path.join(repository_folder, "Other",  "Reference")
-        self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file)
+        self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file, java_executable)
 
     @GeneralUtilities.check_arguments
     def generate_svg_files_from_plantuml_files_for_codeunit(self, codeunit_folder: str,use_cache:bool) -> None:
         self.assert_is_codeunit_folder(codeunit_folder)
         plantuml_jar_file=self.ensure_plantuml_is_available(not use_cache, os.path.dirname(codeunit_folder))
+        java_executable=self.ensure_jre_is_available(not use_cache, os.path.dirname(codeunit_folder))
         target_folder = os.path.join(codeunit_folder, "Other", "Reference")
-        self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file)
+        self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file, java_executable)
 
     @GeneralUtilities.check_arguments
     def ensure_plantuml_is_available(self, enforce_update: bool, repository_folder: str = None) -> str:
@@ -646,7 +667,91 @@ class TFCPS_Tools_General:
         return self.ensure_file_from_github_assets_is_available_with_retry("plantuml", "plantuml", "PlantUML", "plantuml.jar", lambda latest_version: "plantuml.jar", enforce_update=enforce_update, pinned_version=pinned_version)
 
     @GeneralUtilities.check_arguments
-    def __generate_svg_files_from_plantuml(self, diagrams_files_folder: str, plantuml_jar_file: str) -> None:
+    def get_default_jre_version(self) -> str:
+        """Returns the JRE-version used when a repository does not pin its own version (see
+        __jre_version_resource_relative_path). The value is read from the version-file bundled with the
+        ScriptCollection-package, with a fallback to the source-file for an unbuilt source-checkout."""
+        try:
+            content = GeneralUtilities._internal_load_resource(TFCPS_Tools_General.__jre_version_resource_relative_path)
+            return content.decode("utf-8").strip()
+        except (FileNotFoundError, ModuleNotFoundError):
+            source_version_file = GeneralUtilities.resolve_relative_path(f"../../../Other/Resources/{TFCPS_Tools_General.__jre_version_resource_relative_path}", os.path.dirname(__file__))
+            GeneralUtilities.assert_file_exists(source_version_file)
+            return GeneralUtilities.read_text_from_file(source_version_file).strip()
+
+    @GeneralUtilities.check_arguments
+    def get_jre_version(self, repository_folder: str = None) -> str:
+        """Resolves the JRE-version to use: the repository-specific pin in '<repo>/Other/Resources/Dependencies/JRE/Version.txt'
+        if present, otherwise the default bundled with ScriptCollection (see get_default_jre_version)."""
+        if repository_folder is not None:
+            version_file = os.path.join(repository_folder, "Other", "Resources", "Dependencies", "JRE", "Version.txt")
+            if os.path.isfile(version_file):
+                return GeneralUtilities.read_text_from_file(version_file).strip()
+        return self.get_default_jre_version()
+
+    @GeneralUtilities.check_arguments
+    def ensure_jre_is_available(self, enforce_update: bool, repository_folder: str = None) -> str:
+        """Ensures the pinned JDK is available in the global cache for the executing platform and returns the absolute path
+        to its 'java'-executable. The version is the repository-specific pin if present, otherwise the bundled default (see
+        get_jre_version). Pinning the exact build makes the PlantUML-rendering deterministic across machines."""
+        local_resource_name = "JRE"
+        jre_version = self.get_jre_version(repository_folder)
+        feature_version = jre_version.split(".")[0]  # e.g. "21" from "21.0.6+7"
+        pinned_tag = "jdk-" + jre_version
+        if GeneralUtilities.current_system_is_x64():
+            architecture_token = "x64"
+        elif GeneralUtilities.current_system_is_arm64():
+            architecture_token = "aarch64"
+        else:
+            raise ValueError("Unsupported architecture for the pinned JRE.")
+        if GeneralUtilities.current_system_is_windows():
+            operatingsystem_token = "windows"
+            archive_extension = "zip"
+            java_executable_name = "java.exe"
+        elif GeneralUtilities.current_system_is_linux():
+            operatingsystem_token = "linux"
+            archive_extension = "tar.gz"
+            java_executable_name = "java"
+        else:  # treat everything else as macOS (Darwin); Temurin uses the "mac"-token there.
+            operatingsystem_token = "mac"
+            archive_extension = "tar.gz"
+            java_executable_name = "java"
+
+        def get_asset_filename(release_tag: str) -> str:
+            # release_tag looks like "jdk-21.0.6+7"; the Adoptium-asset-name uses the version with the build-separator '+' replaced by '_'.
+            version_in_asset = release_tag[len("jdk-"):].replace("+", "_")
+            return f"OpenJDK{feature_version}U-jdk_{architecture_token}_{operatingsystem_token}_hotspot_{version_in_asset}.{archive_extension}"
+
+        extracted_folder = os.path.join(self.__sc.get_global_cache_folder(), "Tools", local_resource_name)
+        unextracted_resource_name = local_resource_name + "_Unextracted"
+        marker_file = os.path.join(extracted_folder, "PinnedVersion.txt")
+        cached_pinned_tag: str = None
+        if os.path.isfile(marker_file):
+            cached_pinned_tag = GeneralUtilities.read_text_from_file(marker_file).strip()
+        update: bool = enforce_update or not os.path.isdir(extracted_folder) or GeneralUtilities.folder_is_empty(extracted_folder) or cached_pinned_tag != pinned_tag
+        if update:
+            downloaded_archive = self.ensure_file_from_github_assets_is_available_with_retry("adoptium", f"temurin{feature_version}-binaries", unextracted_resource_name, get_asset_filename(pinned_tag), get_asset_filename, enforce_update=enforce_update, pinned_version=pinned_tag)
+            GeneralUtilities.ensure_folder_exists_and_is_empty(extracted_folder)
+            if archive_extension == "zip":
+                with zipfile.ZipFile(downloaded_archive, "r") as zip_ref:
+                    zip_ref.extractall(extracted_folder)
+            else:
+                with tarfile.open(downloaded_archive, "r:gz") as tar:
+                    tar.extractall(path=extracted_folder)
+            GeneralUtilities.ensure_directory_does_not_exist(os.path.join(self.__sc.get_global_cache_folder(), "Tools", unextracted_resource_name))
+            GeneralUtilities.write_text_to_file(marker_file, pinned_tag)
+        GeneralUtilities.assert_folder_exists(extracted_folder)
+        # The archive extracts into a top-level folder (e.g. "jdk-21.0.6+7"); locate the 'java'-executable inside its 'bin'-folder.
+        java_executable_candidates = [f for f in GeneralUtilities.get_all_files_of_folder(extracted_folder) if os.path.basename(f) == java_executable_name and os.path.basename(os.path.dirname(f)) == "bin"]
+        if len(java_executable_candidates) == 0:
+            raise ValueError(f"Could not locate the '{java_executable_name}'-executable inside the extracted JRE at '{extracted_folder}'.")
+        java_executable = java_executable_candidates[0]
+        if not GeneralUtilities.current_system_is_windows():
+            os.chmod(java_executable, 0o755)
+        return java_executable
+
+    @GeneralUtilities.check_arguments
+    def __generate_svg_files_from_plantuml(self, diagrams_files_folder: str, plantuml_jar_file: str, java_executable: str) -> None:
         # Pin the font for all rendered diagrams via a PlantUML-config-file so the resulting SVG is identical across
         # machines, without having to add a skinparam to every (also hand-written) .plantuml-file. See the comment at
         # __default_diagram_font_name for the reason.
@@ -666,7 +771,7 @@ class TFCPS_Tools_General:
                     output_filename = self.get_output_filename_for_plantuml_filename(file)
                     argument = java_font_arguments + ['-jar',plantuml_jar_file, '-tsvg', '-config', font_config_file, os.path.basename(file)]
                     folder = os.path.dirname(file)
-                    self.__sc.run_program_argsasarray("java", argument, folder)
+                    self.__sc.run_program_argsasarray(java_executable, argument, folder)
                     result_file = folder+"/" + output_filename
                     GeneralUtilities.assert_file_exists(result_file)
                     self.__sc.format_xml_file(result_file)

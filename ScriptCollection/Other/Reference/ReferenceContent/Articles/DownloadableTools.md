@@ -18,6 +18,7 @@ The `ensure_*`-functions are called automatically during a build when the respec
 |------|-------------------|--------------|--------|
 | CycloneDX-CLI | `download_cyclonedx` | `ensure_cyclonedxcli_is_available` | GitHub `CycloneDX/cyclonedx-cli` |
 | PlantUML | `download_plantuml` | `ensure_plantuml_is_available` | GitHub `plantuml/plantuml` |
+| JRE (Eclipse-Temurin) | `download_jre` | `ensure_jre_is_available` | GitHub `adoptium/temurin21-binaries` |
 | MediaMTX | `download_mediamtx` | `ensure_mediamtx_is_available` | GitHub `bluenviron/mediamtx` |
 | TruffleHog | `download_trufflehog` | `ensure_trufflehog_is_available` | GitHub `trufflesecurity/trufflehog` |
 | OpenAPIGenerator | `download_openapigenerator` | `ensure_openapigenerator_is_available` | Maven-Central (`org.openapitools`) |
@@ -25,6 +26,7 @@ The `ensure_*`-functions are called automatically during a build when the respec
 
 All of these tools are stored in the global cache (`~/.scriptcollection/GlobalCache/Tools`).
 The CycloneDX-CLI and MediaMTX are downloaded for all supported platforms (linux/windows/macOS, x64/arm64 where available) so the warmed cache can be reused independent of the executing platform.
+The JRE is the exception here: only the executing platform is warmed, because a JDK-archive is large (~200 MB) and the build-image is built per-platform. A specific Temurin-build is pinned (not just the major-version) and used to render all PlantUML-diagrams instead of the host's `java` on the `PATH`. Together with the bundled DejaVu-font this makes the rendered diagram-SVGs byte-identical across machines (e.g. a Windows-client and the Debian-build-container), because PlantUML computes the SVG-geometry purely from the JDK's font-metrics, which differ slightly between JDK-builds. When the pinned build is bumped, the committed diagram-SVGs must be regenerated and re-committed once.
 
 ## Pre-downloading all tools (`scdownloadcachabletools`)
 

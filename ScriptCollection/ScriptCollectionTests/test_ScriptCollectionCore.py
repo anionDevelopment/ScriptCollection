@@ -127,36 +127,40 @@ class ScriptCollectionCoreTests(unittest.TestCase):
         finally:
             GeneralUtilities.ensure_directory_does_not_exist(base_folder)
 
-    def test_run_command_in_folder_rejects_absolute_excluded_folder(self) -> None:
+    def test_run_command_in_folder_supports_absolute_excluded_folder(self) -> None:
         # arrange
         sc = ScriptCollectionCore()
         base_folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
         try:
-            GeneralUtilities.ensure_directory_exists(base_folder)
             absolute_excluded_folder = os.path.join(base_folder, ".git")
+            GeneralUtilities.ensure_directory_exists(absolute_excluded_folder)
 
             # act & assert
-            # An excluded folder must be relative to base_folder; an absolute path is rejected.
+            # An excluded folder may also be given as an absolute path (it is resolved against base_folder, which is a
+            # no-op for an already-absolute path), so a folder inside it must be rejected.
             with self.assertRaises(ValueError):
-                sc.run_command_in_folder(base_folder, "echo", "", base_folder, [absolute_excluded_folder])
+                sc.run_command_in_folder(base_folder, "echo", "", absolute_excluded_folder, [absolute_excluded_folder])
         finally:
             GeneralUtilities.ensure_directory_does_not_exist(base_folder)
 
-    def test_path_is_inside_one_of_the_folders(self) -> None:
+    def test_path_is_allowed_within_base_folder(self) -> None:
         # arrange
         sc = ScriptCollectionCore()
         base_folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
 
         # act & assert
-        # A file inside an excluded folder is detected.
-        assert sc.path_is_inside_one_of_the_folders(os.path.join(base_folder, ".git", "config"), base_folder, [".git", ".claude"])
-        # A ".."-trick that resolves back into an excluded folder is detected.
-        assert sc.path_is_inside_one_of_the_folders(os.path.join(base_folder, ".claude", "..", ".claude", "x"), base_folder, [".claude"])
-        # A file that is not inside any excluded folder is allowed.
-        assert not sc.path_is_inside_one_of_the_folders(os.path.join(base_folder, "src", "main.py"), base_folder, [".git", ".claude"])
-        # An absolute excluded folder is rejected.
-        with self.assertRaises(ValueError):
-            sc.path_is_inside_one_of_the_folders(os.path.join(base_folder, "x"), base_folder, [os.path.join(base_folder, ".git")])
+        # base_folder itself is allowed.
+        assert sc.path_is_allowed_within_base_folder(base_folder, base_folder, [".git", ".claude"])
+        # A path inside base_folder that is not inside any excluded folder is allowed.
+        assert sc.path_is_allowed_within_base_folder(os.path.join(base_folder, "src", "main.py"), base_folder, [".git", ".claude"])
+        # A path inside an excluded folder is not allowed.
+        assert not sc.path_is_allowed_within_base_folder(os.path.join(base_folder, ".git", "config"), base_folder, [".git", ".claude"])
+        # A ".."-trick that resolves back into an excluded folder is not allowed.
+        assert not sc.path_is_allowed_within_base_folder(os.path.join(base_folder, ".claude", "..", ".claude", "x"), base_folder, [".claude"])
+        # A path outside base_folder is not allowed.
+        assert not sc.path_is_allowed_within_base_folder(os.path.join(tempfile.gettempdir(), str(uuid.uuid4())), base_folder, [])
+        # An absolute excluded folder is supported (resolved against base_folder, which is a no-op for absolute paths).
+        assert not sc.path_is_allowed_within_base_folder(os.path.join(base_folder, ".git", "x"), base_folder, [os.path.join(base_folder, ".git")])
 
     def test_git_commit_is_ancestor(self) -> None:
         sc = ScriptCollectionCore()
