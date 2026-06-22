@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.2.144"
+version = "4.2.145"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
@@ -99,6 +99,7 @@ scsetcontentoffile = "ScriptCollection.Executables:SetContentOfFile"
 scprintfilecontent = "ScriptCollection.Executables:PrintFileContent"
 sccreatefile = "ScriptCollection.Executables:CreateFile"
 sccreatefolder = "ScriptCollection.Executables:CreateFolder"
+sccreateskill = "ScriptCollection.Executables:CreateSkill"
 scappendlinetofile = "ScriptCollection.Executables:AppendLineToFile"
 scregexreplaceinfile = "ScriptCollection.Executables:RegexReplaceInFile"
 scnormalizelineendings = "ScriptCollection.Executables:NormalizeLineEndings"

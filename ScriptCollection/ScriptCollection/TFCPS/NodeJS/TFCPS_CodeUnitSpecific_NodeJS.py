@@ -35,6 +35,12 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
             self._protected_sc.normalize_line_endings(scss_file)
         for sass_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".sass"):
             self._protected_sc.normalize_line_endings(sass_file)
+        # The OpenAPI-generator writes its '.openapi-generator/FILES' metadata-file with the host's native
+        # line-endings (CRLF on Windows, LF on Linux). Normalize it to LF like the other generated text-files
+        # so the committed file does not drift between build-hosts.
+        for openapi_generator_files_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder):
+            if os.path.basename(openapi_generator_files_file) == "FILES" and os.path.basename(os.path.dirname(openapi_generator_files_file)) == ".openapi-generator":
+                self._protected_sc.normalize_line_endings(openapi_generator_files_file)
         for html_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".html"):
             self._protected_sc.format_html_file(html_file, os.path.basename(html_file) == "index.html")
         self._protected_sc.run_with_epew("npm", "run lint", codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug,encode_argument_in_base64=True)

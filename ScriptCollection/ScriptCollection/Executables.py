@@ -437,17 +437,16 @@ def PrintFileContent() -> int:
     parser.add_argument('-e', '--encoding', required=False, default="utf-8")
     parser.add_argument('-b', '--basefolder', required=False, default=".", help="Base-folder the excludedfolder-entries are relative to. Defaults to the current working-directory.")
     parser.add_argument('-x', '--excludedfolder', action='append', default=[], help="A folder (relative to basefolder) whose files must not be read. Can be specified multiple times. Example: --excludedfolder .git --excludedfolder .claude --excludedfolder Other/Secrets")
+    parser.add_argument('-f', '--fromline', required=False, default=None, type=int, help="1-based line-number to start printing from (inclusive). Defaults to the first line.")
+    parser.add_argument('-t', '--toline', required=False, default=None, type=int, help="1-based line-number to stop printing at (inclusive). Defaults to the last line.")
     args = parser.parse_args()
     file = args.path
     encoding = args.encoding
-    if not os.path.isfile(file):
-        GeneralUtilities.write_exception_to_stderr(f"File '{file}' does not exist.")
-        return 1
     sc = ScriptCollectionCore()
-    if sc.path_is_inside_one_of_the_folders(file, args.basefolder, args.excludedfolder):
-        GeneralUtilities.write_message_to_stderr(f"Reading '{file}' is not allowed because it is located inside an excluded folder.")
+    if not sc.path_is_allowed_within_base_folder(file, args.basefolder, args.excludedfolder):
+        GeneralUtilities.write_message_to_stderr(f"Reading '{file}' is not allowed because it is not located inside the base-folder or it is located inside an excluded folder.")
         return 1
-    GeneralUtilities.write_message_to_stdout(GeneralUtilities.read_text_from_file(file, encoding))
+    GeneralUtilities.write_message_to_stdout(sc.get_file_content(file, encoding, args.fromline, args.toline))
     return 0
 
 
@@ -470,6 +469,22 @@ def CreateFolder() -> int:
     args = parser.parse_args()
     sc = ScriptCollectionCore()
     sc.create_folder(args.path, args.errorwhenexists, args.createnecessaryfolder)
+    return 0
+
+
+def CreateSkill() -> int:
+    parser = argparse.ArgumentParser(description="Creates a skill ('skills/<name>/' with a lightweight 'skill.json' and a lazy-loaded 'detail.md'). The skill is created in the given repository-folder, or - if none is given - in the current working-directory when that is a git-repository, otherwise in the user's ScriptCollection-configuration-folder.")
+    parser.add_argument('-n', '--name', required=True, help='Name of the skill.')
+    parser.add_argument('-d', '--description', required=True, help='Description of the skill.')
+    parser.add_argument('-r', '--repositoryfolder', required=False, default=None, help='Repository-folder to create the skill in. Defaults to the current git-repository or the user-folder.')
+    parser.add_argument('-t', '--tags', required=False, default=None, help='Comma-separated list of tags.')
+    parser.add_argument('-p', '--priority', required=False, default=None, help='Priority of the skill (e.g. "high", "medium", "low").')
+    parser.add_argument('-g', '--triggers', required=False, default=None, help='Comma-separated list of triggers.')
+    args = parser.parse_args()
+    tags = [tag.strip() for tag in args.tags.split(",") if tag.strip() != GeneralUtilities.empty_string] if args.tags is not None else []
+    triggers = [trigger.strip() for trigger in args.triggers.split(",") if trigger.strip() != GeneralUtilities.empty_string] if args.triggers is not None else []
+    skill_folder = ScriptCollectionCore().create_skill(args.name, args.description, args.repositoryfolder, tags, args.priority, triggers)
+    GeneralUtilities.write_message_to_stdout(skill_folder)
     return 0
 
 
