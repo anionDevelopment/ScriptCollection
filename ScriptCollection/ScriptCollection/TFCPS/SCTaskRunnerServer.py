@@ -1,6 +1,7 @@
 import os
 import json
 import base64
+import ssl
 import uuid
 import threading
 import subprocess
@@ -37,10 +38,18 @@ class SCTaskRunnerServer:
         self.__jobs_lock = threading.Lock()
 
     @GeneralUtilities.check_arguments
-    def run(self, host: str = "0.0.0.0", port: int = 8080) -> None:
+    def run(self, host: str = "0.0.0.0", port: int = 8080, certificate_file: str = None, certificate_key_file: str = None) -> None:
+        """Starts the HTTP-server. When both certificate_file and certificate_key_file are given the server is served over
+        TLS (https); otherwise it is served over plain http (e.g. when TLS is terminated by a reverse-proxy in front of it)."""
         GeneralUtilities.ensure_directory_exists(self.work_folder)
         server = ThreadingHTTPServer((host, port), self.__create_request_handler())
-        self.__sc.log.log(f"SCTaskRunner for operating-system '{self.operating_system_name}' is listening on {host}:{port}.")
+        protocol = "http"
+        if certificate_file is not None and certificate_key_file is not None:
+            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ssl_context.load_cert_chain(certfile=certificate_file, keyfile=certificate_key_file)
+            server.socket = ssl_context.wrap_socket(server.socket, server_side=True)
+            protocol = "https"
+        self.__sc.log.log(f"SCTaskRunner for operating-system '{self.operating_system_name}' is listening on {protocol}://{host}:{port}.")
         server.serve_forever()
 
     @GeneralUtilities.check_arguments

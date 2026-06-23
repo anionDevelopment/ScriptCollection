@@ -145,8 +145,10 @@ class TFCPS_RemoteBuild:
                     continue
                 endpoints.append(RunnerEndpoint(parts[0].strip(), parts[1].strip(), parts[2].strip()))
         # Source 2 (primarily for the build-pipeline): environment-variables "Runner_<name>_URL/_Username/_Password".
-        url_env_pattern = re.compile(r"^Runner_(.+?)_URL$")
-        for env_var_name, env_var_value in os.environ.items():
+        # The lookup is case-insensitive because Windows exposes environment-variable-names upper-cased via os.environ.
+        environment_variables_upper = {name.upper(): value for name, value in os.environ.items()}
+        url_env_pattern = re.compile(r"^RUNNER_(.+?)_URL$")
+        for env_var_name, env_var_value in environment_variables_upper.items():
             match = url_env_pattern.match(env_var_name)
             if match is None:
                 continue
@@ -154,8 +156,8 @@ class TFCPS_RemoteBuild:
             url = (env_var_value or GeneralUtilities.empty_string).strip()
             if url == GeneralUtilities.empty_string:
                 continue
-            username = (os.environ.get(f"Runner_{runner_name}_Username") or GeneralUtilities.empty_string).strip()
-            password = (os.environ.get(f"Runner_{runner_name}_Password") or GeneralUtilities.empty_string).strip()
+            username = (environment_variables_upper.get(f"RUNNER_{runner_name}_USERNAME") or GeneralUtilities.empty_string).strip()
+            password = (environment_variables_upper.get(f"RUNNER_{runner_name}_PASSWORD") or GeneralUtilities.empty_string).strip()
             endpoints.append(RunnerEndpoint(url, username, password))
         return endpoints
 
