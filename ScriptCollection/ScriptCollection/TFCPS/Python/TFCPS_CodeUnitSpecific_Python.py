@@ -63,7 +63,7 @@ class TFCPS_CodeUnitSpecific_Python_Functions(TFCPS_CodeUnitSpecific_Base):
         tests_folder = src_folder+"Tests"
         # The codeunit gets linted in an isolated folder which only contains this codeunit. This is required because otherwise sibling-codeunit-source-folders of the repository would shadow the installed dependency-packages of the same name during pylint's import-resolution (pylint adds the repository-folder to sys.path due to the package-nesting), which would result in false-positive import-errors. In the isolated folder the declared (and installed) dependency-codeunits are resolved instead.
         ignored_subfolders = ["Other", "__pycache__", "*.egg-info", "build", "dist", "venv", ".venv", ".pytest_cache", ".git"]
-        with tempfile.TemporaryDirectory() as isolation_folder:
+        with tempfile.TemporaryDirectory(dir=GeneralUtilities.get_temp_folder()) as isolation_folder:
             isolated_codeunit_folder = os.path.join(isolation_folder, codeunitname)
             GeneralUtilities.copy_content_of_folder(codeunit_folder, isolated_codeunit_folder, ignored_glob_patterms=ignored_subfolders)
             pylint_configuration_file = os.path.join(repository_folder, ".pylintrc")

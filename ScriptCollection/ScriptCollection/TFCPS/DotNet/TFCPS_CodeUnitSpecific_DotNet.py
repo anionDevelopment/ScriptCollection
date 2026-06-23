@@ -1,7 +1,6 @@
 import os
 import re
 import shutil
-import tempfile
 import uuid
 import json
 import csv
@@ -290,7 +289,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         codeunit_name = self.get_codeunit_name()
         codeunit_folder = self.get_codeunit_folder()
         sln_file = os.path.join(codeunit_folder, codeunit_name + ".sln")
-        temp_output_folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        temp_output_folder = os.path.join(GeneralUtilities.get_temp_folder(), str(uuid.uuid4()))
         GeneralUtilities.ensure_directory_exists(temp_output_folder)
         try:
             run_result = self._protected_sc.run_program("dotnet", f"build \"{sln_file}\" -nologo -v minimal -o \"{temp_output_folder}\"", codeunit_folder, throw_exception_if_exitcode_is_not_zero=False, env_vars={"DOTNET_CLI_UI_LANGUAGE": "en-US"})
@@ -556,7 +555,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         
         repository_folder: str = self.get_repository_folder().replace("\\", "/")
         coverage_file_folder = os.path.join(repository_folder, codeunit_name, "Other/Artifacts/TestCoverage")
-        temp_folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        temp_folder = os.path.join(GeneralUtilities.get_temp_folder(), str(uuid.uuid4()))
         GeneralUtilities.ensure_directory_exists(temp_folder)
         runsettings_file = "runsettings.xml"
         codeunit_folder = f"{repository_folder}/{codeunit_name}"
