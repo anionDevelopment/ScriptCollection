@@ -1162,6 +1162,10 @@ class GeneralUtilities:
         return platform.system() == 'Linux'
 
     @staticmethod
+    def current_system_is_macos():
+        return platform.system() == 'Darwin'
+
+    @staticmethod
     @check_arguments
     def get_line():
         return "--------------------------"
