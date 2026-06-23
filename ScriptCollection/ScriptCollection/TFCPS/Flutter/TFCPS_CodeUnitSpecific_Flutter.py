@@ -5,6 +5,7 @@ import zipfile
 from ...GeneralUtilities import GeneralUtilities
 from ...SCLog import  LogLevel
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_CodeUnitSpecific_Base_CLI
+from ..TFCPS_RemoteBuild import RunnerOperatingSystem
 
 class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
  
@@ -31,26 +32,33 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
         }
         for target in targets:
             self._protected_sc.log.log(f"Build flutter-codeunit {codeunit_name} for target {target_names[target]}...")
-            self._protected_sc.run_with_epew("flutter", f"build {target}", src_folder)
             if target == "web":
+                self._protected_sc.run_with_epew("flutter", "build web", src_folder)
                 web_relase_folder = os.path.join(src_folder, "build/web")
                 web_folder = os.path.join(artifacts_folder, "BuildResult_WebApplication")
                 GeneralUtilities.ensure_directory_does_not_exist(web_folder)
                 GeneralUtilities.ensure_directory_exists(web_folder)
                 GeneralUtilities.copy_content_of_folder(web_relase_folder, web_folder)
             elif target == "windows":
-                enabled=False
-                if enabled:#TODO move to external because this is not platform indepent
-                    windows_release_folder = os.path.join(src_folder, "build/windows/x64/runner/Release")
-                    windows_folder = os.path.join(artifacts_folder, "BuildResult_Windows")
-                    GeneralUtilities.ensure_directory_does_not_exist(windows_folder)
-                    GeneralUtilities.ensure_directory_exists(windows_folder)
-                    GeneralUtilities.copy_content_of_folder(windows_release_folder, windows_folder)
+                # Windows-builds always run on a Windows-task-runner - even when building on a Windows-client - so that all
+                # builds are produced uniformly in the same defined environment. See the remote-build-article in the reference.
+                self.run_program_on_remote_runner(RunnerOperatingSystem.Windows, "flutter", ["build", "windows"], src_folder)
+                windows_release_folder = os.path.join(src_folder, "build/windows/x64/runner/Release")
+                windows_folder = os.path.join(artifacts_folder, "BuildResult_Windows")
+                GeneralUtilities.ensure_directory_does_not_exist(windows_folder)
+                GeneralUtilities.ensure_directory_exists(windows_folder)
+                GeneralUtilities.copy_content_of_folder(windows_release_folder, windows_folder)
             elif target == "ios":
-                enabled=False
-                if enabled:#TODO move to external because this is not platform indepent
-                    raise ValueError("building for ios is not implemented yet")
+                # iOS-builds must run on macOS and therefore always run on a macOS-task-runner (uniform builds). See the
+                # remote-build-article in the reference.
+                self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "flutter", ["build", "ios"], src_folder)
+                ios_release_folder = os.path.join(src_folder, "build/ios/iphoneos")
+                ios_folder = os.path.join(artifacts_folder, "BuildResult_IOS")
+                GeneralUtilities.ensure_directory_does_not_exist(ios_folder)
+                GeneralUtilities.ensure_directory_exists(ios_folder)
+                GeneralUtilities.copy_content_of_folder(ios_release_folder, ios_folder)
             elif target == "appbundle":
+                self._protected_sc.run_with_epew("flutter", "build appbundle", src_folder)
                 enabled=False
                 if enabled:#TODO move to external because this is not platform indepent
                     aab_folder = os.path.join(artifacts_folder, "BuildResult_AAB")

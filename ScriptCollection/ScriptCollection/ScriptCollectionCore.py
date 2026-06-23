@@ -37,7 +37,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.151"
+version = "4.3.0"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -3508,6 +3508,59 @@ OCR-content:
         #TODO add cli-script to call this function
         if network_name  in self.get_docker_networks():
             self.run_program("docker",f"network rm {network_name}")
+
+    def get_external_docker_networks_from_compose_file(self,compose_file_path: str) -> list[str]:
+        """
+        Parses a docker-compose.yml file and returns all network names
+        that are marked as external: true.
+        """
+
+        with open(compose_file_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+
+        external_networks = []
+
+        networks = data.get("networks", {})
+        if not isinstance(networks, dict):
+            return external_networks
+
+        for name, config in networks.items():
+            if isinstance(config, dict):
+                if config.get("external") is True:
+                    # case: external: true
+                    external_networks.append(name)
+
+                # optional advanced case: external with explicit name
+                elif "external" in config and isinstance(config["external"], dict):
+                    # e.g. external: { name: "real_network_name" }
+                    real_name = config["external"].get("name")
+                    if real_name:
+                        external_networks.append(real_name)
+
+        return external_networks
+
+    @GeneralUtilities.check_arguments
+    def get_external_docker_networks_from_compose_file(self, compose_file: str) -> list[str]:
+        with open(compose_file, encoding="utf-8") as stream:
+            loaded = yaml.safe_load(stream)
+        networks = loaded.get("networks", dict())
+        result = []
+        for network_key, network_definition in networks.items():
+            network_definition = network_definition or dict()
+            if network_definition.get("external", False):
+                network_name = network_definition.get("name", network_key)
+                result.append(network_name)
+        return result
+
+    @GeneralUtilities.check_arguments
+    def show_external_docker_networks_from_compose_file(self, compose_file: str) -> None:
+        for network_name in self.get_external_docker_networks_from_compose_file(compose_file):
+            GeneralUtilities.write_message_to_stdout(network_name)
+
+    @GeneralUtilities.check_arguments
+    def ensure_external_docker_networks_exist_from_compose_file(self, compose_file: str) -> None:
+        for network_name in self.get_external_docker_networks_from_compose_file(compose_file):
+            self.ensure_docker_network_is_available(network_name)
 
     @GeneralUtilities.check_arguments
     def get_available_cultures_for_angular_app(self,angular_json_file:str)->list[str]:
