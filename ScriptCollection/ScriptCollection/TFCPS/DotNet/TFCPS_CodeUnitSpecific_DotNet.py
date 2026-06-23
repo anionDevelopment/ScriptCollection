@@ -567,7 +567,11 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         args: list[str] = ["test", f"{codeunit_name}.sln", "-c", dotnet_build_configuration, "-o", temp_folder]
         if os.path.isfile(os.path.join(codeunit_folder, runsettings_file)):
             args += ["--settings", runsettings_file]
-        args += ["--results-directory","./TestResults"]
+        # Write the test-results (test-binaries-deployment and coverage) into the system-temp-folder (a subfolder of
+        # temp_folder) instead of a relative "./TestResults" inside the codeunit-folder. The relative path would otherwise
+        # leave a folder behind in the codeunit-folder (visible e.g. when building inside the mounted Debian-build-container).
+        # The whole temp_folder - including these results - is removed in the finally-block below.
+        args += ["--results-directory", os.path.join(temp_folder, "TestResults")]
         try:
             program_output=self._protected_sc.run_program_argsasarray("dotnet", args, codeunit_folder, print_live_output=self.get_verbosity()==LogLevel.Debug, timeoutInSeconds=60*20)
             output_lines=program_output[1].split("\n")
