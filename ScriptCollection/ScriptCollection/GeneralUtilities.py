@@ -85,7 +85,7 @@ class GeneralUtilities:
                                 raise TypeError(f"Argument with index {index} for function {function.__name__} ('{str(argument)}') is not of type {function.__annotations__[parameters[index]]} but has type "+str(type(argument)))
             for index, named_argument in enumerate(named_args):
                 if named_args[named_argument] is not None:
-                    if parameters[index] in function.__annotations__:
+                    if named_argument in function.__annotations__:
                         if not GeneralUtilities.is_generic(function.__annotations__.get(named_argument)):
                             if not isinstance(named_args[named_argument], function.__annotations__.get(named_argument)):
                                 raise TypeError(f"Argument with name {named_argument} for function {function.__name__} ('{str(named_args[named_argument])}') is not of type {function.__annotations__.get(named_argument)}")
