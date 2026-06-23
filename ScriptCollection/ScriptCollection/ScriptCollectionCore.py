@@ -3509,6 +3509,36 @@ OCR-content:
         if network_name  in self.get_docker_networks():
             self.run_program("docker",f"network rm {network_name}")
 
+    def get_external_docker_networks_from_compose_file(self,compose_file_path: str) -> list[str]:
+        """
+        Parses a docker-compose.yml file and returns all network names
+        that are marked as external: true.
+        """
+
+        with open(compose_file_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+
+        external_networks = []
+
+        networks = data.get("networks", {})
+        if not isinstance(networks, dict):
+            return external_networks
+
+        for name, config in networks.items():
+            if isinstance(config, dict):
+                if config.get("external") is True:
+                    # case: external: true
+                    external_networks.append(name)
+
+                # optional advanced case: external with explicit name
+                elif "external" in config and isinstance(config["external"], dict):
+                    # e.g. external: { name: "real_network_name" }
+                    real_name = config["external"].get("name")
+                    if real_name:
+                        external_networks.append(real_name)
+
+        return external_networks
+
     @GeneralUtilities.check_arguments
     def get_available_cultures_for_angular_app(self,angular_json_file:str)->list[str]:
         languages = ["en"]
