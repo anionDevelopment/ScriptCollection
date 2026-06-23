@@ -10,7 +10,6 @@ import time
 import re
 import sys
 import json
-import tempfile 
 import uuid
 import urllib.request
 from packaging import version
@@ -534,7 +533,7 @@ class TFCPS_Tools_General:
         dst = "HEAD"
         dst_prefix = f"v{current_version}"
 
-        temp_file = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        temp_file = os.path.join(GeneralUtilities.get_temp_folder(), str(uuid.uuid4()))
         try:
             GeneralUtilities.ensure_file_does_not_exist(temp_file)
             GeneralUtilities.write_text_to_file(temp_file, self.__sc.run_program("git", f'--no-pager diff --src-prefix={src_prefix}/ --dst-prefix={dst_prefix}/ {src} {dst} -- {codeunit_name}', repository_folder)[1])
@@ -755,7 +754,7 @@ class TFCPS_Tools_General:
         # Pin the font for all rendered diagrams via a PlantUML-config-file so the resulting SVG is identical across
         # machines, without having to add a skinparam to every (also hand-written) .plantuml-file. See the comment at
         # __default_diagram_font_name for the reason.
-        font_config_file = os.path.join(tempfile.gettempdir(), f"plantuml-font-config-{uuid.uuid4()}.cfg")
+        font_config_file = os.path.join(GeneralUtilities.get_temp_folder(), f"plantuml-font-config-{uuid.uuid4()}.cfg")
         GeneralUtilities.write_text_to_file(font_config_file, f'skinparam defaultFontName "{TFCPS_Tools_General.__default_diagram_font_name}"')
         # Force the JVM to use the DejaVu-fonts bundled with ScriptCollection (via the font-path) instead of whatever
         # font-version happens to be installed on the host. This makes the text-measurement - and thus the resulting
@@ -787,7 +786,7 @@ class TFCPS_Tools_General:
         # GeneralUtilities._internal_load_resource so this also works when the package is stored as a zip-archive. Returns
         # None if the fonts are not available (e.g. an older installation without the bundled fonts). The caller is
         # responsible for removing the returned folder afterwards.
-        temp_folder = os.path.join(tempfile.gettempdir(), f"scriptcollection-diagram-fonts-{uuid.uuid4()}")
+        temp_folder = os.path.join(GeneralUtilities.get_temp_folder(), f"scriptcollection-diagram-fonts-{uuid.uuid4()}")
         try:
             GeneralUtilities.ensure_directory_exists(temp_folder)
             for font_filename in TFCPS_Tools_General.__bundled_diagram_font_filenames:

@@ -24,7 +24,6 @@ import shutil
 from typing import IO
 import fnmatch
 import uuid
-import tempfile
 import io
 import requests
 import ntplib
@@ -38,7 +37,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.149"
+version = "4.2.150"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2476,7 +2475,7 @@ DNS                 = {domain}
 
         # prepare
         GeneralUtilities.ensure_directory_exists(deb_output_folder)
-        temp_folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        temp_folder = os.path.join(GeneralUtilities.get_temp_folder(), str(uuid.uuid4()))
         GeneralUtilities.ensure_directory_exists(temp_folder)
         bin_folder = binary_folder
         tool_content_folder_name = toolname+"Content"
@@ -3245,7 +3244,7 @@ OCR-content:
                 override_services[service_name] = {"ports": [f"{exposed_port}:{exposed_port}" for exposed_port in exposed_ports]}
         if 0 == len(override_services):
             return GeneralUtilities.empty_string
-        override_file = os.path.join(tempfile.gettempdir(), f"docker-compose.localhost.{str(uuid.uuid4())}.yml")
+        override_file = os.path.join(GeneralUtilities.get_temp_folder(), f"docker-compose.localhost.{str(uuid.uuid4())}.yml")
         with open(override_file, "w", encoding="utf-8") as stream:
             yaml.safe_dump({"services": override_services}, stream)
         return override_file
