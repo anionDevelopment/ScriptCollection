@@ -1074,6 +1074,26 @@ def EnsureDockerNetworkIsAvailable()->int:
     return 0
 
 
+def ShowExternalDockerNetworks() -> int:
+    parser = argparse.ArgumentParser(description="Prints all external networks declared in a Docker Compose file.")
+    parser.add_argument('-f', '--file', required=False, default="docker-compose.yml", help="Path to the Docker Compose file. Defaults to docker-compose.yml in the current working directory.")
+    args = parser.parse_args()
+    sc: ScriptCollectionCore = ScriptCollectionCore()
+    file = GeneralUtilities.resolve_relative_path(args.file, os.getcwd())
+    sc.show_external_docker_networks_from_compose_file(file)
+    return 0
+
+
+def EnsureExternalDockerNetworksExist() -> int:
+    parser = argparse.ArgumentParser(description="Ensures all external networks declared in a Docker Compose file exist.")
+    parser.add_argument('-f', '--file', required=False, default="docker-compose.yml", help="Path to the Docker Compose file. Defaults to docker-compose.yml in the current working directory.")
+    args = parser.parse_args()
+    sc: ScriptCollectionCore = ScriptCollectionCore()
+    file = GeneralUtilities.resolve_relative_path(args.file, os.getcwd())
+    sc.ensure_external_docker_networks_exist_from_compose_file(file)
+    return 0
+
+
 def ReclaimSpaceFromDocker()->int:
     sc = ScriptCollectionCore()
     parser = argparse.ArgumentParser()

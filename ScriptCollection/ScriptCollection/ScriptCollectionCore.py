@@ -3540,6 +3540,29 @@ OCR-content:
         return external_networks
 
     @GeneralUtilities.check_arguments
+    def get_external_docker_networks_from_compose_file(self, compose_file: str) -> list[str]:
+        with open(compose_file, encoding="utf-8") as stream:
+            loaded = yaml.safe_load(stream)
+        networks = loaded.get("networks", dict())
+        result = []
+        for network_key, network_definition in networks.items():
+            network_definition = network_definition or dict()
+            if network_definition.get("external", False):
+                network_name = network_definition.get("name", network_key)
+                result.append(network_name)
+        return result
+
+    @GeneralUtilities.check_arguments
+    def show_external_docker_networks_from_compose_file(self, compose_file: str) -> None:
+        for network_name in self.get_external_docker_networks_from_compose_file(compose_file):
+            GeneralUtilities.write_message_to_stdout(network_name)
+
+    @GeneralUtilities.check_arguments
+    def ensure_external_docker_networks_exist_from_compose_file(self, compose_file: str) -> None:
+        for network_name in self.get_external_docker_networks_from_compose_file(compose_file):
+            self.ensure_docker_network_is_available(network_name)
+
+    @GeneralUtilities.check_arguments
     def get_available_cultures_for_angular_app(self,angular_json_file:str)->list[str]:
         languages = ["en"]
         with open(angular_json_file, "r", encoding="utf-8") as f:
