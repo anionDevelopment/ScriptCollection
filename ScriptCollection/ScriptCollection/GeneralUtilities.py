@@ -3,6 +3,7 @@ import os
 from os import listdir
 from os.path import isfile, join, isdir
 import platform
+import tempfile
 import json
 import inspect
 import ctypes
@@ -1160,6 +1161,21 @@ class GeneralUtilities:
     @staticmethod
     def current_system_is_linux():
         return platform.system() == 'Linux'
+
+    @staticmethod
+    def get_temp_folder() -> str:
+        """Returns an absolute path to the system-temp-folder. Use this instead of tempfile.gettempdir() directly:
+        in some Linux-build-containers TMPDIR/TEMP/TMP is set to a relative value, which makes tempfile.gettempdir()
+        return a relative path. A relative temp-path would create temp-content relative to the current working-directory
+        (e.g. inside a codeunit-folder) and would not be cleaned up reliably. In that case the platform-default absolute
+        temp-folder is used instead."""
+        temp_folder = tempfile.gettempdir()
+        if not os.path.isabs(temp_folder):
+            if GeneralUtilities.current_system_is_windows():
+                temp_folder = os.path.join(os.environ.get("SystemRoot", "C:\\Windows"), "Temp")
+            else:
+                temp_folder = "/tmp"
+        return temp_folder
 
     @staticmethod
     @check_arguments

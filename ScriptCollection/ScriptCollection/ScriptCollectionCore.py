@@ -24,7 +24,6 @@ import shutil
 from typing import IO
 import fnmatch
 import uuid
-import tempfile
 import io
 import requests
 import ntplib
@@ -38,7 +37,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.2.148"
+version = "4.2.151"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2476,7 +2475,7 @@ DNS                 = {domain}
 
         # prepare
         GeneralUtilities.ensure_directory_exists(deb_output_folder)
-        temp_folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        temp_folder = os.path.join(GeneralUtilities.get_temp_folder(), str(uuid.uuid4()))
         GeneralUtilities.ensure_directory_exists(temp_folder)
         bin_folder = binary_folder
         tool_content_folder_name = toolname+"Content"
@@ -3245,7 +3244,7 @@ OCR-content:
                 override_services[service_name] = {"ports": [f"{exposed_port}:{exposed_port}" for exposed_port in exposed_ports]}
         if 0 == len(override_services):
             return GeneralUtilities.empty_string
-        override_file = os.path.join(tempfile.gettempdir(), f"docker-compose.localhost.{str(uuid.uuid4())}.yml")
+        override_file = os.path.join(GeneralUtilities.get_temp_folder(), f"docker-compose.localhost.{str(uuid.uuid4())}.yml")
         with open(override_file, "w", encoding="utf-8") as stream:
             yaml.safe_dump({"services": override_services}, stream)
         return override_file
@@ -3327,6 +3326,25 @@ OCR-content:
                 self.run_program_argsasarray("docker", ["network", "connect", network_name, own_container_id], throw_exception_if_exitcode_is_not_zero=True)
 
     @GeneralUtilities.check_arguments
+    def __disconnect_build_container_from_compose_networks(self, docker_compose_file: str) -> None:
+        # Detaches THIS build-container again from every (external) network used by the compose-file. This is the inverse of
+        # __connect_build_container_to_compose_networks and is run before "compose down" so the network can be removed without leaving a stale/null
+        # network-reference on the build-container (which would otherwise break the GitHub-runner "Stop containers"-post-step). Failures are ignored on
+        # purpose: the network might already be gone, or the build-container might never have been attached (e.g. the attach failed or did not run).
+        own_container_id = self.__get_own_container_id()
+        if not GeneralUtilities.string_has_content(own_container_id):
+            return
+        if not os.path.isfile(docker_compose_file):
+            return
+        with open(docker_compose_file, encoding="utf-8") as stream:
+            loaded = yaml.safe_load(stream)
+        networks = loaded.get("networks", dict())
+        for network_key, network_definition in networks.items():
+            network_definition = network_definition or dict()
+            network_name = network_definition.get("name", network_key)
+            self.run_program_argsasarray("docker", ["network", "disconnect", "-f", network_name, own_container_id], throw_exception_if_exitcode_is_not_zero=False)
+
+    @GeneralUtilities.check_arguments
     def __register_test_service_containers_in_etc_hosts(self, docker_compose_file: str) -> None:
         # Maps the container-names of the test-services to their current container-IPs in the /etc/hosts of THIS build-container (neither the runner-host
         # nor the test-service-containers are touched). The managed block is rewritten on each start because the containers get a new IP every time.
@@ -3362,6 +3380,14 @@ OCR-content:
         example_folder = os.path.dirname(file)
         example_name = os.path.basename(example_folder)
         title = f"Test{example_name}"
+        if self.is_running_in_build_container():
+            # Inverse of __connect_build_container_to_compose_networks (see start_local_test_service): detach THIS build-container from the compose-networks
+            # BEFORE "compose down" removes them. Otherwise "compose down" removes a network this build-container is still attached to, which leaves a
+            # stale/null network-reference on the build-container. The GitHub-runner adds an automatic post-job "Stop containers"-step (present whenever a
+            # job uses "container:") that enumerates the build-container's networks to disconnect them; that stale entry then makes it fail with
+            # "Value cannot be null. (Parameter 'network')". Disconnecting here first leaves the build-container attached only to the runner-managed
+            # job-network, so the cleanup finds a consistent state.
+            self.__disconnect_build_container_from_compose_networks(os.path.join(example_folder, "docker-compose.yml"))
         self.run_program("docker", f"compose -p {title.lower()} down", example_folder, title=title,print_live_output=True)
 
     @GeneralUtilities.check_arguments
