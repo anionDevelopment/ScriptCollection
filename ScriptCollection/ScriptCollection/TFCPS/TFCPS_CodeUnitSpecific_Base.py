@@ -27,7 +27,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
     __use_cache:bool=None
     tfcps_Tools_General:TFCPS_Tools_General = None
     _protected_sc:ScriptCollectionCore = None
-    __is_pre_merge:bool=False#TODO must be setable to true
+    __is_pre_merge:bool=False
     __validate_developers_of_repository:bool=True#TODO must be setable to false
 
     def __init__(self,current_file:str,verbosity:LogLevel,target_envionment_type:str,use_cache:bool,is_pre_merge:bool):
@@ -115,9 +115,17 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         codeunit_folder = os.path.join(repository_folder, codeunit_name)
 
         # check codeunit-conformity
-        # TODO check if foldername=="<codeunitname>[.codeunit.xml]" == <codeunitname> in file
+        # The codeunit-folder must contain exactly one codeunit-file and its filename (without the ".codeunit.xml"-suffix)
+        # must be equal to the folder-name. (The equality of the folder-name and the name inside the file is checked further below.)
+        if not os.path.isdir(codeunit_folder):
+            raise ValueError(f'Codeunit-folder "{codeunit_folder}" does not exist.')
+        codeunit_filename_suffix = ".codeunit.xml"
+        codeunit_files_in_folder = [entry for entry in os.listdir(codeunit_folder) if entry.endswith(codeunit_filename_suffix) and os.path.isfile(os.path.join(codeunit_folder, entry))]
+        GeneralUtilities.assert_condition(len(codeunit_files_in_folder) == 1, f'The codeunit-folder "{codeunit_folder}" must contain exactly one codeunit-file (matching "*{codeunit_filename_suffix}") but contains {len(codeunit_files_in_folder)}.')
+        codeunit_name_in_codeunit_filename = codeunit_files_in_folder[0][:-len(codeunit_filename_suffix)]
+        GeneralUtilities.assert_condition(codeunit_name_in_codeunit_filename == codeunit_name, f'The codeunit-file "{codeunit_files_in_folder[0]}" must be named "{codeunit_name}{codeunit_filename_suffix}" to match its folder-name ("{codeunit_name}").')
         supported_codeunitspecificationversion = "2.9.4"  # should always be the latest version of the ProjectTemplates-repository
-        codeunit_file = os.path.join(codeunit_folder, f"{codeunit_name}.codeunit.xml")
+        codeunit_file = os.path.join(codeunit_folder, f"{codeunit_name}{codeunit_filename_suffix}")
         if not os.path.isfile(codeunit_file):
             raise ValueError(f'Codeunitfile "{codeunit_file}" does not exist.')
         # TODO implement usage of self.reference_latest_version_of_xsd_when_generating_xml

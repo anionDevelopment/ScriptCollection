@@ -1166,6 +1166,7 @@ class GeneralUtilities:
     def current_system_is_macos():
         return platform.system() == 'Darwin'
 
+    @staticmethod
     def get_temp_folder() -> str:
         """Returns an absolute path to the system-temp-folder. Use this instead of tempfile.gettempdir() directly:
         in some Linux-build-containers TMPDIR/TEMP/TMP is set to a relative value, which makes tempfile.gettempdir()
