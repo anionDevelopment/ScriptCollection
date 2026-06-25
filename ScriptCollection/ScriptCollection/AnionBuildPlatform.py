@@ -65,7 +65,7 @@ class AnionBuildPlatform:
         self.__sc.git_commit(build_repo_folder,"Updated changes")
         self.__sc.git_fetch(build_repo_folder)
         for remote in self.__sc.git_get_all_remote_names(build_repo_folder):
-            self.__sc.git_merge(build_repo_folder,remote+"/"+self.__configuration.source_branch,self.__configuration.source_branch)
+            self.__sc.git_merge(build_repo_folder,remote+"/main","main")
 
         # Pull changes from remote
         self.__sc.git_fetch(repository)

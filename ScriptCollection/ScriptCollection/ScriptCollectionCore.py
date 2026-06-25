@@ -37,7 +37,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.2"
+version = "4.3.3"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -497,7 +497,8 @@ class ScriptCollectionCore:
     @GeneralUtilities.check_arguments
     def git_get_commit_id(self, repository_folder: str, rev: str = "HEAD") -> str:
         self.is_git_or_bare_git_repository(repository_folder)
-        result: tuple[int, str, str, int] = self.run_program_argsasarray("git", ["rev-parse", "--verify", rev], repository_folder, throw_exception_if_exitcode_is_not_zero=True)
+        # Append "^{commit}" so that annotated tags are dereferenced to the commit they point to instead of returning the SHA of the tag-object itself.
+        result: tuple[int, str, str, int] = self.run_program_argsasarray("git", ["rev-parse", "--verify", f"{rev}^{{commit}}"], repository_folder, throw_exception_if_exitcode_is_not_zero=True)
         return result[1].replace('\n', '')
 
     @GeneralUtilities.check_arguments
