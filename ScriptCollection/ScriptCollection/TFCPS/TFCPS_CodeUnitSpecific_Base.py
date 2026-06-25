@@ -232,8 +232,8 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
             for dependency_folder in GeneralUtilities.get_direct_folders_of_folder(repository_dependencies_folder):
                 dependency_name = os.path.basename(dependency_folder)
                 source_version_file = os.path.join(dependency_folder, "Version.txt")
-                if os.path.isfile(source_version_file):
-                    target_version_file = os.path.join(codeunit_folder, "Other", "Resources", "Dependencies", dependency_name, "Version.txt")
+                target_version_file = os.path.join(codeunit_folder, "Other", "Resources", "Dependencies", dependency_name, "Version.txt")
+                if os.path.isfile(target_version_file):# only update dependencies, do not create new ones automatically
                     GeneralUtilities.ensure_directory_exists(os.path.dirname(target_version_file))
                     shutil.copyfile(source_version_file, target_version_file)
 
