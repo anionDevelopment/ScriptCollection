@@ -1074,6 +1074,15 @@ def EnsureDockerNetworkIsAvailable()->int:
     return 0
 
 
+def EnsureDockerNetworkIsNotAvailable()->int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-n', '--networkname', required=True)
+    args = parser.parse_args()
+    sc:ScriptCollectionCore=ScriptCollectionCore()
+    sc.ensure_docker_network_is_not_available(args.networkname)
+    return 0
+
+
 def ShowExternalDockerNetworks() -> int:
     parser = argparse.ArgumentParser(description="Prints all external networks declared in a Docker Compose file.")
     parser.add_argument('-f', '--file', required=False, default="docker-compose.yml", help="Path to the Docker Compose file. Defaults to docker-compose.yml in the current working directory.")

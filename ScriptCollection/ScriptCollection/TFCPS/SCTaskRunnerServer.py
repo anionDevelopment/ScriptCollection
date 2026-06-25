@@ -30,8 +30,8 @@ class SCTaskRunnerServer:
 
     def __init__(self, operating_system_name: str, username: str, password: str, work_folder: str = None, sc: ScriptCollectionCore = None):
         self.operating_system_name = operating_system_name
-        self.__username = username
-        self.__password = password
+        self.__username = username  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
+        self.__password = password  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
         self.work_folder = work_folder if work_folder is not None else os.path.join(GeneralUtilities.get_temp_folder(), "SCTaskRunner")
         self.__sc = sc if sc is not None else ScriptCollectionCore()
         self.__jobs: dict[str, _RunnerJob] = {}
@@ -53,7 +53,7 @@ class SCTaskRunnerServer:
         server.serve_forever()
 
     @GeneralUtilities.check_arguments
-    def __start_job(self, archive_bytes: bytes, codeunit_name: str, program: str, arguments: list[str], working_directory: str) -> str:
+    def __start_job(self, archive_bytes: bytes, codeunit_name: str, program: str, arguments: list[str], working_directory: str) -> str:  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
         job_id = str(uuid.uuid4())
         workspace_folder = os.path.join(self.work_folder, job_id)
         # Isolation: each job gets a fresh, empty workspace-folder.
@@ -78,14 +78,14 @@ class SCTaskRunnerServer:
         command_folder = os.path.join(job.workspace_folder, working_directory)
         try:
             self.__sc.log.log(f"Run '{program} {' '.join(arguments)}' in '{command_folder}'...")
-            process = subprocess.Popen([program] + arguments, cwd=command_folder, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
-            for line in process.stdout:
+            with subprocess.Popen([program] + arguments, cwd=command_folder, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace") as process:
+                for line in process.stdout:
+                    with job.lock:
+                        job.log = job.log + line
+                process.wait()
                 with job.lock:
-                    job.log = job.log + line
-            process.wait()
-            with job.lock:
-                job.exitcode = process.returncode
-                job.state = "completed" if process.returncode == 0 else "failed"
+                    job.exitcode = process.returncode
+                    job.state = "completed" if process.returncode == 0 else "failed"
         except Exception as exception:
             with job.lock:
                 job.log = job.log + f"\nException while running the program: {exception}\n"
@@ -93,7 +93,7 @@ class SCTaskRunnerServer:
                 job.state = "failed"
 
     @GeneralUtilities.check_arguments
-    def __get_result_archive(self, job: _RunnerJob) -> bytes:
+    def __get_result_archive(self, job: _RunnerJob) -> bytes:  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
         codeunit_folder = os.path.join(job.workspace_folder, job.codeunit_name)
         archive_file = os.path.join(self.work_folder, f"{uuid.uuid4()}.result.tar.gz")
         try:
@@ -104,7 +104,7 @@ class SCTaskRunnerServer:
             GeneralUtilities.ensure_file_does_not_exist(archive_file)
 
     @GeneralUtilities.check_arguments
-    def __delete_job(self, job_id: str) -> None:
+    def __delete_job(self, job_id: str) -> None:  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
         with self.__jobs_lock:
             job = self.__jobs.pop(job_id, None)
         if job is not None:
@@ -155,26 +155,31 @@ class SCTaskRunnerServer:
                     return
                 parts = self.path.strip("/").split("/")
                 if len(parts) >= 2 and parts[0] == "jobs":
-                    job = self.__get_job(parts[1])
-                    if job is None:
-                        self.__send_text(404, "Unknown job")
+                    self.__handle_job_get(parts)
+                    return
+                self.__send_text(404, "Not found")
+
+            def __handle_job_get(self, parts: list[str]) -> None:
+                job = self.__get_job(parts[1])
+                if job is None:
+                    self.__send_text(404, "Unknown job")
+                    return
+                if len(parts) == 2:
+                    with job.lock:
+                        self.__send_json(200, {"state": job.state, "exitcode": job.exitcode})
+                    return
+                if len(parts) == 3 and parts[2] == "logs":
+                    with job.lock:
+                        self.__send_text(200, job.log)
+                    return
+                if len(parts) == 3 and parts[2] == "result":
+                    with job.lock:
+                        ready = job.state == "completed"
+                    if not ready:
+                        self.__send_text(409, "Job is not completed")
                         return
-                    if len(parts) == 2:
-                        with job.lock:
-                            self.__send_json(200, {"state": job.state, "exitcode": job.exitcode})
-                        return
-                    if len(parts) == 3 and parts[2] == "logs":
-                        with job.lock:
-                            self.__send_text(200, job.log)
-                        return
-                    if len(parts) == 3 and parts[2] == "result":
-                        with job.lock:
-                            ready = job.state == "completed"
-                        if not ready:
-                            self.__send_text(409, "Job is not completed")
-                            return
-                        self.__send(200, outer._SCTaskRunnerServer__get_result_archive(job))
-                        return
+                    self.__send(200, outer._SCTaskRunnerServer__get_result_archive(job))
+                    return
                 self.__send_text(404, "Not found")
 
             def do_POST(self):  # pylint:disable=invalid-name
