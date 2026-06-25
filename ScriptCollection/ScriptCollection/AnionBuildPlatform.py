@@ -56,13 +56,16 @@ class AnionBuildPlatform:
         GeneralUtilities.assert_condition(build_repo_folder.endswith("Build"),f"buildrepositoriesfolder {build_repo_folder} must end with 'Build'")
         self.__sc.assert_is_git_repository(build_repo_folder)
         product_name = os.path.basename(build_repo_folder)[:-len("Build")]
-        repository:str=os.path.join(build_repo_folder,"Submodules",product_name)
+        repository:str=os.path.join(build_repo_folder, "Submodules", product_name)
         self.__sc.assert_is_git_repository(repository)
-        reference_repo:str=os.path.join(build_repo_folder,"Submodules",product_name+"Reference")
+        reference_repo:str=os.path.join(build_repo_folder, "Submodules", product_name+"Reference")
         self.__sc.assert_is_git_repository(reference_repo)
         self.__sc.git_commit(reference_repo,"Updated changes")
         self.__sc.git_checkout(repository,self.__configuration.source_branch)
         self.__sc.git_commit(build_repo_folder,"Updated changes")
+        self.__sc.git_fetch(build_repo_folder)
+        for remote in self.__sc.git_get_all_remote_names(build_repo_folder):
+            self.__sc.git_merge(build_repo_folder,remote+"/"+self.__configuration.source_branch,self.__configuration.source_branch)
 
         # Pull changes from remote
         self.__sc.git_fetch(repository)
@@ -71,12 +74,12 @@ class AnionBuildPlatform:
 
         # Added changelog entry and build to verify buildability and to update versions etc.
         if self.__configuration.lazy_mode:
-            self.__sc.run_program("sccreatechangelogentry","-m Update.",repository)
+            self.__sc.run_program("sccreatechangelogentry", "-m Update.", repository)
             arguments:str="bb --"
             if self.__configuration.verbosity == LogLevel.Debug:
                 arguments+=f" --verbosity {self.__configuration.verbosity.value}"
-            self.__sc.run_program("task",arguments,repository)
-            self.__sc.git_commit(repository,"update")
+            self.__sc.run_program("task", arguments, repository)
+            self.__sc.git_commit(repository, "update")
 
         # Update dependencies
         if self.__configuration.update_dependencies:
