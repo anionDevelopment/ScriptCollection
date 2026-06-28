@@ -49,12 +49,12 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         except Exception as exception:
             self.sc.log.log_exception(f"'{product_information_file}' could not be validated against the XSD:", exception, LogLevel.Warning)
 
+        #run prepare-script
+        self.run_prepare_script()
+
         #check if changelog exists
         changelog_file=os.path.join(self.repository,"Other","Resources","Changelog",f"v{self.tfcps_tools_general.get_version_of_project(self.repository)}.md")
         GeneralUtilities.assert_file_exists(changelog_file,f"Changelogfile \"{changelog_file}\" does not exist. Try to create it for example using \"sccreatechangelogentry -m ...\".") 
-        
-        #run prepare-script
-        self.run_prepare_script()
 
         #mark current version as supported
         now = GeneralUtilities.get_now()
