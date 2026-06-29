@@ -39,6 +39,12 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     def build_codeunits(self) -> None:
         self.sc.log.log(GeneralUtilities.get_line())
         start_time:datetime=GeneralUtilities.get_now()
+
+        if self.is_pre_merge():
+            GeneralUtilities.assert_condition(not self.__assert_no_new_changes,f"A pre-merge build can not be done with the assert-no-new-changes-option.")
+        ready_to_merge_file=os.path.join(self.repository,".ScriptCollection",".IsReadyToMerge")
+        GeneralUtilities.ensure_file_does_not_exist(ready_to_merge_file)
+
         self.sc.log.log(f"Start building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(start_time,False)}. (Target environment-type: {self.target_environment_type})")
         if self.__assert_no_new_changes:
             self.sc.assert_no_uncommitted_changes(self.repository,"Can not build codeunit: There are uncommitted changes in the repository.")
@@ -78,13 +84,19 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()
 
         self.sc.log.log(GeneralUtilities.get_line())
+
         self.search_for_secrets()
         self.__search_for_vulnerabilities()
         self.__normalize_md_and_txt_line_endings()
+
         if self.is_pre_merge():
             self.__translate()
             self.__collect_metrics()
             self.__generate_loc_diagram()
+            GeneralUtilities.ensure_file_does_not_exist(ready_to_merge_file)
+        else:
+            if self.is_working_branch():
+                GeneralUtilities.ensure_file_exists(ready_to_merge_file)
 
         if self.__assert_no_new_changes:
             self.sc.assert_no_uncommitted_changes(self.repository,"There are new uncommitted changes in the repository.")
@@ -100,6 +112,14 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         for text_file_extension in [".txt", ".md"]:
             for text_file in self.sc.get_not_git_ignored_files_of_folder(self.repository, text_file_extension):
                 self.sc.normalize_line_endings(text_file)
+
+    @GeneralUtilities.check_arguments
+    def is_working_branch(self)->bool:
+        if self.sc.git_repository_has_uncommitted_changes(self.repository):
+            return True
+        if self.sc.git_get_current_branch_name(self.repository) != "main":
+            return True
+        return False
 
     @GeneralUtilities.check_arguments
     def run_prepare_script(self):
