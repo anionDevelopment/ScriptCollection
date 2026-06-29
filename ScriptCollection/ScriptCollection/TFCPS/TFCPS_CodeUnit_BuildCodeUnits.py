@@ -20,8 +20,9 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     __use_cache:bool = None
     __is_pre_merge:bool = None
     __assert_no_new_changes:bool = None
+    __add_ready_to_merge_flag:bool = None
 
-    def __init__(self,repository:str,loglevel:LogLevel,target_environment_type:str,additionalargumentsfile:str,use_cache:bool,is_pre_merge:bool,assertnonewchanges:bool):
+    def __init__(self,repository:str,loglevel:LogLevel,target_environment_type:str,additionalargumentsfile:str,use_cache:bool,is_pre_merge:bool,assertnonewchanges:bool,add_ready_to_merge_flag:bool=False):
         self.sc=ScriptCollectionCore()
         self.sc.log.loglevel=loglevel
         self.__use_cache=use_cache
@@ -34,6 +35,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.additionalargumentsfile=additionalargumentsfile
         self.__is_pre_merge=is_pre_merge
         self.__assert_no_new_changes=assertnonewchanges
+        self.__add_ready_to_merge_flag=add_ready_to_merge_flag
 
     @GeneralUtilities.check_arguments
     def build_codeunits(self) -> None:
@@ -96,7 +98,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             GeneralUtilities.ensure_file_does_not_exist(ready_to_merge_file)
         else:
             if self.is_working_branch():
-                GeneralUtilities.ensure_file_exists(ready_to_merge_file)
+                if self.add_ready_to_merge_flag():
+                    GeneralUtilities.ensure_file_exists(ready_to_merge_file)
 
         if self.__assert_no_new_changes:
             self.sc.assert_no_uncommitted_changes(self.repository,"There are new uncommitted changes in the repository.")
@@ -153,6 +156,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             scbuildcodeunits_arguments.append("-p")
         if self.__assert_no_new_changes:
             scbuildcodeunits_arguments.append("-u")
+        if self.__add_ready_to_merge_flag:
+            scbuildcodeunits_arguments.append("-m")
         if GeneralUtilities.string_has_content(self.additionalargumentsfile):
             scbuildcodeunits_arguments += ["-a", self.__translate_path_into_container(self.additionalargumentsfile, container_repository_folder)]
 
@@ -386,6 +391,10 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     @GeneralUtilities.check_arguments
     def is_pre_merge(self) -> bool:
         return self.__is_pre_merge
+
+    @GeneralUtilities.check_arguments
+    def add_ready_to_merge_flag(self) -> bool:
+        return self.__add_ready_to_merge_flag
 
     @GeneralUtilities.check_arguments
     def update_dependencies(self) -> None:
