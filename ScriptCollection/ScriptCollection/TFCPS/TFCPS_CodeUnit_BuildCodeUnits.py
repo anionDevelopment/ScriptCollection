@@ -2,6 +2,7 @@ import os
 import json
 import re
 import socket
+import uuid
 from datetime import datetime, timedelta,timezone
 import xmlschema
 import yaml
@@ -161,17 +162,42 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if GeneralUtilities.string_has_content(self.additionalargumentsfile):
             scbuildcodeunits_arguments += ["-a", self.__translate_path_into_container(self.additionalargumentsfile, container_repository_folder)]
 
+        #if the repository is a git-submodule then "<repository>/.git" is not a directory but a pointer-file referencing a gitdir which
+        #lies outside the mounted working-tree (for example "<product>Build/.git/modules/Submodules/<product>"). git inside the container
+        #can not resolve that gitdir, so "git rev-parse --verify HEAD" fails and the version-detection silently falls back to a wrong
+        #default-version. To fix this regardless of where the submodule is located in the base-repository, the resolved real gitdir is
+        #mounted into the container at a dedicated path and the pointer-file is replaced (file-over-file mount) by a generated one that
+        #references that in-container path. GIT_WORK_TREE overrides the "core.worktree" of the submodule-gitdir (which still points at the
+        #original, now wrong, location). For a normal repository (own ".git"-directory) nothing additional is required.
+        git_dir_docker_arguments: list[str] = []
+        staged_git_pointer_file: str = None
+        if os.path.isfile(os.path.join(self.repository, ".git")):
+            real_git_folder = self.sc.get_real_git_folder(self.repository)
+            container_git_dir = "/Workspace/RepositoryGitDir"
+            staged_git_pointer_file = os.path.join(GeneralUtilities.get_temp_folder(), f"sc-container-gitpointer-{uuid.uuid4()}")
+            GeneralUtilities.write_text_to_file(staged_git_pointer_file, f"gitdir: {container_git_dir}\n")
+            git_dir_docker_arguments = [
+                "-v", f"{real_git_folder}:{container_git_dir}",
+                "-v", f"{staged_git_pointer_file}:{container_repository_folder}/.git",
+                "-e", f"GIT_WORK_TREE={container_repository_folder}",
+            ]
+
         #run scbuildcodeunits inside the SCBuilder-image. the repository is mounted into the container and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
         docker_arguments = [
             "run", "--rm",
             "-v", f"{self.repository}:{container_repository_folder}",
             "-v", "/var/run/docker.sock:/var/run/docker.sock",
+        ] + git_dir_docker_arguments + [
             "-w", container_repository_folder,
             image,
         ] + scbuildcodeunits_arguments
         self.sc.log.log(f"Build codeunits in container using image \"{image}\"...")
-        # the exitcode is evaluated by the caller (returned as part of the result-tuple), so the program-runner must not raise on a non-zero exitcode here.
-        result=self.sc.run_program_argsasarray("docker", docker_arguments, throw_exception_if_exitcode_is_not_zero=False, print_live_output=True)
+        try:
+            # the exitcode is evaluated by the caller (returned as part of the result-tuple), so the program-runner must not raise on a non-zero exitcode here.
+            result=self.sc.run_program_argsasarray("docker", docker_arguments, throw_exception_if_exitcode_is_not_zero=False, print_live_output=True)
+        finally:
+            if staged_git_pointer_file is not None:
+                GeneralUtilities.ensure_file_does_not_exist(staged_git_pointer_file)
         exit_code:int=result[0]
         stdout:str=result[1] or GeneralUtilities.empty_string
         stderr:str=result[2] or GeneralUtilities.empty_string

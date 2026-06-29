@@ -37,7 +37,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.10"
+version = "4.3.11"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -584,8 +584,7 @@ class ScriptCollectionCore:
             argument.append("--force")
         if (pushalltags):
             argument.append("--tags")
-        result: tuple[int, str, str, int] = self.run_program_argsasarray("git", argument, folder, throw_exception_if_exitcode_is_not_zero=True, print_errors_as_information=True)
-        return result[1].replace('\r', '').replace('\n', '')
+        self.run_program_argsasarray("git", argument, folder, throw_exception_if_exitcode_is_not_zero=True, print_errors_as_information=True)
 
     @GeneralUtilities.check_arguments
     def git_pull_with_retry(self, folder: str, remote: str, localbranchname: str, remotebranchname: str, force: bool = False, amount_of_attempts: int = 5) -> None:
