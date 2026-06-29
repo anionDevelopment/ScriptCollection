@@ -1041,8 +1041,14 @@ class ScriptCollectionCore:
     def assert_no_uncommitted_changes(self, repository_folder: str,custom_message:str=None) -> None:
         if self.git_repository_has_uncommitted_changes(repository_folder):
             diff_result = self.run_program("git", "diff HEAD", repository_folder, throw_exception_if_exitcode_is_not_zero=False)
+            # "git diff HEAD" only shows changes of tracked files; list the untracked files separately so they are shown here too.
+            untracked_files_result = self.run_program_argsasarray("git", ["ls-files", "--exclude-standard", "--others"], repository_folder, throw_exception_if_exitcode_is_not_zero=False)
             GeneralUtilities.write_message_to_stderr(f"Uncommitted changes in '{repository_folder}':")
-            GeneralUtilities.write_message_to_stderr(diff_result[1])
+            if GeneralUtilities.string_has_content(diff_result[1]):
+                GeneralUtilities.write_message_to_stderr(diff_result[1])
+            if GeneralUtilities.string_has_content(untracked_files_result[1]):
+                GeneralUtilities.write_message_to_stderr("Untracked files:")
+                GeneralUtilities.write_message_to_stderr(untracked_files_result[1])
             if custom_message:
                 raise ValueError(f"Repository '{repository_folder}' has uncommitted changes: "+custom_message)
             else:
@@ -1926,7 +1932,7 @@ class ScriptCollectionCore:
     # <run programs>
 
     @GeneralUtilities.check_arguments
-    def __run_program_argsasarray_async_helper(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = 600, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> Popen:
+    def __run_program_argsasarray_async_helper(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = None, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> Popen:
         popen: Popen = self.program_runner.run_program_argsasarray_async_helper(program, arguments_as_array, working_directory, custom_argument, interactive, env_vars)
         return popen
 
@@ -1953,8 +1959,13 @@ class ScriptCollectionCore:
         return False
 
     @staticmethod
-    def __read_popen_pipes(p: Popen, print_live_output: bool, print_errors_as_information: bool, log: SCLog) -> tuple[list[str], list[str]]:
+    def __read_popen_pipes(p: Popen, print_live_output: bool, print_errors_as_information: bool, log: SCLog, timeoutInSeconds: int = None) -> tuple[list[str], list[str]]:
         p_id = p.pid
+        # "timeoutInSeconds" is the maximal total runtime of the process. None or a non-positive value means "no timeout".
+        # Without this the loop below would wait forever for a process which never terminates (e.g. a hanging child-process).
+        timeout_enabled: bool = timeoutInSeconds is not None and 0 < timeoutInSeconds
+        start_time: float = time.monotonic()
+        timed_out: bool = False
         with ThreadPoolExecutor(2) as pool:
             q_stdout = Queue()
             q_stderr = Queue()
@@ -2005,12 +2016,19 @@ class ScriptCollectionCore:
                 except Empty:
                     reading_stderr_last_time_resulted_in_exception = True
 
+                if timeout_enabled and timeoutInSeconds < (time.monotonic() - start_time):
+                    timed_out = True
+                    p.kill()  # the process exceeded its timeout; kill it so the reader-threads get EOF and this loop ends.
+                    break
+
                 time.sleep(0.01)  # this is required to not finish too early
 
+            if timed_out:
+                raise TimeoutError(f"The process with process-id {p_id} did not finish within the configured timeout of {timeoutInSeconds} second(s) and was killed.")
             return (stdout_result, stderr_result)
 
     @GeneralUtilities.check_arguments
-    def run_program_argsasarray(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = 600, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False, print_live_output: bool = False, env_vars: dict = None) -> tuple[int, str, str, int]:
+    def run_program_argsasarray(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = None, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False, print_live_output: bool = False, env_vars: dict = None) -> tuple[int, str, str, int]:
         if self.call_program_runner_directly:
             return self.program_runner.run_program_argsasarray(program, arguments_as_array, working_directory, custom_argument, interactive, env_vars)
         try:
@@ -2049,7 +2067,7 @@ class ScriptCollectionCore:
                     GeneralUtilities.ensure_file_exists(log_file)
                 pid = process.pid
 
-                outputs: tuple[list[str], list[str]] = ScriptCollectionCore.__read_popen_pipes(process, print_live_output, print_errors_as_information, self.log)
+                outputs: tuple[list[str], list[str]] = ScriptCollectionCore.__read_popen_pipes(process, print_live_output, print_errors_as_information, self.log, timeoutInSeconds)
 
                 for out_line_plain in outputs[0]:
                     if out_line_plain is not None:
@@ -2105,12 +2123,12 @@ class ScriptCollectionCore:
 
     # Return-values program_runner: Exitcode, StdOut, StdErr, Pid
     @GeneralUtilities.check_arguments
-    def run_program_with_retry(self, program: str, arguments:  str = "", working_directory: str = None,  print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = 600, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  str = None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False, print_live_output: bool = False, amount_of_attempts: int = 5, delay_in_seconds: int = 2, env_vars: dict = None) -> tuple[int, str, str, int]:
+    def run_program_with_retry(self, program: str, arguments:  str = "", working_directory: str = None,  print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = None, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  str = None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False, print_live_output: bool = False, amount_of_attempts: int = 5, delay_in_seconds: int = 2, env_vars: dict = None) -> tuple[int, str, str, int]:
         return GeneralUtilities.retry_action(lambda: self.run_program(program, arguments, working_directory, print_errors_as_information, log_file, timeoutInSeconds, addLogOverhead, title, log_namespace,arguments_for_log, throw_exception_if_exitcode_is_not_zero, custom_argument, interactive, print_live_output, env_vars), amount_of_attempts, delay_in_seconds=delay_in_seconds)
 
     # Return-values program_runner: Exitcode, StdOut, StdErr, Pid
     @GeneralUtilities.check_arguments
-    def run_program(self, program: str, arguments:  str = "", working_directory: str = None,  print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = 600, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  str = None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False, print_live_output: bool = False, env_vars: dict = None) -> tuple[int, str, str, int]:
+    def run_program(self, program: str, arguments:  str = "", working_directory: str = None,  print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = None, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  str = None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False, print_live_output: bool = False, env_vars: dict = None) -> tuple[int, str, str, int]:
         if self.call_program_runner_directly:
             return self.program_runner.run_program(program, arguments, working_directory, custom_argument, interactive, env_vars)
         return self.run_program_argsasarray(program, GeneralUtilities.arguments_to_array(arguments), working_directory,  print_errors_as_information, log_file, timeoutInSeconds, addLogOverhead, title, log_namespace, GeneralUtilities.arguments_to_array(arguments_for_log), throw_exception_if_exitcode_is_not_zero, custom_argument, interactive, print_live_output, env_vars)
@@ -2158,13 +2176,13 @@ class ScriptCollectionCore:
 
     # Return-values program_runner: Exitcode, StdOut, StdErr, Pid
     @GeneralUtilities.check_arguments
-    def run_program_argsasarray_with_retry(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None,  print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = 600, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False, print_live_output: bool = False, amount_of_attempts: int = 5, delay_in_seconds: int = 2, env_vars: dict = None) -> tuple[int, str, str, int]:
+    def run_program_argsasarray_with_retry(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None,  print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = None, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False, print_live_output: bool = False, amount_of_attempts: int = 5, delay_in_seconds: int = 2, env_vars: dict = None) -> tuple[int, str, str, int]:
         return GeneralUtilities.retry_action(lambda: self.run_program_argsasarray(program, arguments_as_array, working_directory, print_errors_as_information, log_file, timeoutInSeconds, addLogOverhead, title, log_namespace,arguments_for_log, throw_exception_if_exitcode_is_not_zero, custom_argument, interactive, print_live_output, env_vars), amount_of_attempts, delay_in_seconds=delay_in_seconds)
 
 
     # Return-values program_runner: Pid
     @GeneralUtilities.check_arguments
-    def run_program_argsasarray_async(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None,  print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = 600, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> int:
+    def run_program_argsasarray_async(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None,  print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = None, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> int:
         if self.call_program_runner_directly:
             return self.program_runner.run_program_argsasarray_async(program, arguments_as_array, working_directory, custom_argument, interactive, env_vars)
         mock_loader_result = self.__try_load_mock(program, ' '.join(arguments_as_array), working_directory)
@@ -2175,7 +2193,7 @@ class ScriptCollectionCore:
 
     # Return-values program_runner: Pid
     @GeneralUtilities.check_arguments
-    def run_program_async(self, program: str, arguments: str = "",  working_directory: str = None,print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = 600, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> int:
+    def run_program_async(self, program: str, arguments: str = "",  working_directory: str = None,print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = None, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> int:
         if self.call_program_runner_directly:
             return self.program_runner.run_program_argsasarray_async(program, arguments, working_directory, custom_argument, interactive, env_vars)
         return self.run_program_argsasarray_async(program, GeneralUtilities.arguments_to_array(arguments), working_directory,  print_errors_as_information, log_file, timeoutInSeconds, addLogOverhead, title, log_namespace, arguments_for_log, custom_argument, interactive, env_vars)
@@ -2258,11 +2276,11 @@ class ScriptCollectionCore:
         pid: int = None
 
     @GeneralUtilities.check_arguments
-    def run_with_epew_with_retry(self, program: str, argument: str = "", working_directory: str = None, print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = 600, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  str =None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False,print_live_output:bool=False,encode_argument_in_base64:bool=False, amount_of_attempts: int = 3, delay_in_seconds: int = 2) -> tuple[int, str, str, int]:
+    def run_with_epew_with_retry(self, program: str, argument: str = "", working_directory: str = None, print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = None, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  str =None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False,print_live_output:bool=False,encode_argument_in_base64:bool=False, amount_of_attempts: int = 3, delay_in_seconds: int = 2) -> tuple[int, str, str, int]:
         return GeneralUtilities.retry_action(lambda: self.run_with_epew(program, argument, working_directory, print_errors_as_information, log_file, timeoutInSeconds, addLogOverhead, title, log_namespace,arguments_for_log, throw_exception_if_exitcode_is_not_zero, custom_argument, interactive, print_live_output,encode_argument_in_base64), amount_of_attempts, delay_in_seconds=delay_in_seconds)
 
     @GeneralUtilities.check_arguments
-    def run_with_epew(self, program: str, argument: str = "", working_directory: str = None, print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = 600, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  str =None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False,print_live_output:bool=False,encode_argument_in_base64:bool=False) -> tuple[int, str, str, int]:
+    def run_with_epew(self, program: str, argument: str = "", working_directory: str = None, print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = None, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  str =None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False,print_live_output:bool=False,encode_argument_in_base64:bool=False) -> tuple[int, str, str, int]:
         epew_argument:list[str]=["-p",program ,"-w", working_directory]
         if encode_argument_in_base64:
             if arguments_for_log is None:
@@ -2380,8 +2398,10 @@ class ScriptCollectionCore:
         GeneralUtilities.ensure_directory_does_not_exist(cache_folder)
         # /nofetch and /nonormalize: avoid network calls / branch normalization (no auth, no DNS, deterministic in containers and offline).
         # called twice as workaround for issue 1877 in gitversion ( https://github.com/GitTools/GitVersion/issues/1877 )
-        result = self.run_program_argsasarray("gitversion", ["/nofetch", "/nonormalize", "/showVariable", variable], folder)
-        result = self.run_program_argsasarray("gitversion", ["/nofetch", "/nonormalize", "/showVariable", variable], folder)
+        # timeoutInSeconds: gitversion finishes within seconds on a normal repository; enforce a timeout so a hanging gitversion-process (observed in some build-containers) aborts the build instead of waiting forever.
+        gitversion_timeout_in_seconds: int = 300
+        result = self.run_program_argsasarray("gitversion", ["/nofetch", "/nonormalize", "/showVariable", variable], folder, timeoutInSeconds=gitversion_timeout_in_seconds)
+        result = self.run_program_argsasarray("gitversion", ["/nofetch", "/nonormalize", "/showVariable", variable], folder, timeoutInSeconds=gitversion_timeout_in_seconds)
         result = GeneralUtilities.strip_new_line_character(result[1])
 
         return result
