@@ -125,16 +125,16 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         container_repository_folder = "/Workspace/Repository"
         image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "SCBuilder")
 
-        #build the scbuildcodeunits-arguments based on the current state (analogous to the arguments accepted by the scbuildcodeunits-executable)
-        scbuildcodeunits_arguments = "scbuildcodeunits -r /Workspace/Repository -v 4"
+        #build the scbuildcodeunits-arguments based on the current state (analogous to the arguments accepted by the scbuildcodeunits-executable). each token must be a separate argument because run_program_argsasarray passes every list-element verbatim and does not split on spaces.
+        scbuildcodeunits_arguments = ["scbuildcodeunits", "-r", container_repository_folder, "-v", "4"]
         if not self.__use_cache:
-            scbuildcodeunits_arguments+="-c"
+            scbuildcodeunits_arguments.append("-c")
         if self.__is_pre_merge:
-            scbuildcodeunits_arguments+="-p"
+            scbuildcodeunits_arguments.append("-p")
         if self.__assert_no_new_changes:
-            scbuildcodeunits_arguments+="-u"
+            scbuildcodeunits_arguments.append("-u")
         if GeneralUtilities.string_has_content(self.additionalargumentsfile):
-            scbuildcodeunits_arguments += f" -a {self.__translate_path_into_container(self.additionalargumentsfile, container_repository_folder)}"
+            scbuildcodeunits_arguments += ["-a", self.__translate_path_into_container(self.additionalargumentsfile, container_repository_folder)]
 
         #run scbuildcodeunits inside the SCBuilder-image. the repository is mounted into the container and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
         docker_arguments = [
@@ -143,8 +143,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             "-v", "/var/run/docker.sock:/var/run/docker.sock",
             "-w", container_repository_folder,
             image,
-            scbuildcodeunits_arguments,
-        ] 
+        ] + scbuildcodeunits_arguments
         self.sc.log.log(f"Build codeunits in container using image \"{image}\"...")
         result=self.sc.run_program_argsasarray("docker", docker_arguments, print_live_output=True)
         exit_code:int=result[0]
