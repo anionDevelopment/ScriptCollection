@@ -1185,6 +1185,22 @@ class GeneralUtilities:
         return temp_folder
 
     @staticmethod
+    def _internal_with_absolute_temp_folder_environment_variables(environment: dict) -> dict:
+        """Returns a copy of the given environment-dictionary in which the temp-folder-environment-variables (TMPDIR/TMP/TEMP)
+        are replaced by the absolute system-temp-folder if they are set to a relative value. This is required because spawned
+        child-processes resolve their temp-folder via these variables (e.g. .NET-tools like the coverlet-collector or CycloneDX
+        via Path.GetTempPath()); a relative value (as set in some Linux-build-containers) would otherwise make them create
+        temp-content relative to their current working-directory (e.g. a leftover 'tmp/<guid>'-folder inside a codeunit-folder)
+        instead of in the system-temp-folder."""
+        result = dict(environment)
+        absolute_temp_folder = GeneralUtilities.get_temp_folder()
+        for temp_environment_variable_name in ("TMPDIR", "TMP", "TEMP"):
+            value = result.get(temp_environment_variable_name)
+            if value is not None and not os.path.isabs(value):
+                result[temp_environment_variable_name] = absolute_temp_folder
+        return result
+
+    @staticmethod
     @check_arguments
     def get_line():
         return "--------------------------"
