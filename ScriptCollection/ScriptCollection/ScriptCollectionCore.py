@@ -37,7 +37,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.3"
+version = "4.3.4"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -645,7 +645,7 @@ class ScriptCollectionCore:
     def git_unstage_all_changes(self, directory: str) -> None:
         self.assert_is_git_repository(directory)
         self.run_program_argsasarray("git", ["reset"], directory, throw_exception_if_exitcode_is_not_zero=True)
-        # TODO check if this will also be done for submodules
+        # TODO ensure this will also be done for submodules
 
     @GeneralUtilities.check_arguments
     def git_stage_file(self, directory: str, file: str) -> None:
@@ -669,7 +669,7 @@ class ScriptCollectionCore:
         self.assert_is_git_repository(directory)
         self.run_program_argsasarray("git", ['clean', '-df'], directory, throw_exception_if_exitcode_is_not_zero=True)
         self.run_program_argsasarray("git", ['checkout', '.'], directory, throw_exception_if_exitcode_is_not_zero=True)
-        # TODO check if this will also be done for submodules
+        # TODO ensure this will also be done for submodules
 
     @GeneralUtilities.check_arguments
     def git_commit(self, directory: str, message: str = "Saved changes.", author_name: str = None, author_email: str = None, stage_all_changes: bool = True, no_changes_behavior: int = 0,commit_message_body:str=None) -> str:
@@ -2333,6 +2333,26 @@ class ScriptCollectionCore:
             result = "0.1.0"
         return result
 
+    @GeneralUtilities.check_arguments
+    def get_real_git_folder(self,repository_folder:str) -> str:
+        git_folder = os.path.join(repository_folder, ".git")
+        if os.path.isfile(git_folder):
+            with open(git_folder, "r", encoding="utf-8") as f:
+                line = f.readline().strip()
+            prefix = "gitdir:"
+            if not line.startswith(prefix):
+                raise ValueError(f"Invalid .git file: '{git_folder}'")
+            git_dir = line[len(prefix):].strip()
+            if not os.path.isabs(git_dir):
+                git_dir = os.path.normpath(os.path.join(repository_folder, git_dir))
+            if not os.path.isdir(git_dir):
+                raise ValueError(f"Resolved git directory '{git_dir}' does not exist.")
+            return git_dir
+        elif os.path.isdir(git_folder):
+            return git_folder
+        else:
+            raise ValueError(f"Folder '{repository_folder}' is not a git-repository (no .git-folder found).")
+
     @staticmethod
     @GeneralUtilities.check_arguments
     def is_patch_version(version_string: str) -> bool:
@@ -2340,6 +2360,9 @@ class ScriptCollectionCore:
 
     @GeneralUtilities.check_arguments
     def get_version_from_gitversion(self, folder: str, variable: str) -> str:
+        git_folder:str=self.get_real_git_folder(folder)
+        cache_folder:str=os.path.join(git_folder,"gitversion_cache")
+        GeneralUtilities.ensure_directory_does_not_exist(cache_folder)
         # /nofetch and /nonormalize: avoid network calls / branch normalization (no auth, no DNS, deterministic in containers and offline).
         # called twice as workaround for issue 1877 in gitversion ( https://github.com/GitTools/GitVersion/issues/1877 )
         result = self.run_program_argsasarray("gitversion", ["/nofetch", "/nonormalize", "/showVariable", variable], folder)

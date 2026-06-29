@@ -813,9 +813,12 @@ class GeneralUtilities:
     @staticmethod
     @check_arguments
     def read_binary_from_file(file: str) -> bytes:
-        file=GeneralUtilities.normalize_path(file)
-        with open(file, "rb") as file_object:
-            return file_object.read()
+        try:
+            file=GeneralUtilities.normalize_path(file)
+            with open(file, "rb") as file_object:
+                return file_object.read()
+        except Exception as e:
+            raise ValueError(f"Could not read file '{file}'.") from e
 
     @staticmethod
     @check_arguments

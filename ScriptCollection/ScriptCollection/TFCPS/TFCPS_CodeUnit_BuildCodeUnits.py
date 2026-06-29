@@ -126,15 +126,15 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "SCBuilder")
 
         #build the scbuildcodeunits-arguments based on the current state (analogous to the arguments accepted by the scbuildcodeunits-executable)
-        scbuildcodeunits_arguments = ["-r", container_repository_folder, "-v", str(int(self.sc.log.loglevel)), "-e", self.target_environment_type]
+        scbuildcodeunits_arguments = "scbuildcodeunits -r /Workspace/Repository -v 4"
         if not self.__use_cache:
-            scbuildcodeunits_arguments.append("-c")
+            scbuildcodeunits_arguments+="-c"
         if self.__is_pre_merge:
-            scbuildcodeunits_arguments.append("-p")
+            scbuildcodeunits_arguments+="-p"
         if self.__assert_no_new_changes:
-            scbuildcodeunits_arguments.append("-u")
+            scbuildcodeunits_arguments+="-u"
         if GeneralUtilities.string_has_content(self.additionalargumentsfile):
-            scbuildcodeunits_arguments = scbuildcodeunits_arguments + ["-a", self.__translate_path_into_container(self.additionalargumentsfile, container_repository_folder)]
+            scbuildcodeunits_arguments += f" -a {self.__translate_path_into_container(self.additionalargumentsfile, container_repository_folder)}"
 
         #run scbuildcodeunits inside the SCBuilder-image. the repository is mounted into the container and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
         docker_arguments = [
@@ -143,11 +143,15 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             "-v", "/var/run/docker.sock:/var/run/docker.sock",
             "-w", container_repository_folder,
             image,
-            "scbuildcodeunits",
-        ] + scbuildcodeunits_arguments
+            scbuildcodeunits_arguments,
+        ] 
         self.sc.log.log(f"Build codeunits in container using image \"{image}\"...")
-        self.sc.run_program_argsasarray("docker", docker_arguments, print_live_output=True)
-
+        result=self.sc.run_program_argsasarray("docker", docker_arguments, print_live_output=True)
+        exit_code:int=result[0]
+        stdout:str=result[1] or GeneralUtilities.empty_string
+        stderr:str=result[2] or GeneralUtilities.empty_string
+        return (exit_code==0,f"{stdout}\n{stderr}")
+    
     @GeneralUtilities.check_arguments
     def __translate_path_into_container(self, host_path: str, container_repository_folder: str) -> str:
         normalized_repository = os.path.normpath(self.repository)
