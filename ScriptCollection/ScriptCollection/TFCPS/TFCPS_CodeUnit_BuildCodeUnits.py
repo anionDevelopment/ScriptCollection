@@ -121,7 +121,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["PrepareBuildCodeunits.py"]+args, os.path.join(self.repository,"Other","Scripts"),print_live_output=True)
 
     @GeneralUtilities.check_arguments
-    def build_codeunits_in_container(self) -> None:
+    def build_codeunits_in_container(self) -> tuple[bool, str]:
         container_repository_folder = "/Workspace/Repository"
         image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "SCBuilder")
 
@@ -145,7 +145,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             image,
         ] + scbuildcodeunits_arguments
         self.sc.log.log(f"Build codeunits in container using image \"{image}\"...")
-        result=self.sc.run_program_argsasarray("docker", docker_arguments, print_live_output=True)
+        # the exitcode is evaluated by the caller (returned as part of the result-tuple), so the program-runner must not raise on a non-zero exitcode here.
+        result=self.sc.run_program_argsasarray("docker", docker_arguments, throw_exception_if_exitcode_is_not_zero=False, print_live_output=True)
         exit_code:int=result[0]
         stdout:str=result[1] or GeneralUtilities.empty_string
         stderr:str=result[2] or GeneralUtilities.empty_string

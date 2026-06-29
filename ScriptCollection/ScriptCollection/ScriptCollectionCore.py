@@ -37,7 +37,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.4"
+version = "4.3.5"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -570,8 +570,24 @@ class ScriptCollectionCore:
         GeneralUtilities.retry_action(lambda: self.git_pull(folder, remote, localbranchname, remotebranchname), amount_of_attempts)
 
     @GeneralUtilities.check_arguments
+    def git_branch_is_pullable(self, folder: str, remote: str, localbranchname: str, remotebranchname: str) -> bool:
+        """Fetches remote and returns whether pulling remotebranchname into localbranchname would advance (fast-forward) the local-branch.
+        Returns True if the local-branch is behind the remote-branch (or equal to it).
+        Returns False if the local-branch is ahead of the remote-branch (or diverged from it), in which case a pull would do nothing useful and a normal pull would even fail with a non-fast-forward-error."""
+        self.is_git_or_bare_git_repository(folder)
+        self.git_fetch(folder, remote)
+        return self.git_commit_is_ancestor(folder, localbranchname, f"{remote}/{remotebranchname}")
+
+    @GeneralUtilities.check_arguments
     def git_pull(self, folder: str, remote: str, localbranchname: str, remotebranchname: str, force: bool = False) -> None:
         self.is_git_or_bare_git_repository(folder)
+        if not force and not self.is_bare_git_repository(folder):
+            # If the local-branch is already up-to-date with or ahead of the remote-branch there is nothing to pull and a normal
+            # pull would fail with a non-fast-forward-error. In that case do nothing. (Skipped for bare-repositories because
+            # those have no working-tree to update and git_fetch does not support them.)
+            if not self.git_branch_is_pullable(folder, remote, localbranchname, remotebranchname):
+                self.log.log(f"Skip pulling '{remotebranchname}' from '{remote}' into '{localbranchname}' in '{folder}' because the local-branch is not behind the remote-branch.", LogLevel.Debug)
+                return
         argument = f"pull {remote} {remotebranchname}:{localbranchname}"
         if force:
             argument = f"{argument} --force"
@@ -749,8 +765,7 @@ class ScriptCollectionCore:
     @GeneralUtilities.check_arguments
     def merge_repository(self, repository_folder: str, remote: str, branch: str):
         GeneralUtilities.assert_condition(not self.git_repository_has_uncommitted_changes(repository_folder),f"Can not merge. There are uncommitted changes in \"{repository_folder}\".")
-        self.git_fetch(repository_folder, remote)
-        is_pullable: bool = self.git_commit_is_ancestor(repository_folder, branch, f"{remote}/{branch}")
+        is_pullable: bool = self.git_branch_is_pullable(repository_folder, remote, branch, branch)
         if is_pullable:
             self.git_pull(repository_folder, remote, branch, branch)
             uncommitted_changes = self.git_repository_has_uncommitted_changes(repository_folder)

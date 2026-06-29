@@ -14,7 +14,12 @@ class ProgramRunnerPopen(ProgramRunnerBase):
         # "shell=True" is not allowed because it is not recommended and also something like
         # "ScriptCollectionCore().run_program('curl', 'https://example.com/dataset?id=1&format=json')"
         # would not be possible anymore because the ampersand will be treated as shell-command.
-        env = {**os.environ, **env_vars} if env_vars is not None else None
+        # Always pass an explicit environment (instead of inheriting os.environ implicitly) so that relative
+        # temp-folder-environment-variables - which some Linux-build-containers set - are normalized to an absolute path.
+        # Otherwise spawned child-processes (e.g. .NET-tools resolving Path.GetTempPath()) would create temp-content
+        # relative to their working-directory (e.g. a leftover 'tmp/<guid>'-folder inside a codeunit-folder).
+        base_environment = GeneralUtilities._internal_with_absolute_temp_folder_environment_variables(os.environ)
+        env = {**base_environment, **env_vars} if env_vars is not None else base_environment
         try:
             if interactive:
                 result = Popen(arguments_for_process, cwd=working_directory, stdout=PIPE, stderr=PIPE, shell=False, text=True, stdin=sys.stdin, env=env)  # pylint: disable=consider-using-with
