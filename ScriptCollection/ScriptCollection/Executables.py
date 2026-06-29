@@ -263,14 +263,15 @@ def BuildCodeUnits() -> int:
     parser.add_argument("-c",'--nocache', required=False, default=False, action='store_true')
     parser.add_argument('-p','--ispremerge', required=False, default=False, action='store_true')
     parser.add_argument('-u','--assertnonewchanges', required=False, default=False, action='store_true')
+    parser.add_argument('-m','--addreadytomergeflag', required=False, default=False, action='store_true')
 
     args = parser.parse_args()
-    
+
     verbosity=LogLevel(int(args.verbosity))
 
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
 
-    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges) 
+    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges,args.addreadytomergeflag)
     t.build_codeunits()
     return 0
 
@@ -286,11 +287,12 @@ def BuildCodeUnitsC() -> int:
     parser.add_argument('-p','--ispremerge', required=False, default=False, action='store_true')
     parser.add_argument('--image', required=False, default="scbuilder:latest")
     parser.add_argument('-u','--assertnonewchanges', required=False, default=False, action='store_true')
+    parser.add_argument('-m','--addreadytomergeflag', required=False, default=False, action='store_true')
     args = parser.parse_args()
     GeneralUtilities.reconfigure_standard_input_and_outputs()
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
     verbosity=LogLevel(int(args.verbosity))
-    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges)
+    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges,args.addreadytomergeflag)
     success, _ = t.build_codeunits_in_container()
     return 0 if success else 1
 
