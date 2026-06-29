@@ -37,7 +37,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.9"
+version = "4.3.10"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -552,8 +552,30 @@ class ScriptCollectionCore:
         GeneralUtilities.retry_action(lambda: self.git_push(folder, remotename, localbranchname, remotebranchname, forcepush, pushalltags, verbosity), amount_of_attempts)
 
     @GeneralUtilities.check_arguments
+    def git_branch_is_pushable(self, folder: str, remote: str, localbranchname: str, remotebranchname: str) -> bool:
+        """Fetches remote and returns whether pushing localbranchname to remotebranchname would advance (fast-forward) the remote-branch.
+        Returns True if the remote-branch does not exist yet or is strictly behind the local-branch.
+        Returns False if the remote-branch already contains the current commit (is equal to the local-branch), is ahead of it or
+        diverged from it, in which case a push would do nothing useful and a normal push would even fail with a non-fast-forward-error."""
+        self.is_git_or_bare_git_repository(folder)
+        self.git_fetch(folder, remote)
+        remote_ref = f"{remote}/{remotebranchname}"
+        if not self.branch_exists(folder, remote_ref):
+            return True
+        remote_is_ancestor_of_local = self.git_commit_is_ancestor(folder, remote_ref, localbranchname)
+        local_is_ancestor_of_remote = self.git_commit_is_ancestor(folder, localbranchname, remote_ref)
+        return remote_is_ancestor_of_local and not local_is_ancestor_of_remote
+
+    @GeneralUtilities.check_arguments
     def git_push(self, folder: str, remotename: str, localbranchname: str, remotebranchname: str, forcepush: bool = False, pushalltags: bool = True, verbosity: LogLevel = LogLevel.Quiet,resurse_submodules:bool=False) -> None:
         self.is_git_or_bare_git_repository(folder)
+        if not forcepush and not self.is_bare_git_repository(folder):
+            # If the remote-branch already contains the current commit or is ahead of the local-branch there is nothing to push and a
+            # normal push would fail with a non-fast-forward-error. In that case do nothing. (Skipped for bare-repositories because
+            # git_fetch does not support them.)
+            if not self.git_branch_is_pushable(folder, remotename, localbranchname, remotebranchname):
+                self.log.log(f"Skip pushing '{localbranchname}' to '{remotebranchname}' on '{remotename}' in '{folder}' because the remote-branch is not behind the local-branch.", LogLevel.Debug)
+                return
         argument = ["push"]
         if resurse_submodules:
             argument = argument + ["--recurse-submodules=on-demand"]
