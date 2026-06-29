@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import shutil
 import socket
 import uuid
 from datetime import datetime, timedelta,timezone
@@ -166,20 +167,28 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         #lies outside the mounted working-tree (for example "<product>Build/.git/modules/Submodules/<product>"). git inside the container
         #can not resolve that gitdir, so "git rev-parse --verify HEAD" fails and the version-detection silently falls back to a wrong
         #default-version. To fix this regardless of where the submodule is located in the base-repository, the resolved real gitdir is
-        #mounted into the container at a dedicated path and the pointer-file is replaced (file-over-file mount) by a generated one that
-        #references that in-container path. GIT_WORK_TREE overrides the "core.worktree" of the submodule-gitdir (which still points at the
-        #original, now wrong, location). For a normal repository (own ".git"-directory) nothing additional is required.
+        #mounted into the container at a dedicated path and two files are replaced via file-over-file-mounts:
+        # - "<container-repository>/.git" by a generated pointer-file that references the in-container gitdir-path, and
+        # - the gitdir's "config" by a copy whose "core.worktree" points at the in-container working-tree.
+        #The config-override is required because the submodule-gitdir's original "core.worktree" references the original (now wrong)
+        #location: git itself could be told via GIT_WORK_TREE, but gitversion (libgit2) reads core.worktree from the config and ignores
+        #GIT_WORK_TREE - it would otherwise fail with "doesn't point at a valid Git repository or workdir". For a normal repository (own
+        #".git"-directory) nothing additional is required.
         git_dir_docker_arguments: list[str] = []
         staged_git_pointer_file: str = None
+        staged_git_config_file: str = None
         if os.path.isfile(os.path.join(self.repository, ".git")):
             real_git_folder = self.sc.get_real_git_folder(self.repository)
             container_git_dir = "/Workspace/RepositoryGitDir"
             staged_git_pointer_file = os.path.join(GeneralUtilities.get_temp_folder(), f"sc-container-gitpointer-{uuid.uuid4()}")
             GeneralUtilities.write_text_to_file(staged_git_pointer_file, f"gitdir: {container_git_dir}\n")
+            staged_git_config_file = os.path.join(GeneralUtilities.get_temp_folder(), f"sc-container-gitconfig-{uuid.uuid4()}")
+            shutil.copyfile(os.path.join(real_git_folder, "config"), staged_git_config_file)
+            self.sc.run_program_argsasarray("git", ["config", "--file", staged_git_config_file, "core.worktree", container_repository_folder], GeneralUtilities.get_temp_folder())
             git_dir_docker_arguments = [
                 "-v", f"{real_git_folder}:{container_git_dir}",
+                "-v", f"{staged_git_config_file}:{container_git_dir}/config",
                 "-v", f"{staged_git_pointer_file}:{container_repository_folder}/.git",
-                "-e", f"GIT_WORK_TREE={container_repository_folder}",
             ]
 
         #run scbuildcodeunits inside the SCBuilder-image. the repository is mounted into the container and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
@@ -198,6 +207,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         finally:
             if staged_git_pointer_file is not None:
                 GeneralUtilities.ensure_file_does_not_exist(staged_git_pointer_file)
+            if staged_git_config_file is not None:
+                GeneralUtilities.ensure_file_does_not_exist(staged_git_config_file)
         exit_code:int=result[0]
         stdout:str=result[1] or GeneralUtilities.empty_string
         stderr:str=result[2] or GeneralUtilities.empty_string
