@@ -101,6 +101,7 @@ class TFCPS_CodeUnit_BuildCodeUnit:
             artifacts_list.append(f"        <cps:artifact>{artifact_name}<cps:artifact>")
         artifacts = '\n'.join(artifacts_list)
         moment = GeneralUtilities.datetime_to_string(GeneralUtilities.get_now())
+        commit_id = self.sc.git_get_commit_id(self.repository_folder)  # the actual commit-id (not the branch-name) which was checked-out while building this codeunit
         # TODO implement usage of reference_latest_version_of_xsd_when_generating_xml
         GeneralUtilities.write_text_to_file(artifactsinformation_file, f"""<?xml version="1.0" encoding="UTF-8" ?>
 <cps:artifactsinformation xmlns:cps="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure" artifactsinformationspecificationversion="1.0.0"
@@ -109,6 +110,7 @@ class TFCPS_CodeUnit_BuildCodeUnit:
     <cps:version>{codeunit_version}</cps:version>
     <cps:timestamp>{moment}</cps:timestamp>
     <cps:targetenvironmenttype>{self.target_environment_type}</cps:targetenvironmenttype>
+    <cps:commitid>{commit_id}</cps:commitid>
     <cps:artifacts>
 {artifacts}
     </cps:artifacts>
