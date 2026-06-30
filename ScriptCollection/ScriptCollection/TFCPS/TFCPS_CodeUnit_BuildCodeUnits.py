@@ -436,7 +436,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     @GeneralUtilities.check_arguments
     def update_dependencies(self) -> None:
         repository=self.repository
-        self.sc.log.log("Update dependencies...")
+        self.sc.log.log("Update dependencies for product...")
         self.update_year_in_license_file()
         self.sc.assert_is_git_repository(repository)
         self.sc.assert_no_uncommitted_changes(repository)
@@ -448,10 +448,12 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.sc.log.log(f"Update dependencies of codeunit {codeunit_name}...")
             codeunit_folder=os.path.join(repository,codeunit_name)
             tFCPS_CodeUnit_BuildCodeUnit:TFCPS_CodeUnit_BuildCodeUnit = TFCPS_CodeUnit_BuildCodeUnit(codeunit_folder,self.sc.log.loglevel,"QualityCheck",None,True,False)
-            tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()#ensure requirements for updating are there (some programming-languages needs this)
+            if self.sc.git_repository_has_uncommitted_changes(repository):
+                tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()#ensure requirements for updating are there (some programming-languages needs this)
             if self.tfcps_tools_general.codeunit_has_updatable_dependencies(os.path.join(codeunit_folder,f"{codeunit_name}.codeunit.xml")):
                 self.sc.run_program(GeneralUtilities.get_python_executable(),"UpdateDependencies.py",os.path.join(codeunit_folder,"Other"))
-            tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()#check if codeunit is still buildable
+            if self.sc.git_repository_has_uncommitted_changes(repository):
+                tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()#check if codeunit is still buildable
         if self.sc.git_repository_has_uncommitted_changes(repository):
             changelog_folder = os.path.join(repository, "Other", "Resources", "Changelog")
             project_version:str=self.tfcps_tools_general.get_version_of_project(repository)
