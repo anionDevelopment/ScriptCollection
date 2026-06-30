@@ -23,6 +23,7 @@ class SCLog:
     add_overhead_to_logfile: bool = None
     print_as_color: bool = None
     add_milliseconds_to_logfile_entry: bool = None
+    subnamespace:str=None
 
     def __init__(self, log_file: str = None, loglevel: LogLevel = None, print_as_color: bool = True):
         self.log_file = log_file
@@ -59,6 +60,8 @@ class SCLog:
         part1: str = GeneralUtilities.empty_string
         part2: str = GeneralUtilities.empty_string
         part3: str = "] "
+        if GeneralUtilities.string_has_content(self.subnamespace):
+            part3 = part3 + f"[{self.subnamespace}] "
         part4: str = message
 
         if loglevel == LogLevel.Warning and not message.startswith("Warning: "):
