@@ -436,7 +436,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     @GeneralUtilities.check_arguments
     def update_dependencies(self) -> None:
         repository=self.repository
-        self.sc.log.log("Update dependencies...")
+        self.sc.log.log("Update dependencies for product...")
         self.update_year_in_license_file()
         self.sc.assert_is_git_repository(repository)
         self.sc.assert_no_uncommitted_changes(repository)

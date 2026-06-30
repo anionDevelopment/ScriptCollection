@@ -151,5 +151,5 @@ class TFCPS_CodeUnit_BuildCodeUnit:
 
     @GeneralUtilities.check_arguments
     def update_dependencies(self) -> None:
-        self.sc.log.log("Update dependencies...")
+        self.sc.log.log("Update dependencies for codeunit...")
         self.sc.run_program(GeneralUtilities.get_python_executable(), "UpdateDependencies.py", os.path.join(self.codeunit_folder, "Other"),print_live_output=True)
