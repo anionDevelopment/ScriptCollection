@@ -96,10 +96,28 @@ class GeneralUtilities:
 
     @staticmethod
     def deprecated(reason: str=None):
-        def decorator(func):
-            @functools.wraps(func)
+        def decorator(target):
+            if isinstance(target, type):
+                # target is a class: wrap its __init__ so the warning is emitted on instantiation while target stays a class.
+                original_init = target.__init__
+
+                @functools.wraps(original_init)
+                def init_wrapper(self, *args, **kwargs):
+                    msg = f"Class {target.__name__} is deprecated."
+                    if GeneralUtilities.string_has_content(reason):
+                        msg += f" {reason}"
+                    warnings.warn(
+                        msg,
+                        category=DeprecationWarning,
+                        stacklevel=2
+                    )
+                    return original_init(self, *args, **kwargs)
+                target.__init__ = init_wrapper
+                return target
+
+            @functools.wraps(target)
             def wrapper(*args, **kwargs):
-                msg = f"Function {func.__name__}() is deprecated."
+                msg = f"Function {target.__name__}() is deprecated."
                 if GeneralUtilities.string_has_content(reason):
                     msg += f" {reason}"
                 warnings.warn(
@@ -107,7 +125,7 @@ class GeneralUtilities:
                     category=DeprecationWarning,
                     stacklevel=2
                 )
-                return func(*args, **kwargs)
+                return target(*args, **kwargs)
             return wrapper
         return decorator
 

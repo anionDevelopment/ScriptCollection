@@ -7,6 +7,7 @@ from .TFCPS_Tools_General import TFCPS_Tools_General
 from .TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
 from .TFCPS_Generic import TFCPS_Generic_Functions
 
+@GeneralUtilities.deprecated()
 class MergeToMainConfiguration:
     product_name: str = None
     merge_source_branch:str = None
@@ -30,6 +31,7 @@ class MergeToMainConfiguration:
         self.common_remote_name=common_remote_name
         self.build_repo=build_repo
 
+@GeneralUtilities.deprecated()
 class TFCPS_MergeToMain:
 
     sc:ScriptCollectionCore = None
@@ -82,6 +84,7 @@ class TFCPS_MergeToMain:
         self.sc.git_push_with_retry(self.generic_prepare_new_release_arguments.repository_folder,self.generic_prepare_new_release_arguments.common_remote_name,target_branch,target_branch)
         self.sc.git_commit(self.generic_prepare_new_release_arguments.build_repo,"Updated submodule")
 
+@GeneralUtilities.deprecated()
 class TFCPS_MergeToMain_CLI:
 
     @staticmethod
