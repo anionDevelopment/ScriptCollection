@@ -10,6 +10,7 @@ from .TFCPS_MergeToMain import TFCPS_MergeToMain
 from .TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
  
 
+@GeneralUtilities.deprecated()
 class MergeToStableConfiguration:
     log_level:LogLevel = None
     source_branch:str = None  #main
@@ -40,6 +41,7 @@ class MergeToStableConfiguration:
         self.common_remote_url=common_remote_url
         self.additional_arguments_file=additional_arguments_file
 
+@GeneralUtilities.deprecated()
 class TFCPS_MergeToStable:
 
     sc:ScriptCollectionCore = None
@@ -279,6 +281,7 @@ class TFCPS_MergeToStable:
                 target_testcoveragereport = os.path.join(target_folder, "TestCoverageReport")
                 shutil.copytree(source_testcoveragereport, target_testcoveragereport)
 
+@GeneralUtilities.deprecated()
 class TFCPS_MergeToStable_CLI:
 
     @staticmethod

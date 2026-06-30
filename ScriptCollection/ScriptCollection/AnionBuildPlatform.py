@@ -5,6 +5,7 @@ from .SCLog import LogLevel
 from .GeneralUtilities import GeneralUtilities
 from .ScriptCollectionCore import ScriptCollectionCore
 
+@GeneralUtilities.deprecated()
 class AnionBuildPlatformConfiguration:
     build_repositories_folder:str = None
     additional_arguments_file:str = None
@@ -30,6 +31,7 @@ class AnionBuildPlatformConfiguration:
         self.update_dependencies=update_dependencies
         self.lazy_mode=lazy_mode
 
+@GeneralUtilities.deprecated()
 class AnionBuildPlatform:
 
     __configuration: AnionBuildPlatformConfiguration = None
@@ -144,6 +146,7 @@ class AnionBuildPlatform:
 
 
 
+@GeneralUtilities.deprecated()
 class TFCPS_AnionBuildPlatform_CLI:
 
     @staticmethod

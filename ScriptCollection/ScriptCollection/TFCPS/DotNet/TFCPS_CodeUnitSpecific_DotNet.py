@@ -291,8 +291,18 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         sln_file = os.path.join(codeunit_folder, codeunit_name + ".sln")
         temp_output_folder = os.path.join(GeneralUtilities.get_temp_folder(), str(uuid.uuid4()))
         GeneralUtilities.ensure_directory_exists(temp_output_folder)
+        # Run the build from an absolute temporary working-directory (instead of the codeunit-folder) and with node-reuse
+        # disabled. Building a solution with "-o" (which is required here to keep the diagnostics-build isolated from the
+        # real build-output) is not officially supported by the .NET-SDK (warning NETSDK1194) and makes MSBuild create an
+        # additional "tmp/<guid>"-output-folder relative to the build-process' working-directory. With node-reuse enabled
+        # that folder is even created by a reused MSBuild-worker-node that still has a codeunit-subfolder as its working-
+        # directory, so it ends up inside the codeunit-folder. Such a folder is usually cleaned up by the SDK, but on a
+        # bind-mounted filesystem (for example when the build runs in a Linux-container with the repository mounted from a
+        # Windows-host) the cleanup can fail and the folder is left behind. By using an absolute working-directory and
+        # forcing fresh worker-nodes (which inherit that working-directory) any such relative "tmp/<guid>"-folder is created
+        # below temp_output_folder and removed together with it in the finally-block.
         try:
-            run_result = self._protected_sc.run_program("dotnet", f"build \"{sln_file}\" -nologo -v minimal -o \"{temp_output_folder}\"", codeunit_folder, throw_exception_if_exitcode_is_not_zero=False, env_vars={"DOTNET_CLI_UI_LANGUAGE": "en-US"})
+            run_result = self._protected_sc.run_program("dotnet", f"build \"{sln_file}\" -nologo -v minimal -o \"{temp_output_folder}\"", temp_output_folder, throw_exception_if_exitcode_is_not_zero=False, env_vars={"DOTNET_CLI_UI_LANGUAGE": "en-US", "MSBUILDDISABLENODEREUSE": "1"})
         finally:
             GeneralUtilities.ensure_directory_does_not_exist(temp_output_folder)
         diagnostics: list[tuple[LogLevel, str, str | None, int | None]] = []
@@ -329,7 +339,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         for (level, message, file, line) in diagnostics:
             location = f" ({file}:{line})" if file else ""
             self._protected_sc.log.log(f"{message}{location}", level)
-            if level == LogLevel.Error:#should not occurr on scbuildcodeunits because then the build would have failed already.
+            if level == LogLevel.Error:#should not occurr on scbuildcodeunits because then the build would have failed already but you can also run this script manually.
                 has_errors = True
         if has_errors:
             raise ValueError("Linting-issues occurred.")
@@ -552,7 +562,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         self._protected_sc.log.log("Run testcases...")
         dotnet_build_configuration: str = self.get_target_environment_type()
         codeunit_name: str = self.get_codeunit_name()
-        
+
         repository_folder: str = self.get_repository_folder().replace("\\", "/")
         coverage_file_folder = os.path.join(repository_folder, codeunit_name, "Other/Artifacts/TestCoverage")
         temp_folder = os.path.join(GeneralUtilities.get_temp_folder(), str(uuid.uuid4()))
@@ -563,16 +573,25 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         target_file = os.path.join(coverage_file_folder, "TestCoverage.xml")
         GeneralUtilities.ensure_file_does_not_exist(target_file)
 
-        args: list[str] = ["test", f"{codeunit_name}.sln", "-c", dotnet_build_configuration, "-o", temp_folder]
-        if os.path.isfile(os.path.join(codeunit_folder, runsettings_file)):
-            args += ["--settings", runsettings_file]
+        sln_file = os.path.join(codeunit_folder, f"{codeunit_name}.sln")
+        args: list[str] = ["test", sln_file, "-c", dotnet_build_configuration, "-o", temp_folder]
+        runsettings_path = os.path.join(codeunit_folder, runsettings_file)
+        if os.path.isfile(runsettings_path):
+            args += ["--settings", runsettings_path]
         # Write the test-results (test-binaries-deployment and coverage) into the system-temp-folder (a subfolder of
         # temp_folder) instead of a relative "./TestResults" inside the codeunit-folder. The relative path would otherwise
         # leave a folder behind in the codeunit-folder (visible e.g. when building inside the mounted Debian-build-container).
         # The whole temp_folder - including these results - is removed in the finally-block below.
         args += ["--results-directory", os.path.join(temp_folder, "TestResults")]
+        # Run dotnet-test from an absolute working-directory (a subfolder of temp_folder) with node-reuse disabled, for the
+        # same reason as in get_dotnet_build_diagnostics: building the solution with "-o" makes MSBuild create an additional
+        # relative "tmp/<guid>"-output-folder, which a reused worker-node would otherwise create inside the codeunit-folder
+        # where it can be left behind on a bind-mounted filesystem. All paths passed to dotnet-test are absolute, so the
+        # changed working-directory does not affect the test-result or the coverage-output.
+        test_working_directory = os.path.join(temp_folder, "WorkingDirectory")
+        GeneralUtilities.ensure_directory_exists(test_working_directory)
         try:
-            program_output=self._protected_sc.run_program_argsasarray("dotnet", args, codeunit_folder, print_live_output=self.get_verbosity()==LogLevel.Debug, timeoutInSeconds=60*20)
+            program_output=self._protected_sc.run_program_argsasarray("dotnet", args, test_working_directory, print_live_output=self.get_verbosity()==LogLevel.Debug, timeoutInSeconds=60*20, env_vars={"MSBUILDDISABLENODEREUSE": "1"})
             output_lines=program_output[1].split("\n")
             output_lines=[line for line in output_lines if GeneralUtilities.string_has_content(line)]
             generated_coverage_file: str = output_lines[-1].strip()#the cobertura file is printed in the end of the output by the xplat collector
