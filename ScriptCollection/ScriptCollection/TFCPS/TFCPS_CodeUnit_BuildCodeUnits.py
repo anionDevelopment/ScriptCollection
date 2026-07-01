@@ -146,6 +146,10 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["PrepareBuildCodeunits.py"]+args, os.path.join(self.repository,"Other","Scripts"),print_live_output=True)
 
     @GeneralUtilities.check_arguments
+    def build_codeunits_in_a_local_container(self) -> tuple[bool, str]:#TODO remove this
+        return self.build_codeunits_in_container()
+    
+    @GeneralUtilities.check_arguments
     def build_codeunits_in_container(self) -> tuple[bool, str]:
         container_repository_folder = "/Workspace/Repository"
         image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "SCBuilder")
