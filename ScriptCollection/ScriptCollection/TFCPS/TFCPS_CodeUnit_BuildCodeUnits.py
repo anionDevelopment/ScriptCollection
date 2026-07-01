@@ -197,7 +197,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             
         test=True#TODO remove this
         if test:
-            scbuildcodeunits_arguments=["bash","-c", "pip3 install scriptcollection --upgrade && scshowversion "+" ".join(scbuildcodeunits_arguments)]
+            scbuildcodeunits_arguments=["bash","-c", "pip3 install scriptcollection --upgrade && scshowversion && "+" ".join(scbuildcodeunits_arguments)]
         
         #run scbuildcodeunits inside the SCBuilder-image. the repository is mounted into the container and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
         docker_arguments = [
