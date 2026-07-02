@@ -6,7 +6,7 @@ patch-version-bump-message: '\+semver:\s?(patch)'
 branches:
   main:
     regex: ^main$
-    increment: Patch
+    increment: None
     mode: ContinuousDelivery
     source-branches: ['main']
   stable:

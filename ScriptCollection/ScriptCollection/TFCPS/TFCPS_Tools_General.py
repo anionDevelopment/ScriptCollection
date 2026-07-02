@@ -526,7 +526,7 @@ class TFCPS_Tools_General:
         target_file_dark = os.path.join(target_folder, "DiffReportDark.html").replace("\\", "/")
         src = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # hash/id of empty git-tree
         src_prefix = "Begin"
-        if self.__sc.get_current_git_branch_has_tag(repository_folder):
+        if self.__sc.git_repository_has_tags(repository_folder):
             latest_tag = self.__sc.get_latest_git_tag(repository_folder)
             src = self.__sc.git_get_commit_id(repository_folder, latest_tag)
             src_prefix = latest_tag
