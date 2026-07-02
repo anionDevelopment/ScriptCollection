@@ -37,7 +37,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.19"
+version = "4.3.20"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2440,11 +2440,10 @@ class ScriptCollectionCore:
         # /nofetch and /nonormalize: avoid network calls / branch normalization (no auth, no DNS, deterministic in containers and offline).
         # called twice as workaround for issue 1877 in gitversion ( https://github.com/GitTools/GitVersion/issues/1877 )
         # timeoutInSeconds: gitversion finishes within seconds on a normal repository; enforce a timeout so a hanging gitversion-process (observed in some build-containers) aborts the build instead of waiting forever.
-        gitversion_timeout_in_seconds: int = 30
+        gitversion_timeout_in_seconds: int = 300
         result = self.run_program_argsasarray("gitversion", ["/nofetch", "/nonormalize", "/showVariable", variable], folder, timeoutInSeconds=gitversion_timeout_in_seconds)
         result = self.run_program_argsasarray("gitversion", ["/nofetch", "/nonormalize", "/showVariable", variable], folder, timeoutInSeconds=gitversion_timeout_in_seconds)
         result = GeneralUtilities.strip_new_line_character(result[1])
-
         return result
 
     @GeneralUtilities.check_arguments
