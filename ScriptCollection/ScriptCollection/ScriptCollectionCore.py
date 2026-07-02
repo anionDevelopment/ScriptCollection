@@ -37,7 +37,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.18"
+version = "4.3.19"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -931,10 +931,20 @@ class ScriptCollectionCore:
                 self.git_create_tag(repository, commit_id_new, tag, sign, message)
 
     @GeneralUtilities.check_arguments
-    def get_current_git_branch_has_tag(self, repository_folder: str) -> bool:
+    def get_current_git_commit_has_tag(self, repository_folder: str) -> bool:
+        # Returns whether the currently checked-out commit (HEAD) itself has a tag.
+        # "git tag --points-at HEAD" lists all tags (annotated and lightweight) that point exactly at HEAD;
+        # this is not the same as "a tag is reachable from HEAD" (for that see get_latest_git_tag/git_repository_has_tags).
         self.is_git_or_bare_git_repository(repository_folder)
-        result = self.run_program_argsasarray("git", ["describe", "--tags", "--abbrev=0"], repository_folder, throw_exception_if_exitcode_is_not_zero=False)
-        return result[0] == 0
+        result = self.run_program_argsasarray("git", ["tag", "--points-at", "HEAD"], repository_folder, throw_exception_if_exitcode_is_not_zero=False)
+        return result[0] == 0 and GeneralUtilities.string_has_content(result[1])
+
+    @GeneralUtilities.check_arguments
+    def git_repository_has_tags(self, repository_folder: str) -> bool:
+        # Returns whether the repository contains at least one tag (regardless of the currently checked-out commit).
+        self.is_git_or_bare_git_repository(repository_folder)
+        result = self.run_program_argsasarray("git", ["tag"], repository_folder, throw_exception_if_exitcode_is_not_zero=False)
+        return result[0] == 0 and GeneralUtilities.string_has_content(result[1])
 
     @GeneralUtilities.check_arguments
     def get_latest_git_tag(self, repository_folder: str) -> str:
@@ -2375,14 +2385,24 @@ class ScriptCollectionCore:
     def get_semver_version_from_gitversion(self, repository_folder: str) -> str:
         self.assert_is_git_repository(repository_folder)
         if (self.git_repository_has_commits(repository_folder)):
-            result = self.get_version_from_gitversion(repository_folder, "MajorMinorPatch")
-            if self.git_repository_has_uncommitted_changes(repository_folder):
-                if self.get_current_git_branch_has_tag(repository_folder):
-                    id_of_latest_tag = self.git_get_commit_id(repository_folder, self.get_latest_git_tag(repository_folder))
-                    current_commit = self.git_get_commit_id(repository_folder)
-                    current_commit_is_on_latest_tag = id_of_latest_tag == current_commit
-                    if current_commit_is_on_latest_tag:
-                        result = self.increment_version(result, False, False, True)
+            has_tags=self.git_repository_has_tags(repository_folder)
+            if has_tags:
+                repo_has_uncommitted_changes=self.git_repository_has_uncommitted_changes(repository_folder)
+                current_commit_is_on_tag=self.get_current_git_commit_has_tag(repository_folder)
+                current_branch_name:str=self.git_get_current_branch_name(repository_folder)
+                latest_version_tag=self.get_latest_git_tag(repository_folder)
+                current_version=latest_version_tag[1:]#remove "v"-prefix
+                if current_branch_name in ("main", "master", "stable"):
+                    GeneralUtilities.assert_condition(not repo_has_uncommitted_changes, f"Repository '{repository_folder}' is on branch '{current_branch_name}' and has uncommitted changes. This is not allowed.")
+                    GeneralUtilities.assert_condition(current_commit_is_on_tag, f"Repository '{repository_folder}' does not have a tag. This is not allowed.")
+                    result = current_version
+                else:
+                    if current_commit_is_on_tag and not repo_has_uncommitted_changes:
+                        result = current_version
+                    else:
+                        result = self.get_version_from_gitversion(repository_folder, "MajorMinorPatch")
+            else:
+                result = "0.1.0"
         else:
             result = "0.1.0"
         return result
@@ -2420,7 +2440,7 @@ class ScriptCollectionCore:
         # /nofetch and /nonormalize: avoid network calls / branch normalization (no auth, no DNS, deterministic in containers and offline).
         # called twice as workaround for issue 1877 in gitversion ( https://github.com/GitTools/GitVersion/issues/1877 )
         # timeoutInSeconds: gitversion finishes within seconds on a normal repository; enforce a timeout so a hanging gitversion-process (observed in some build-containers) aborts the build instead of waiting forever.
-        gitversion_timeout_in_seconds: int = 300
+        gitversion_timeout_in_seconds: int = 30
         result = self.run_program_argsasarray("gitversion", ["/nofetch", "/nonormalize", "/showVariable", variable], folder, timeoutInSeconds=gitversion_timeout_in_seconds)
         result = self.run_program_argsasarray("gitversion", ["/nofetch", "/nonormalize", "/showVariable", variable], folder, timeoutInSeconds=gitversion_timeout_in_seconds)
         result = GeneralUtilities.strip_new_line_character(result[1])

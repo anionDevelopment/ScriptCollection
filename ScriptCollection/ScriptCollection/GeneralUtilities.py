@@ -1526,30 +1526,38 @@ class GeneralUtilities:
     @check_arguments
     def get_current_platform() -> Platform:
         system = platform.system().lower()
-        machine = platform.machine().lower()
+        arch = platform.machine().lower()
 
-        if system == "windows" and machine in ("x86_64", "amd64"):
+        if system == "windows" and GeneralUtilities. system_is_x64(arch):
             return Platform.Windows_AMD64
-        elif system == "linux" and machine in ("x86_64", "amd64"):
+        elif system == "linux" and GeneralUtilities.system_is_x64(arch):
             return Platform.Linux_AMD64
-        elif system == "linux" and machine in ("arm64", "aarch64"):
+        elif system == "linux" and GeneralUtilities.system_is_arm64(arch):
             return Platform.Linux_ARM64
-        elif system == "darwin" and machine in ("x86_64", "amd64"):
+        elif system == "darwin" and GeneralUtilities.system_is_arm64(arch):
             return Platform.MacOS_ARM64
         else:
-            raise ValueError(f"Unsupported platform: {system}/{machine}")
+            raise ValueError(f"Unsupported platform: {system}/{arch}")
 
     @staticmethod
     @check_arguments
     def current_system_is_x64():
-        arch = platform.machine().lower()
+        return GeneralUtilities.system_is_x64(platform.machine().lower())
+    
+    @staticmethod
+    @check_arguments
+    def system_is_x64(arch:str):
         return arch in ("x86_64", "amd64")
 
     @staticmethod
     @check_arguments
     def current_system_is_arm64():
-        arch = platform.machine().lower()
-        return arch in ("arm", "aarch64")
+        return GeneralUtilities.system_is_arm64(platform.machine().lower())
+    
+    @staticmethod
+    @check_arguments
+    def system_is_arm64(arch:str):
+        return arch in ("arm", "arm64", "aarch64")
     
     @staticmethod
     @check_arguments
