@@ -1,5 +1,6 @@
 from datetime import timedelta, datetime
 from functools import cmp_to_key
+import ast
 import json
 import binascii
 import filecmp
@@ -37,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.20"
+version = "4.3.21"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -171,6 +172,8 @@ class ScriptCollectionCore:
         self.call_program_runner_directly = None
         self.__mocked_program_calls = list[ScriptCollectionCore.__MockProgramCall]()
         self.log = SCLog(None, LogLevel.Warning, False)
+        # in-memory-cache (first level) for the result of __get_next_version_from_gitversion (which performs an expensive clone) keyed by (repository_folder, commit_id, branch_name); a persistent second-level cache-file below the repository is used additionally. the result only depends on the committed state and the branch-name, so this key invalidates itself as soon as a new commit is created or another branch/commit is checked out
+        self.__next_gitversion_cache = dict[tuple[str, str, str], str]()
 
     @staticmethod
     @GeneralUtilities.check_arguments
@@ -2401,10 +2404,124 @@ class ScriptCollectionCore:
                         result = current_version
                     else:
                         result = self.get_version_from_gitversion(repository_folder, "MajorMinorPatch")
+                        if current_commit_is_on_tag and repo_has_uncommitted_changes:
+                            result = self.__get_next_version_from_gitversion(repository_folder, current_branch_name)
             else:
                 result = "0.1.0"
         else:
             result = "0.1.0"
+        return result
+
+    @GeneralUtilities.check_arguments
+    def __get_next_version_from_gitversion(self, repository_folder: str, branch_name: str) -> str:
+        """
+        Computes the version gitversion would assign to the next commit on the given branch.
+        This is needed when the current commit is exactly on a tag but the repository has uncommitted changes:
+        gitversion treats a tagged commit as a released version and therefore reports the tag-version itself,
+        so its result does not reflect that the uncommitted changes will lead to a new (incremented) version.
+        Instead of reimplementing gitversion's increment-logic (which is configured per project in GitVersion.yml
+        and would inevitably drift from it), a disposable clone is created in which the branch is reproduced and an
+        empty commit is added. Gitversion then computes the increment itself - based on the branch-name/-prefix and
+        the repository's own GitVersion.yml - while the original working-directory stays untouched.
+        Because the result only depends on the committed state and the branch-name, it is memoized per
+        (repository_folder, commit_id, branch_name). The in-memory-cache avoids re-cloning within a single process
+        (e. g. the many calls during one scbuildcodeunits-run); a persistent cache-file below the repository additionally
+        avoids re-cloning across separate process-invocations.
+        """
+        commit_id = self.git_get_commit_id(repository_folder)
+        cache_key = (repository_folder, commit_id, branch_name)
+        if cache_key in self.__next_gitversion_cache:
+            return self.__next_gitversion_cache[cache_key]
+        persisted_result = self.__read_next_version_from_disk_cache(repository_folder, commit_id, branch_name)
+        if persisted_result is not None:
+            self.__next_gitversion_cache[cache_key] = persisted_result
+            return persisted_result
+        temp_folder = os.path.join(GeneralUtilities.get_temp_folder(), str(uuid.uuid4()))
+        try:
+            self.git_clone(temp_folder, repository_folder, include_submodules=False)
+            # the local clone already checks out the source's current branch on the tagged commit; the explicit checkout only guarantees gitversion sees the correct branch-name (and thus the correct increment-rule)
+            self.run_program_argsasarray("git", ["checkout", branch_name], temp_folder, throw_exception_if_exitcode_is_not_zero=True)
+            self.git_commit(temp_folder, "Empty commit to let gitversion compute the next version", no_changes_behavior=1)
+            result = self.get_version_from_gitversion(temp_folder, "MajorMinorPatch")
+            self.__next_gitversion_cache[cache_key] = result
+            self.__write_next_version_to_disk_cache(repository_folder, commit_id, branch_name, result)
+            return result
+        finally:
+            GeneralUtilities.ensure_directory_does_not_exist(temp_folder)
+
+    @GeneralUtilities.check_arguments
+    def get_scriptcollection_repository_cache_folder(self, repository_folder: str) -> str:
+        return os.path.join(repository_folder, ".ScriptCollection", "Cache")
+
+    @GeneralUtilities.check_arguments
+    def ensure_scriptcollection_gitignore_is_setup(self, repository_folder: str) -> None:
+        """Ensures that "<repository>/.ScriptCollection/.gitignore" exists and contains the expected entries."""
+        scriptcollection_folder = os.path.join(repository_folder, ".ScriptCollection")
+        GeneralUtilities.ensure_directory_exists(scriptcollection_folder)
+        gitignore_file = os.path.join(scriptcollection_folder, ".gitignore")
+        lines = ["/Cache/"]
+        GeneralUtilities.write_lines_to_file(gitignore_file, lines)
+
+    @GeneralUtilities.check_arguments
+    def __get_next_version_disk_cache_file(self, repository_folder: str) -> str:
+        return os.path.join(self.get_scriptcollection_repository_cache_folder(repository_folder), "GitVersionNextVersion.txt")
+
+    @GeneralUtilities.check_arguments
+    def __read_next_version_from_disk_cache(self, repository_folder: str, commit_id: str, branch_name: str) -> str:
+        # returns None if there is no cached entry for the given commit and branch. the entries use a tab as separator because git-ref-names can not contain tabs (or any other control-character), so the branch-name can never collide with the separator.
+        cache_file = self.__get_next_version_disk_cache_file(repository_folder)
+        if not os.path.isfile(cache_file):
+            return None
+        for line in GeneralUtilities.read_nonempty_lines_from_file(cache_file):
+            parts = line.split("\t")
+            if len(parts) == 3 and parts[0] == commit_id and parts[1] == branch_name:
+                return parts[2]
+        return None
+
+    @GeneralUtilities.check_arguments
+    def __write_next_version_to_disk_cache(self, repository_folder: str, commit_id: str, branch_name: str, version_to_cache: str) -> None:
+        # the cache-file lives below ".ScriptCollection/Cache"; ensure the .gitignore is set up first so writing the cache never introduces uncommitted changes.
+        self.ensure_scriptcollection_gitignore_is_setup(repository_folder)
+        cache_file = self.__get_next_version_disk_cache_file(repository_folder)
+        GeneralUtilities.ensure_directory_exists(os.path.dirname(cache_file))
+        lines = []
+        if os.path.isfile(cache_file):
+            for line in GeneralUtilities.read_nonempty_lines_from_file(cache_file):
+                parts = line.split("\t")
+                if not (len(parts) == 3 and parts[0] == commit_id and parts[1] == branch_name):
+                    lines.append(line)
+        lines.append(f"{commit_id}\t{branch_name}\t{version_to_cache}")
+        GeneralUtilities.write_lines_to_file(cache_file, lines)
+
+    @GeneralUtilities.check_arguments
+    def check_python_ast(self, path: str) -> list[tuple[str, int, int, str]]:
+        """
+        Parses python-source-files with the ast-module to detect syntax-errors without executing them.
+        'path' can be a single file (which is checked regardless of its file-extension) or a folder (in which case
+        all "*.py"-files below it are checked recursively). Returns one (file, line, column, message)-tuple for every
+        file that could not be parsed; an empty list means all checked files are syntactically valid. Raises a
+        ValueError if 'path' neither exists as file nor as folder.
+        """
+        files_to_check: list[str] = []
+        if os.path.isfile(path):
+            files_to_check.append(path)
+        elif os.path.isdir(path):
+            for root, _, files in os.walk(path):
+                for file in files:
+                    if file.endswith(".py"):
+                        files_to_check.append(os.path.join(root, file))
+        else:
+            raise ValueError(f"Path '{path}' does not exist as file or folder.")
+        result: list[tuple[str, int, int, str]] = []
+        for file in sorted(files_to_check):
+            try:
+                with open(file, "r", encoding="utf-8") as file_handle:
+                    source = file_handle.read()
+                ast.parse(source, filename=file)
+            except SyntaxError as syntax_error:
+                result.append((file, syntax_error.lineno or 0, syntax_error.offset or 0, syntax_error.msg or "Syntax-error"))
+            except UnicodeDecodeError as decode_error:
+                result.append((file, 0, 0, f"File could not be decoded as utf-8: {decode_error}"))
         return result
 
     @GeneralUtilities.check_arguments
