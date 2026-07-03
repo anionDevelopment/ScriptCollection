@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta,timezone
 import xmlschema
 import yaml
+from packaging.version import Version
 from ..GeneralUtilities import GeneralUtilities
 from ..ScriptCollectionCore import ScriptCollectionCore
 from ..SCLog import  LogLevel
@@ -44,16 +45,32 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.sc.log.log(GeneralUtilities.get_line())
         start_time:datetime=GeneralUtilities.get_now()
 
+        #assert that the product-information-file exists
+        product_information_file = os.path.join(self.repository, ".ScriptCollection", "ProductInformation.xml")
+        GeneralUtilities.assert_file_exists(product_information_file, f"The file '{product_information_file}' does not exist.")
+        
+        #when the build runs inside a container, ensure the used SCBuilder-image is at least the version required by this repository (defined in .ScriptCollection/OCIImages/ImageDefinition.csv)
+        if self.sc.is_runnning_in_container():
+            scbuilder_version_environment_value = os.environ.get("SCBuilderVersion")
+            GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(scbuilder_version_environment_value), "The environment-variable 'SCBuilderVersion' is not set although the build runs inside a container (environment-variable 'ISRUNNINGINCONTAINER' is 'true').")
+            required_scbuilder_version = Version(self.tfcps_tools_general.oci_image_manager.get_tag_for_image(self.repository, "SCBuilder"))
+            version_match = re.search(r"\d+(\.\d+)+", scbuilder_version_environment_value)
+            GeneralUtilities.assert_condition(version_match is not None, f"The environment-variable 'SCBuilderVersion' (value: '{scbuilder_version_environment_value}') does not contain a version-string.")
+            actual_scbuilder_version = Version(version_match.group(0))
+            GeneralUtilities.assert_condition(actual_scbuilder_version >= required_scbuilder_version, f"The used SCBuilder-version {actual_scbuilder_version} is older than the version {required_scbuilder_version} required by '{self.tfcps_tools_general.get_product_name(self.repository)}' (defined in .ScriptCollection/OCIImages/ImageDefinition.csv). Please update to a newer SCBuilder-image.")
+        
         if self.is_pre_merge():
             GeneralUtilities.assert_condition(not self.__assert_no_new_changes,f"A pre-merge build can not be done with the assert-no-new-changes-option.")
         ready_to_merge_file=os.path.join(self.repository,".ScriptCollection",".IsReadyToMerge")
         GeneralUtilities.ensure_file_does_not_exist(ready_to_merge_file)
 
+        #ensure <repo>/.ScriptCollection/.gitignore is set up (ignores the cache-folder so cache-files never show up as uncommitted changes)
+        self.sc.ensure_scriptcollection_gitignore_is_setup(self.repository)
+
         self.sc.log.log(f"Start building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(start_time,False)}. (Target environment-type: {self.target_environment_type})")
         if self.__assert_no_new_changes:
             self.sc.assert_no_uncommitted_changes(self.repository,"Can not build codeunit: There are uncommitted changes in the repository.")
 
-        product_information_file = os.path.join(self.repository, ".ScriptCollection", "ProductInformation.xml")
         try:
             xmlschema.validate(product_information_file, "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/main/Conventions/RepositoryStructure/CommonProjectStructure/projectinformation.xsd")
         except Exception as exception:

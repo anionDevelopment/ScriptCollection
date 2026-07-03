@@ -43,6 +43,12 @@ If you write a build- or maintenance-script with these commands, the same script
 | `screname -s <source> -t <target>` | Renames/moves a file or folder. | `0` = success, `1` = error |
 | `sccopy -s <source> -t <target>` | Copies a file or folder. | `0` = success, `1` = error |
 
+### Source-code checks
+
+| Command | What it does | Exit-codes |
+|---------|--------------|------------|
+| `sccheckpythonast -p <path>` | Checks python-source-files for syntax-errors by parsing them with the `ast`-module (without executing them). `<path>` can be a single file (checked regardless of its extension) or a folder (checked recursively for `*.py`-files). Files with a syntax-error are printed as `<file>:<line>:<column>: <message>` to stderr. | `0` = all valid, `2` = at least one syntax-error, `1` = error |
+
 ### Iteration and orchestration
 
 | Command | What it does | Exit-codes |

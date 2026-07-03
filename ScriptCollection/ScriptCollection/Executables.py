@@ -423,6 +423,24 @@ def FileExists() -> int:
         return 2
 
 
+def CheckPythonAst() -> int:
+    parser = argparse.ArgumentParser(description="Checks python-source-files for syntax-errors by parsing them with the ast-module (without executing them). The path can be a single file or a folder (checked recursively for '*.py'-files). Returns exit-code 0 if all checked files are syntactically valid, 2 if at least one file has a syntax-error and 1 on error (for example if the path does not exist).")
+    parser.add_argument('-p', '--path', required=True, help="File or folder to check.")
+    args = parser.parse_args()
+    sc = ScriptCollectionCore()
+    try:
+        errors = sc.check_python_ast(args.path)
+    except Exception as exception:
+        GeneralUtilities.write_message_to_stderr(str(exception))
+        return 1
+    if len(errors) == 0:
+        GeneralUtilities.write_message_to_stdout("All checked python-files are syntactically valid.")
+        return 0
+    for (file, line, column, message) in errors:
+        GeneralUtilities.write_message_to_stderr(f"{file}:{line}:{column}: {message}")
+    return 2
+
+
 def FolderExists() -> int:
     parser = argparse.ArgumentParser(description="This function returns 0 if the given folder exists. Otherwise this function returns 2. If an error occurrs the exitcode is 1.")
     parser.add_argument('-p', '--path', required=True)
