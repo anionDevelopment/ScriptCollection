@@ -2430,7 +2430,7 @@ class ScriptCollectionCore:
         """
         commit_id = self.git_get_commit_id(repository_folder)
         cache_key = (repository_folder, commit_id, branch_name)
-        if cache_key in self.__next_gitversion_cache:
+        if cache_key in self.__next_gitversion_cache:#TODO remove __next_gitversion_cache (disk-cache is enough, transient cache here is unnecessary)
             return self.__next_gitversion_cache[cache_key]
         persisted_result = self.__read_next_version_from_disk_cache(repository_folder, commit_id, branch_name)
         if persisted_result is not None:
@@ -2441,7 +2441,7 @@ class ScriptCollectionCore:
             self.git_clone(temp_folder, repository_folder, include_submodules=False)
             # the local clone already checks out the source's current branch on the tagged commit; the explicit checkout only guarantees gitversion sees the correct branch-name (and thus the correct increment-rule)
             self.run_program_argsasarray("git", ["checkout", branch_name], temp_folder, throw_exception_if_exitcode_is_not_zero=True)
-            self.git_commit(temp_folder, "Empty commit to let gitversion compute the next version", no_changes_behavior=1)
+            self.run_program("git","-c user.name=\"noname\" -c user.email=\"noname@example.com\" commit -m empty --quiet --allow-empty", temp_folder, no_changes_behavior=1)
             result = self.get_version_from_gitversion(temp_folder, "MajorMinorPatch")
             self.__next_gitversion_cache[cache_key] = result
             self.__write_next_version_to_disk_cache(repository_folder, commit_id, branch_name, result)
@@ -2470,8 +2470,8 @@ class ScriptCollectionCore:
     def __read_next_version_from_disk_cache(self, repository_folder: str, commit_id: str, branch_name: str) -> str:
         # returns None if there is no cached entry for the given commit and branch. the entries use a tab as separator because git-ref-names can not contain tabs (or any other control-character), so the branch-name can never collide with the separator.
         cache_file = self.__get_next_version_disk_cache_file(repository_folder)
-        if not os.path.isfile(cache_file):
-            return None
+        GeneralUtilities.ensure_directory_exists(os.path.dirname(cache_file))
+        GeneralUtilities.ensure_file_exists(cache_file)
         for line in GeneralUtilities.read_nonempty_lines_from_file(cache_file):
             parts = line.split("\t")
             if len(parts) == 3 and parts[0] == commit_id and parts[1] == branch_name:
