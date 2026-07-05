@@ -130,7 +130,7 @@ class OCIImageManager:
                 newest_versions:set[Version]={default_tag}
                 current_version=Version(default_tag)
                 for address in addresses_to_check:
-                    newest_versions_for_address=self.get_available_versions_of_image_which_are_newer(image_name,address,current_version,VersionEcholon.LatestVersion)
+                    newest_versions_for_address=self.get_latest_of_image(image_name,address,current_version,VersionEcholon.LatestVersion)
                     if newest_versions_for_address is not None:
                         newest_versions.update(newest_versions_for_address)
                 GeneralUtilities.assert_condition(len(newest_versions)>0,f"Could not find any version for image {image_name} in registry {registry_address}.")
@@ -142,13 +142,66 @@ class OCIImageManager:
         GeneralUtilities.write_lines_to_file(file,new_lines)
 
     @GeneralUtilities.check_arguments
-    def get_available_versions_of_image_which_are_newer(self,image_name:str,registry_address:str,current_version:Version,echolon: VersionEcholon)->Version:
-        #image_handler=self.get_image_handler(image_name)
-        result= None #TODO calculate result using get_available_tags_of_image.
-        #TODO if echolon is not none, then use echolon instead of the default echolon of the image-handler.
-        #TODO return the versions sorted.
-        #TODO if result is empty: return None
+    def get_latest_of_image(self,image_name:str,registry_address:str,current_version:Version,echolon: VersionEcholon)->Version:
+        result= None
+        image_handler=self.get_image_handler(image_name)
+        if echolon not in (VersionEcholon.NoUpdate, VersionEcholon.CustomAlgorithm):
+            available_tags:list[str]=self.get_available_tags_of_image(image_name,registry_address)
+            available_versions:set[Version]={image_handler.tag_to_version(image_name,tag) for tag in available_tags}
+            #the current version must always be a candidate so that the result is never a downgrade
+            available_versions.add(current_version)
+        match echolon:
+            case VersionEcholon.LatestPatch:#caution: this never updates the minor or major version
+                #take the latest available patch-version for the current minor-version of the image.
+                result=self.__get_latest_patch(available_versions,current_version.major,current_version.minor)
+            case VersionEcholon.LatestPatchOrLatestMinor:#caution: this never updates the major version
+                #take the latest available patch-version for the current minor-version of the image if there is a newer patch version available.
+                #otherwise take the latest available patch-version of the next available minor-version within the current major-version.
+                result=self.__get_latest_patch_or_next_minor(available_versions,current_version)
+            case VersionEcholon.LatestPatchOrLatestMinorOrNextMajor:#usual case for images which have complex migrations sometimes, like GitLab or NextCloud
+                #like LatestPatchOrLatestMinor, but if there is neither a newer patch nor a newer minor-version available within the current major-version
+                #then take the latest available patch-version of the lowest minor-version of the next available major-version.
+                result=self.__get_latest_patch_or_next_minor(available_versions,current_version)
+                if result==current_version:
+                    next_major=self.__get_next_higher_value({v.major for v in available_versions},current_version.major)
+                    if next_major is not None:
+                        lowest_minor=min({v.minor for v in available_versions if v.major==next_major})
+                        result=self.__get_latest_patch(available_versions,next_major,lowest_minor)
+            case VersionEcholon.LatestVersion:#usual case for most images
+                #take the latest available version of the image.
+                result=max(available_versions)
+            case VersionEcholon.CustomAlgorithm:
+                #the image-handler decides which version to use for the given current version.
+                result=image_handler.get_latest_version_custom(image_name,registry_address,current_version)
+            case VersionEcholon.NoUpdate:
+                result = current_version
         return result
+
+    @GeneralUtilities.check_arguments
+    def __get_latest_patch(self,available_versions:set[Version],major:int,minor:int)->Version:
+        """Returns the latest available patch-version for the given major- and minor-version or None if no such version is available."""
+        matching_versions={v for v in available_versions if v.major==major and v.minor==minor}
+        if len(matching_versions)==0:
+            return None
+        return max(matching_versions)
+
+    @GeneralUtilities.check_arguments
+    def __get_latest_patch_or_next_minor(self,available_versions:set[Version],current_version:Version)->Version:
+        latest_patch=self.__get_latest_patch(available_versions,current_version.major,current_version.minor)
+        if latest_patch is not None and latest_patch>current_version:
+            return latest_patch
+        next_minor=self.__get_next_higher_value({v.minor for v in available_versions if v.major==current_version.major},current_version.minor)
+        if next_minor is not None:
+            return self.__get_latest_patch(available_versions,current_version.major,next_minor)
+        return current_version
+
+    @GeneralUtilities.check_arguments
+    def __get_next_higher_value(self,values:set[int],current_value:int)->int:
+        """Returns the smallest value in values which is greater than current_value or None if no such value exists."""
+        higher_values={v for v in values if v>current_value}
+        if len(higher_values)==0:
+            return None
+        return min(higher_values)
     
     @GeneralUtilities.check_arguments
     def get_available_tags_of_image(self,image_name:str,registry_address:str)->list[str]:
@@ -194,9 +247,11 @@ class OCIImageManager:
         return result
 
     @GeneralUtilities.check_arguments
-    def update_image_in_docker_compose_file(self,docker_compose_file:str,default_echolon:VersionEcholon=None,per_image_echolons:dict[str,VersionEcholon]=None)->None:
+    def update_image_in_docker_compose_file(self,docker_compose_file:str,default_echolon:VersionEcholon=None,per_image_echolons:dict[str,VersionEcholon]=None,verbose:bool=False)->None:
         if per_image_echolons is None:
             per_image_echolons = {}
+        if verbose:
+            self.__sc.log.log(f"Checking images in docker-compose-file \"{docker_compose_file}\" for updates.",LogLevel.Information)
         for service,service_information in self.get_images_used_in_docker_compose_file(docker_compose_file).items():
             image_name=service_information[0]
             image_address=service_information[1]
@@ -205,12 +260,19 @@ class OCIImageManager:
             effective_echolon=per_image_echolons.get(image_name,default_echolon)
             if effective_echolon is None:
                 effective_echolon=image_handler.get_default_echolon_for_update()
-            new_versions_for_address=self.get_available_versions_of_image_which_are_newer(image_name,image_address,self.tag_to_version(image_name,current_tag),effective_echolon)
+            if verbose:
+                self.__sc.log.log(f"Service \"{service}\": checking image \"{image_address}:{current_tag}\" using echolon \"{effective_echolon.name}\".",LogLevel.Information)
+            new_versions_for_address=self.get_latest_of_image(image_name,image_address,self.tag_to_version(image_name,current_tag),effective_echolon)
             new_tag=self.version_to_tag(image_name,new_versions_for_address)
             if new_tag is not None and new_tag != current_tag:
                 new_image_reference = f"{image_address}:{new_tag}"
+                if verbose:
+                    self.__sc.log.log(f"Service \"{service}\": updating image \"{image_address}\" from tag \"{current_tag}\" to tag \"{new_tag}\".",LogLevel.Information)
                 with open(docker_compose_file, "r", encoding="utf-8") as f:
                     compose_data = yaml.safe_load(f)
                 compose_data["services"][service]["image"] = new_image_reference
                 with open(docker_compose_file, "w", encoding="utf-8") as f:
                     yaml.safe_dump(compose_data, f, default_flow_style=False, sort_keys=False)
+            else:
+                if verbose:
+                    self.__sc.log.log(f"Service \"{service}\": image \"{image_address}\" is already up-to-date at tag \"{current_tag}\".",LogLevel.Information)

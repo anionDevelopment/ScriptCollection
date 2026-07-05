@@ -9,6 +9,7 @@ import tarfile
 import time
 import re
 import sys
+import platform
 import json
 import uuid
 import urllib.request
@@ -1070,7 +1071,20 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def do_npm_install(self, package_json_folder: str, npm_force: bool,use_cache:bool) -> None:
         target_folder:str=os.path.join(package_json_folder,"node_modules")
-        update:bool=not os.path.isdir(target_folder) or GeneralUtilities.folder_is_empty(target_folder) or not use_cache
+        platform_marker_file:str=os.path.join(target_folder,".sc_installed_for_platform")
+        current_platform:str=f"{sys.platform}-{platform.machine().lower()}"
+        # node_modules holds platform-specific native binaries (esbuild, rollup, lightningcss, swc, ...) which
+        # get installed only for the current host-platform. When node_modules is cached/shared between build-hosts
+        # of different platforms (e.g. a Windows-native build via 'scbuildcodeunits' followed by a build inside a
+        # mounted Linux-container via 'scbuildcodeunitsc') the cached node_modules contains the binaries for the
+        # foreign platform and lacks the ones for the current platform, which breaks the build. Therefore the cache
+        # is only reused when it was installed for exactly the current platform; otherwise a fresh install is forced
+        # so 'npm clean-install' rebuilds node_modules with the binaries matching the current platform.
+        cache_is_reusable:bool=os.path.isdir(target_folder) \
+            and not GeneralUtilities.folder_is_empty(target_folder) \
+            and os.path.isfile(platform_marker_file) \
+            and GeneralUtilities.read_text_from_file(platform_marker_file).strip()==current_platform
+        update:bool=not (use_cache and cache_is_reusable)
         if update:
             self.__sc.log.log("Do npm-install...")
             argument1 = "install"
@@ -1087,6 +1101,9 @@ class TFCPS_Tools_General:
             if npm_force:
                 argument3 = f"{argument3} --force"
             self.__sc.run_with_epew("npm", argument3, package_json_folder)
+
+            # 'npm clean-install' recreates node_modules, so the platform-marker must be written afterwards.
+            GeneralUtilities.write_text_to_file(platform_marker_file, current_platform)
 
     @staticmethod
     @GeneralUtilities.check_arguments
@@ -1864,13 +1881,13 @@ class TFCPS_Tools_General:
 
     @GeneralUtilities.check_arguments
     def try_update_basic_codeunitreference_from_examples_repository(self, codeunit_folder:str,example_codeunit_name: str):
-        source=f"https://raw.githubusercontent.com/anionDevelopment/CommonProjectStructureExamples/refs/heads/main/{example_codeunit_name}/Other/Reference/ReferenceContent/HowToBuild.md"
+        source=f"https://raw.githubusercontent.com/anionDev/CommonProjectStructureExamples/refs/heads/main/{example_codeunit_name}/Other/Reference/ReferenceContent/HowToBuild.md"
         target=f"{codeunit_folder}/Other/Reference/ReferenceContent/HowToBuild.md"
         self.download_file(source,target)   
 
     @GeneralUtilities.check_arguments
     def try_update_basic_repositoryreference_from_examples_repository(self, repository_folder:str):
-        source=f"https://raw.githubusercontent.com/anionDevelopment/CommonProjectStructureExamples/refs/heads/main/Other/Reference/RepositoryStructure.mdd"
+        source=f"https://raw.githubusercontent.com/anionDev/CommonProjectStructureExamples/refs/heads/main/Other/Reference/RepositoryStructure.mdd"
         target=f"{repository_folder}/Other/Reference/RepositoryStructure.md"
         self.download_file(source,target)   
 

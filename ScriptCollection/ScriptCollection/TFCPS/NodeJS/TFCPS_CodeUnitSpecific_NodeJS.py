@@ -1,8 +1,6 @@
 import os
 import re
-import sys
 import json
-import platform
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from lxml import etree
@@ -51,73 +49,9 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
     def do_common_tasks(self,current_codeunit_version:str)-> None:
         codeunit_version = current_codeunit_version
         codeunit_folder = self.get_codeunit_folder()
-        self.__remove_foreign_platform_node_modules_packages(codeunit_folder)
         self.do_common_tasks_base(current_codeunit_version)
         self.tfcps_Tools_General.replace_version_in_packagejson_file(GeneralUtilities.resolve_relative_path("./package.json", codeunit_folder), codeunit_version)
         self.tfcps_Tools_General.do_npm_install(codeunit_folder, True,self.use_cache())
-
-    @GeneralUtilities.check_arguments
-    def __remove_foreign_platform_node_modules_packages(self, codeunit_folder: str) -> None:
-        # Native packages (esbuild, rollup, lightningcss, swc, ...) ship platform-specific binaries via
-        # optional dependencies whose package.json declares 'os'/'cpu'. When node_modules is shared between
-        # build-hosts (e.g. Windows-native vs. a mounted Linux-Docker-container) the binary for the foreign
-        # platform stays present and breaks the build. Remove every installed package whose declared 'os'/'cpu'
-        # does not match the current host so the subsequent npm-install fetches the matching one.
-        node_modules_folder = os.path.join(codeunit_folder, "node_modules")
-        if not os.path.isdir(node_modules_folder):
-            return
-        current_os = sys.platform  # matches npm's 'os'-values ('win32', 'linux', 'darwin')
-        current_cpu = {
-            "amd64": "x64", "x86_64": "x64",
-            "aarch64": "arm64", "arm64": "arm64",
-            "i386": "ia32", "i686": "ia32", "x86": "ia32",
-        }.get(platform.machine().lower(), platform.machine().lower())
-        for package_folder in self.__get_node_modules_package_folders(node_modules_folder):
-            package_json_file = os.path.join(package_folder, "package.json")
-            if not os.path.isfile(package_json_file):
-                continue
-            try:
-                with open(package_json_file, encoding="utf-8") as f:
-                    package_json = json.load(f)
-            except (ValueError, OSError):
-                continue
-            os_allowed = self.__node_platform_value_allowed(package_json.get("os"), current_os)
-            cpu_allowed = self.__node_platform_value_allowed(package_json.get("cpu"), current_cpu)
-            if not (os_allowed and cpu_allowed):
-                self._protected_sc.log.log(f"Remove foreign-platform node_modules-package '{os.path.basename(package_folder)}' (os={package_json.get('os')}, cpu={package_json.get('cpu')}; host={current_os}/{current_cpu}).", LogLevel.Debug)
-                GeneralUtilities.ensure_directory_does_not_exist(package_folder)
-
-    @GeneralUtilities.check_arguments
-    def __get_node_modules_package_folders(self, node_modules_folder: str) -> list[str]:
-        # Yields the package-folders inside node_modules. Packages live either directly in node_modules
-        # or, for scoped packages, one level below a '@scope'-folder.
-        result: list[str] = []
-        for entry in os.listdir(node_modules_folder):
-            entry_path = os.path.join(node_modules_folder, entry)
-            if not os.path.isdir(entry_path):
-                continue
-            if entry.startswith("@"):
-                for scoped_entry in os.listdir(entry_path):
-                    scoped_path = os.path.join(entry_path, scoped_entry)
-                    if os.path.isdir(scoped_path):
-                        result.append(scoped_path)
-            else:
-                result.append(entry_path)
-        return result
-
-    @GeneralUtilities.check_arguments
-    def __node_platform_value_allowed(self, values, current: str) -> bool:
-        # Implements npm's 'os'/'cpu'-matching: a missing constraint allows everything; a negated entry
-        # ('!win32') blocks the value; if positive entries exist the current value must be one of them.
-        if not values:
-            return True
-        positives = [v for v in values if not v.startswith("!")]
-        negatives = [v[1:] for v in values if v.startswith("!")]
-        if current in negatives:
-            return False
-        if positives and current not in positives:
-            return False
-        return True
 
     @GeneralUtilities.check_arguments
     def generate_reference(self) -> None:
