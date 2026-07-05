@@ -36,3 +36,9 @@ class AbstractImageHandler(ABC):
     @abstractmethod
     def get_default_echolon_for_update(self,image_name:str)->VersionEcholon:
         raise NotImplementedError()#because it is abstract
+
+    def get_latest_version_custom(self,image_name:str,registry_address:str,current_version:Version)->Version:
+        """Determines the latest version of an image using an image-specific custom algorithm.
+        This is used when the echolon VersionEcholon.CustomAlgorithm is selected.
+        Image-handlers which want to support a custom algorithm must override this method."""
+        raise NotImplementedError(f"Image-handler \"{type(self).__name__}\" does not define a custom algorithm for determining the latest version of image \"{image_name}\".")
