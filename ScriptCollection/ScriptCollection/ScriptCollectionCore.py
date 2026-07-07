@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.23"
+version = "4.3.24"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2441,7 +2441,7 @@ class ScriptCollectionCore:
             self.git_clone(temp_folder, repository_folder, include_submodules=False)
             # the local clone already checks out the source's current branch on the tagged commit; the explicit checkout only guarantees gitversion sees the correct branch-name (and thus the correct increment-rule)
             self.run_program_argsasarray("git", ["checkout", branch_name], temp_folder, throw_exception_if_exitcode_is_not_zero=True)
-            self.run_program("git","-c user.name=\"noname\" -c user.email=\"noname@example.com\" commit -m empty --quiet --allow-empty", temp_folder, no_changes_behavior=1)
+            self.run_program("git","-c user.name=\"noname\" -c user.email=\"noname@example.com\" commit -m empty --quiet --allow-empty", temp_folder)
             result = self.get_version_from_gitversion(temp_folder, "MajorMinorPatch")
             self.__next_gitversion_cache[cache_key] = result
             self.__write_next_version_to_disk_cache(repository_folder, commit_id, branch_name, result)
