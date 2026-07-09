@@ -107,8 +107,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.sc.log.log(GeneralUtilities.get_line())
 
         self.search_for_secrets()
-        self.__search_for_vulnerabilities()
         self.__normalize_md_and_txt_line_endings()
+        self.tfcps_tools_general.generate_svg_files_from_plantuml_files_for_repository(self.repository, self.use_cache())
 
         if self.is_pre_merge():
             self.__translate()
@@ -371,10 +371,6 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         GeneralUtilities.assert_condition(not self.sc.file_is_git_ignored(f"Other/Reference/Technical/Diagrams/{filenamebase}.svg",self.repository),f"Other/Reference/Technical/Diagrams/{filenamebase}.svg must not be git-ignored")#because it should be referencable in markdown-files and viewable without building the codeunits.
         self.sc.generate_chart_diagram(diagram_definition_file,os.path.basename(diagram_svg_file))
         self.sc.format_xml_file(diagram_svg_file)
-
-    @GeneralUtilities.check_arguments
-    def __search_for_vulnerabilities(self):
-        pass#TODO
 
     @GeneralUtilities.check_arguments
     def search_for_secrets(self) -> None:

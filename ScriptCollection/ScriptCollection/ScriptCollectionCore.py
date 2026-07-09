@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.24"
+version = "4.3.25"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -152,6 +152,41 @@ class VSCodeWorkspaceMongoDBConnection:
 """
         return result
     
+class GitHubIssueSummary:
+    number:int = None
+    title:str = None
+    state:str = None  # "open" or "closed"
+    tags:list[str] = None  # the labels of the issue
+
+    def __init__(self,number:int,title:str,state:str,tags:list[str]):
+        self.number=number
+        self.title=title
+        self.state=state
+        self.tags=tags
+
+
+class GitHubIssueComment:
+    author:str = None  #nullable
+    body:str = None
+    created_at:str = None  #nullable
+
+    def __init__(self,author:str,body:str,created_at:str):
+        self.author=author
+        self.body=body
+        self.created_at=created_at
+
+
+class GitHubIssue:
+    summary:GitHubIssueSummary = None
+    description:str = None  #nullable (the body of the issue)
+    comments:list[GitHubIssueComment] = None
+
+    def __init__(self,summary:GitHubIssueSummary,description:str,comments:list[GitHubIssueComment]):
+        self.summary=summary
+        self.description=description
+        self.comments=comments
+
+
 class ScriptCollectionCore:
 
     # The purpose of this property is to use it when testing your code which uses scriptcollection for external program-calls.
@@ -165,6 +200,8 @@ class ScriptCollectionCore:
     log: SCLog = None
     # Magic string which can be used inside the arguments of run_command_in_folder. Every occurrence of it will be replaced by the (resolved) actual_folder.
     run_command_in_folder_actual_folder_placeholder: str = "{actual_folder}"
+    # Base-url of the GitHub-REST-API. This is an internal constant on purpose and deliberately not exposed as a parameter of the GitHub-functions.
+    __github_api_base_url: str = "https://api.github.com"
 
 
     def __init__(self):
@@ -313,6 +350,73 @@ class ScriptCollectionCore:
                 arg_for_log=f"login {registry} -u {username} -p ***"
                 self.run_program("docker",arg,arguments_for_log=arg_for_log,print_live_output=self.log.loglevel==LogLevel.Debug)
         
+
+    @GeneralUtilities.check_arguments
+    def get_issues_of_github_repository(self, owner: str, repository: str, github_token: str = None) -> list[GitHubIssueSummary]:
+        """Retrieves all issues (open and closed) of the given GitHub-repository and returns for each issue its number, title, state and tags.
+        Use 'get_github_issue_details' to retrieve the full details (description, comments) of a specific issue.
+        'github_token' is optional but recommended: without it only public repositories are accessible and a low unauthenticated rate-limit applies.
+        This function only returns the retrieved data; it does not modify anything."""
+        headers = self.__get_github_api_headers(github_token)
+        result: list[GitHubIssueSummary] = []
+        issues_url = f"{self.__github_api_base_url}/repos/{owner}/{repository}/issues"
+        # 'state=all' returns open and closed issues. GitHub returns pull-requests on this endpoint too; they are filtered out below.
+        raw_issues = self.__get_all_github_pages(issues_url, {"state": "all", "per_page": "100"}, headers)
+        for raw_issue in raw_issues:
+            if "pull_request" in raw_issue:  # this entry is a pull-request, not an issue
+                continue
+            tags = [label["name"] for label in raw_issue.get("labels", [])]
+            result.append(GitHubIssueSummary(raw_issue["number"], raw_issue["title"], raw_issue["state"], tags))
+        return result
+
+    @GeneralUtilities.check_arguments
+    def get_github_issue_details(self, owner: str, repository: str, issue_number: int, github_token: str = None) -> GitHubIssue:
+        """Retrieves the full details of a single issue of the given GitHub-repository:
+        title, description (body), comments, state ('open' or 'closed') and tags (labels).
+        'github_token' is optional but recommended: without it only public repositories are accessible and a low unauthenticated rate-limit applies.
+        This function only returns the retrieved data; it does not modify anything."""
+        headers = self.__get_github_api_headers(github_token)
+        issue_url = f"{self.__github_api_base_url}/repos/{owner}/{repository}/issues/{issue_number}"
+        response = requests.get(issue_url, headers=headers, timeout=30)
+        response.raise_for_status()  # check if statuscode = 200
+        raw_issue = response.json()
+        tags = [label["name"] for label in raw_issue.get("labels", [])]
+        summary = GitHubIssueSummary(raw_issue["number"], raw_issue["title"], raw_issue["state"], tags)
+        comments: list[GitHubIssueComment] = []
+        if raw_issue.get("comments", 0) > 0:
+            raw_comments = self.__get_all_github_pages(raw_issue["comments_url"], {"per_page": "100"}, headers)
+            for raw_comment in raw_comments:
+                author = raw_comment["user"]["login"] if raw_comment.get("user") is not None else None
+                comments.append(GitHubIssueComment(author, raw_comment.get("body"), raw_comment.get("created_at")))
+        return GitHubIssue(summary, raw_issue.get("body"), comments)
+
+    @GeneralUtilities.check_arguments
+    def __get_github_api_headers(self, github_token: str) -> dict:
+        headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+        if GeneralUtilities.string_has_content(github_token):
+            headers["Authorization"] = f"Bearer {github_token}"
+        return headers
+
+    @GeneralUtilities.check_arguments
+    def __get_all_github_pages(self, url: str, query_parameters: dict, headers: dict) -> list:
+        """Requests all pages of a paginated GitHub-API-endpoint (following the 'Link'-header) and returns the concatenated result-items."""
+        result: list = []
+        next_url = url
+        next_parameters = query_parameters
+        while next_url is not None:
+            response = requests.get(next_url, params=next_parameters, headers=headers, timeout=30)
+            response.raise_for_status()  # check if statuscode = 200
+            result.extend(response.json())
+            # follow the pagination using the 'Link'-header ( https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api ).
+            next_url = None
+            next_parameters = None  # the 'next'-url from the Link-header already contains all required query-parameters
+            link_header = response.headers.get("Link")
+            if link_header is not None:
+                for link in link_header.split(","):
+                    parts = link.split(";")
+                    if len(parts) >= 2 and 'rel="next"' in parts[1]:
+                        next_url = parts[0].strip().lstrip("<").rstrip(">")
+        return result
 
     @GeneralUtilities.check_arguments
     def python_file_has_errors(self, file: str, working_directory: str, treat_warnings_as_errors: bool = True, display_file: str = None) -> tuple[bool, list[str]]:
