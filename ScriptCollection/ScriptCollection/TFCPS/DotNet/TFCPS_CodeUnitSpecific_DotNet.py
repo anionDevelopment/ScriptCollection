@@ -541,8 +541,8 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         return result
 
     @GeneralUtilities.check_arguments
-    def generate_reference(self) -> None:
-        self.generate_reference_using_docfx()
+    def generate_reference(self, generate_class_reference:bool=False) -> None:
+        self.generate_reference_using_docfx(generate_class_reference)
 
     
     @GeneralUtilities.check_arguments

@@ -1,6 +1,20 @@
+import os
+import tempfile
 import unittest
+from ..ScriptCollection.GeneralUtilities import GeneralUtilities
 from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
+from ..ScriptCollection.TFCPS.TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base
 from ..ScriptCollection.TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
+
+
+def generate_toc_md_file_content_for_toc_yml_content(toc_yml_content: str) -> str:
+    """Writes the given toc.yml-content to a temporary file and returns the generated toc.md-content for it."""
+    # pylint:disable=protected-access
+    generate_toc_md_file_content = TFCPS_CodeUnitSpecific_Base._TFCPS_CodeUnitSpecific_Base__generate_toc_md_file_content
+    with tempfile.TemporaryDirectory() as temporary_folder:
+        toc_file = os.path.join(temporary_folder, "toc.yml")
+        GeneralUtilities.write_text_to_file(toc_file, toc_yml_content)
+        return generate_toc_md_file_content(toc_file)
 
 
 class TasksForCommonProjectStructureTests(unittest.TestCase):
@@ -78,3 +92,96 @@ class TasksForCommonProjectStructureTests(unittest.TestCase):
         assert TFCPS_Tools_General.sort_reference_folder("/folder/v3.0.0", "/folder/v4.0.0") < 0
         assert TFCPS_Tools_General.sort_reference_folder("/folder/v4.0.0", "/folder/v3.0.0") > 0
         assert TFCPS_Tools_General.sort_reference_folder("/folder/v4.0.0", "/folder/v4.0.0") == 0
+
+    def test_generate_toc_md_file_content_with_empty_toc(self) -> None:
+        # arrange
+        function_input = "### YamlMime:TableOfContent\nitems: []\n"
+        expected_result = "# Table of contents\n"
+
+        # act
+        actual_result = generate_toc_md_file_content_for_toc_yml_content(function_input)
+
+        # assert
+        assert expected_result == actual_result
+
+    def test_generate_toc_md_file_content_with_namespaces_and_types(self) -> None:
+        # arrange
+        function_input = """### YamlMime:TableOfContent
+items:
+- uid: Example.Core
+  name: Example.Core
+  type: Namespace
+  items:
+  - uid: Example.Core.Generic
+    name: Generic
+    type: Class
+  - uid: Example.Core.GenericXMLSerializer`1
+    name: GenericXMLSerializer<T>
+    type: Class
+- uid: Example.Core.Misc
+  name: Example.Core.Misc
+  type: Namespace
+  items:
+  - uid: Example.Core.Misc.Utilities
+    name: Utilities
+    type: Class
+"""
+        expected_result = """# Table of contents
+
+## Example.Core
+
+- [Generic](./Example.Core.Generic.yml)
+- [GenericXMLSerializer&lt;T&gt;](./Example.Core.GenericXMLSerializer-1.yml)
+
+## Example.Core.Misc
+
+- [Utilities](./Example.Core.Misc.Utilities.yml)
+"""
+
+        # act
+        actual_result = generate_toc_md_file_content_for_toc_yml_content(function_input)
+
+        # assert
+        assert expected_result == actual_result
+
+    def test_generate_toc_md_file_content_with_namespace_without_types(self) -> None:
+        # arrange
+        function_input = """### YamlMime:TableOfContent
+items:
+- uid: Example.Core
+  name: Example.Core
+  type: Namespace
+"""
+        expected_result = """# Table of contents
+
+## Example.Core
+
+(This namespace does not contain any documented type.)
+"""
+
+        # act
+        actual_result = generate_toc_md_file_content_for_toc_yml_content(function_input)
+
+        # assert
+        assert expected_result == actual_result
+
+    def test_generate_toc_md_file_content_with_toc_without_items_property(self) -> None:
+        # arrange
+        function_input = """- uid: Example.Core
+  name: Example.Core
+  items:
+  - uid: Example.Core.Utilities
+    name: Utilities
+"""
+        expected_result = """# Table of contents
+
+## Example.Core
+
+- [Utilities](./Example.Core.Utilities.yml)
+"""
+
+        # act
+        actual_result = generate_toc_md_file_content_for_toc_yml_content(function_input)
+
+        # assert
+        assert expected_result == actual_result
