@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.26"
+version = "4.3.27"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -152,7 +152,7 @@ class VSCodeWorkspaceMongoDBConnection:
 """
         return result
     
-class GitHubIssueSummary:
+class ProjectServerIssueSummary:
     number:int = None
     title:str = None
     state:str = None  # "open" or "closed"
@@ -165,7 +165,7 @@ class GitHubIssueSummary:
         self.tags=tags
 
 
-class GitHubIssueComment:
+class ProjectServerIssueComment:
     author:str = None  #nullable
     body:str = None
     created_at:str = None  #nullable
@@ -176,12 +176,12 @@ class GitHubIssueComment:
         self.created_at=created_at
 
 
-class GitHubIssue:
-    summary:GitHubIssueSummary = None
+class ProjectServerIssue:
+    summary:ProjectServerIssueSummary = None
     description:str = None  #nullable (the body of the issue)
-    comments:list[GitHubIssueComment] = None
+    comments:list[ProjectServerIssueComment] = None
 
-    def __init__(self,summary:GitHubIssueSummary,description:str,comments:list[GitHubIssueComment]):
+    def __init__(self,summary:ProjectServerIssueSummary,description:str,comments:list[ProjectServerIssueComment]):
         self.summary=summary
         self.description=description
         self.comments=comments
@@ -352,13 +352,13 @@ class ScriptCollectionCore:
         
 
     @GeneralUtilities.check_arguments
-    def get_issues_of_github_repository(self, owner: str, repository: str, github_token: str = None) -> list[GitHubIssueSummary]:
+    def get_issues_of_github_repository(self, owner: str, repository: str, github_token: str = None) -> list[ProjectServerIssueSummary]:
         """Retrieves all issues (open and closed) of the given GitHub-repository and returns for each issue its number, title, state and tags.
         Use 'get_github_issue_details' to retrieve the full details (description, comments) of a specific issue.
         'github_token' is optional but recommended: without it only public repositories are accessible and a low unauthenticated rate-limit applies.
         This function only returns the retrieved data; it does not modify anything."""
         headers = self.__get_github_api_headers(github_token)
-        result: list[GitHubIssueSummary] = []
+        result: list[ProjectServerIssueSummary] = []
         issues_url = f"{self.__github_api_base_url}/repos/{owner}/{repository}/issues"
         # 'state=all' returns open and closed issues. GitHub returns pull-requests on this endpoint too; they are filtered out below.
         raw_issues = self.__get_all_github_pages(issues_url, {"state": "all", "per_page": "100"}, headers)
@@ -366,11 +366,11 @@ class ScriptCollectionCore:
             if "pull_request" in raw_issue:  # this entry is a pull-request, not an issue
                 continue
             tags = [label["name"] for label in raw_issue.get("labels", [])]
-            result.append(GitHubIssueSummary(raw_issue["number"], raw_issue["title"], raw_issue["state"], tags))
+            result.append(ProjectServerIssueSummary(raw_issue["number"], raw_issue["title"], raw_issue["state"], tags))
         return result
 
     @GeneralUtilities.check_arguments
-    def get_github_issue_details(self, owner: str, repository: str, issue_number: int, github_token: str = None) -> GitHubIssue:
+    def get_github_issue_details(self, owner: str, repository: str, issue_number: int, github_token: str = None) -> ProjectServerIssue:
         """Retrieves the full details of a single issue of the given GitHub-repository:
         title, description (body), comments, state ('open' or 'closed') and tags (labels).
         'github_token' is optional but recommended: without it only public repositories are accessible and a low unauthenticated rate-limit applies.
@@ -381,14 +381,14 @@ class ScriptCollectionCore:
         response.raise_for_status()  # check if statuscode = 200
         raw_issue = response.json()
         tags = [label["name"] for label in raw_issue.get("labels", [])]
-        summary = GitHubIssueSummary(raw_issue["number"], raw_issue["title"], raw_issue["state"], tags)
-        comments: list[GitHubIssueComment] = []
+        summary = ProjectServerIssueSummary(raw_issue["number"], raw_issue["title"], raw_issue["state"], tags)
+        comments: list[ProjectServerIssueComment] = []
         if raw_issue.get("comments", 0) > 0:
             raw_comments = self.__get_all_github_pages(raw_issue["comments_url"], {"per_page": "100"}, headers)
             for raw_comment in raw_comments:
                 author = raw_comment["user"]["login"] if raw_comment.get("user") is not None else None
-                comments.append(GitHubIssueComment(author, raw_comment.get("body"), raw_comment.get("created_at")))
-        return GitHubIssue(summary, raw_issue.get("body"), comments)
+                comments.append(ProjectServerIssueComment(author, raw_comment.get("body"), raw_comment.get("created_at")))
+        return ProjectServerIssue(summary, raw_issue.get("body"), comments)
 
     @GeneralUtilities.check_arguments
     def __get_github_api_headers(self, github_token: str) -> dict:
