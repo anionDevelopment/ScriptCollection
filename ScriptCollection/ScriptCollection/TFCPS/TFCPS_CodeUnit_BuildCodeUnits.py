@@ -114,14 +114,17 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.__translate()
             self.__collect_metrics()
             self.__generate_loc_diagram()
+
+        if self.__assert_no_new_changes:
+            self.sc.assert_no_uncommitted_changes(self.repository,"There are new uncommitted changes in the repository.")
+
+        #the ready-to-merge-flag-file itself must not be part of the uncommitted-changes-check above, otherwise setting/clearing it would always trigger that assertion.
+        if self.is_pre_merge():
             GeneralUtilities.ensure_file_does_not_exist(ready_to_merge_file)
         else:
             if self.is_working_branch():
                 if self.add_ready_to_merge_flag():
                     GeneralUtilities.ensure_file_exists(ready_to_merge_file)
-
-        if self.__assert_no_new_changes:
-            self.sc.assert_no_uncommitted_changes(self.repository,"There are new uncommitted changes in the repository.")
 
         end_time:datetime=GeneralUtilities.get_now()
         duration=end_time-start_time
