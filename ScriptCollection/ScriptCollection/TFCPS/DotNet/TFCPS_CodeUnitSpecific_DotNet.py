@@ -343,6 +343,8 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
                 has_errors = True
         if has_errors:
             raise ValueError("Linting-issues occurred.")
+        #TODO assert that the PackageProjectUrl-value (<PackageProjectUrl>...<\\/PackageProjectUrl>) from the csproj-file of the main-project is the same url than the remote-url in E:\Data\Projects\ScriptCollection\.ScriptCollection\ProductInformation.xml
+        #TODO assert that the PackageProjectUrl-value (<PackageProjectUrl>...<\\/PackageProjectUrl>) from the csproj-file of the test-project is the same url than the remote-url in E:\Data\Projects\ScriptCollection\.ScriptCollection\ProductInformation.xml
 
     @GeneralUtilities.check_arguments
     def do_common_tasks(self,current_codeunit_version:str,certificateGeneratorInformation:CertificateGeneratorInformationBase)-> None:
