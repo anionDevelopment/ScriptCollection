@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.28"
+version = "4.3.29"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2309,7 +2309,7 @@ class ScriptCollectionCore:
         if not self.path_is_allowed_within_base_folder(actual_folder, base_folder, excluded_folders):
             raise ValueError(f"The folder '{resolved_actual_folder}' is not allowed: it must be equal to or a subfolder of the base-folder '{resolved_base_folder}' and must not be located inside one of the excluded folders.")
         effective_arguments = arguments.replace(ScriptCollectionCore.run_command_in_folder_actual_folder_placeholder, resolved_actual_folder)
-        result = self.run_program(command, effective_arguments, resolved_base_folder)
+        result = self.run_program(command, effective_arguments, resolved_base_folder,print_live_output=True)
         return result[0]
 
     # Return-values program_runner: Exitcode, StdOut, StdErr, Pid
