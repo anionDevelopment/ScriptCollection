@@ -279,6 +279,7 @@ def BuildCodeUnits() -> int:
 def BuildCodeUnitsC() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('-r','--repositoryfolder', required=False, default=".")
+    parser.add_argument('-b','--basemountfolder', required=False, default=None)
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
     parser.add_argument('--targetenvironment', required=False, default="QualityCheck")
@@ -292,8 +293,11 @@ def BuildCodeUnitsC() -> int:
     GeneralUtilities.reconfigure_standard_input_and_outputs()
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
     verbosity=LogLevel(int(args.verbosity))
+    base_mount_folder:str=args.basemountfolder
+    if base_mount_folder is None:
+        base_mount_folder=repo
     t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges,args.addreadytomergeflag)
-    success, _ = t.build_codeunits_in_container()
+    success, _ = t.build_codeunits_in_container(base_mount_folder)
     return 0 if success else 1
 
 def UpdateDependencies() -> int:
