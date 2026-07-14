@@ -170,8 +170,16 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         return self.build_codeunits_in_container()
     
     @GeneralUtilities.check_arguments
-    def build_codeunits_in_container(self) -> tuple[bool, str]:
-        container_repository_folder = "/Workspace/Repository"
+    def build_codeunits_in_container(self,base_mount_folder:str) -> tuple[bool, str]:
+        container_repository_folder = "/Workspace/Repository"#TODO rename this to /Workspace/Project/Repository and adapt everywhere where required.
+        #TODO use base_mount_folder. how? -> der base_mount_folder muss im container ein parent-ordner von container_repository_folder sein.
+        # du darfst annehmen, dass base_mount_folder immer korrekt gesetzt ist vom aufrufer.
+        # base_mount_folder und container_repository_folder müssen beide absolute pfade sein (also man kann einfach einen startswith check machen).
+        # der punkt ist halt: man soll als aufrufer den repo-pfad angeben können (lokal auf windows beim aufrufer z.b. E:\Data\Projects\ConSurvBuild\Submodules\ConSurv ) und
+        # man soll über den base_mount_folder jetzt auch angeben können, dass der ganze ordner E:\Data\Projects\ConSurvBuild in den container gemountet wird.
+        # also dann wird in dem beispiel base_mount_folder="E:\Data\Projects\ConSurvBuild". dann der ordner wird dann unter /Workspace/Project/ConSurvBuild gemountet im container.
+        # und container_repository_folder muss dann logischerweise zu "/Workspace/Project/ConSurvBuild/Submodules/ConSurv" berechnet werden.
+        # ziel des umbaus: man kann BuildCodeUnitsC so aufrufen, dass man nicht nur das repository selbst in den container mountet sondern auch einen beliebigen parent-ordner und das src-repository selbst (in dem fall der ConSurv-ordner) ist dann in einem entsprechenden unterordner und wird auch genau da korrekt gebuildet.
         image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "SCBuilder")
 
         #build the scbuildcodeunits-arguments based on the current state (analogous to the arguments accepted by the scbuildcodeunits-executable). each token must be a separate argument because run_program_argsasarray passes every list-element verbatim and does not split on spaces.
