@@ -343,8 +343,6 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
                 has_errors = True
         if has_errors:
             raise ValueError("Linting-issues occurred.")
-        #TODO assert that the PackageProjectUrl-value (<PackageProjectUrl>...<\\/PackageProjectUrl>) from the csproj-file of the main-project is the same url than the remote-url in E:\Data\Projects\ScriptCollection\.ScriptCollection\ProductInformation.xml
-        #TODO assert that the PackageProjectUrl-value (<PackageProjectUrl>...<\\/PackageProjectUrl>) from the csproj-file of the test-project is the same url than the remote-url in E:\Data\Projects\ScriptCollection\.ScriptCollection\ProductInformation.xml
 
     @GeneralUtilities.check_arguments
     def do_common_tasks(self,current_codeunit_version:str,certificateGeneratorInformation:CertificateGeneratorInformationBase)-> None:
@@ -373,6 +371,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         if not result1[0]:
             hints: str = "\n".join(result1[2])
             raise ValueError(f"'{csproj_file}' with content '{GeneralUtilities.read_text_from_file(csproj_file)}' does not match the standardized .csproj-file-format which is defined by the regex '{result1[1]}'.\n{hints}")
+        self.__check_csproj_urls(csproj_file)
 
         test_csproj_project_name = csproj_project_name+"Tests"
         test_csproj_file = os.path.join(codeunit_folder, test_csproj_project_name, test_csproj_project_name+".csproj")
@@ -380,6 +379,26 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         if not result2[0]:
             hints: str = "\n".join(result2[2])
             raise ValueError(f"'{test_csproj_file}' with content '{GeneralUtilities.read_text_from_file(test_csproj_file)}' does not match the standardized .csproj-file-format which is defined by the regex '{result2[1]}'.\n{hints}")
+        self.__check_csproj_urls(test_csproj_file)
+
+    @GeneralUtilities.check_arguments
+    def __check_csproj_urls(self, csproj_file: str) -> None:
+        remote_address: str = self.get_remote_address()
+        root: etree._ElementTree = etree.parse(csproj_file)
+        package_project_url: str = self.__get_unique_csproj_property_value(root, csproj_file, "PackageProjectUrl")
+        repository_url: str = self.__get_unique_csproj_property_value(root, csproj_file, "RepositoryUrl")
+        if package_project_url != remote_address:
+            raise ValueError(f"The PackageProjectUrl-value '{package_project_url}' in '{csproj_file}' is not equal to the remote-address '{remote_address}' which is defined in the ProductInformation.xml-file of the repository.")
+        expected_repository_url: str = package_project_url+".git"
+        if repository_url != expected_repository_url:
+            raise ValueError(f"The RepositoryUrl-value '{repository_url}' in '{csproj_file}' is not equal to the expected value '{expected_repository_url}'.")
+
+    @GeneralUtilities.check_arguments
+    def __get_unique_csproj_property_value(self, root: etree._ElementTree, csproj_file: str, property_name: str) -> str:
+        values: list[str] = [str(value).strip() for value in root.xpath(f"/Project/PropertyGroup/{property_name}/text()")]
+        if len(values) != 1:
+            raise ValueError(f"'{csproj_file}' must contain exactly one {property_name}-element but contains {len(values)} of them.")
+        return values[0]
 
     def __standardized_task_verify_standard_format_for_project_csproj_file(self, csproj_file: str, codeunit_folder: str, codeunit_name: str, codeunit_version: str) -> tuple[bool, str, str]:
         codeunit_name_regex = re.escape(codeunit_name)
