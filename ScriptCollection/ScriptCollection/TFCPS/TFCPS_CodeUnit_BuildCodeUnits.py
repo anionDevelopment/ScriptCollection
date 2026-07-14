@@ -164,10 +164,6 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["PrepareBuildCodeunits.py"]+args, os.path.join(self.repository,"Other","Scripts"),print_live_output=True)
 
     @GeneralUtilities.check_arguments
-    def build_codeunits_in_a_local_container(self) -> tuple[bool, str]:#TODO remove this
-        return self.build_codeunits_in_container()
-    
-    @GeneralUtilities.check_arguments
     def build_codeunits_in_container(self,base_mount_folder:str) -> tuple[bool, str]:
         #base_mount_folder is assumed to be an absolute path set correctly by the caller (see BuildCodeUnitsC in Executables.py, which defaults it to the repository itself).
         #it may be the repository itself or any parent-folder of it, which allows the caller to mount not only the repository but the whole surrounding folder-structure into the container.
