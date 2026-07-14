@@ -1,9 +1,7 @@
 import os
 import json
 import re
-import shutil
 import socket
-import uuid
 from datetime import datetime, timedelta,timezone
 import xmlschema
 import yaml
@@ -170,8 +168,15 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         return self.build_codeunits_in_container()
     
     @GeneralUtilities.check_arguments
-    def build_codeunits_in_container(self) -> tuple[bool, str]:
-        container_repository_folder = "/Workspace/Repository"
+    def build_codeunits_in_container(self,base_mount_folder:str) -> tuple[bool, str]:
+        #base_mount_folder is assumed to be an absolute path set correctly by the caller (see BuildCodeUnitsC in Executables.py, which defaults it to the repository itself).
+        #it may be the repository itself or any parent-folder of it, which allows the caller to mount not only the repository but the whole surrounding folder-structure into the container.
+        normalized_base_mount_folder = os.path.normpath(base_mount_folder)
+        normalized_repository = os.path.normpath(self.repository)
+        relative_repository_path = os.path.relpath(normalized_repository, normalized_base_mount_folder).replace(os.sep, "/")
+        GeneralUtilities.assert_condition(relative_repository_path == "." or not relative_repository_path.startswith(".."), f"The repository '{self.repository}' is not located inside the base-mount-folder '{base_mount_folder}'.")
+        container_base_mount_folder = f"/Workspace/Project/{os.path.basename(normalized_base_mount_folder)}"
+        container_repository_folder = container_base_mount_folder if relative_repository_path == "." else f"{container_base_mount_folder}/{relative_repository_path}"
         image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "SCBuilder")
 
         #build the scbuildcodeunits-arguments based on the current state (analogous to the arguments accepted by the scbuildcodeunits-executable). each token must be a separate argument because run_program_argsasarray passes every list-element verbatim and does not split on spaces.
@@ -187,56 +192,27 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if GeneralUtilities.string_has_content(self.additionalargumentsfile):
             scbuildcodeunits_arguments += ["-a", self.__translate_path_into_container(self.additionalargumentsfile, container_repository_folder)]
 
-        #if the repository is a git-submodule then "<repository>/.git" is not a directory but a pointer-file referencing a gitdir which
-        #lies outside the mounted working-tree (for example "<product>Build/.git/modules/Submodules/<product>"). git inside the container
-        #can not resolve that gitdir, so "git rev-parse --verify HEAD" fails and the version-detection silently falls back to a wrong
-        #default-version. To fix this regardless of where the submodule is located in the base-repository, the resolved real gitdir is
-        #mounted into the container at a dedicated path and two files are replaced via file-over-file-mounts:
-        # - "<container-repository>/.git" by a generated pointer-file that references the in-container gitdir-path, and
-        # - the gitdir's "config" by a copy whose "core.worktree" points at the in-container working-tree.
-        #The config-override is required because the submodule-gitdir's original "core.worktree" references the original (now wrong)
-        #location: git itself could be told via GIT_WORK_TREE, but gitversion (libgit2) reads core.worktree from the config and ignores
-        #GIT_WORK_TREE - it would otherwise fail with "doesn't point at a valid Git repository or workdir". For a normal repository (own
-        #".git"-directory) nothing additional is required.
-        git_dir_docker_arguments: list[str] = []
-        staged_git_pointer_file: str = None
-        staged_git_config_file: str = None
-        if os.path.isfile(os.path.join(self.repository, ".git")):
-            real_git_folder = self.sc.get_real_git_folder(self.repository)
-            container_git_dir = "/Workspace/RepositoryGitDir"
-            staged_git_pointer_file = os.path.join(GeneralUtilities.get_temp_folder(), f"sc-container-gitpointer-{uuid.uuid4()}")
-            GeneralUtilities.write_text_to_file(staged_git_pointer_file, f"gitdir: {container_git_dir}\n")
-            staged_git_config_file = os.path.join(GeneralUtilities.get_temp_folder(), f"sc-container-gitconfig-{uuid.uuid4()}")
-            shutil.copyfile(os.path.join(real_git_folder, "config"), staged_git_config_file)
-            self.sc.run_program_argsasarray("git", ["config", "--file", staged_git_config_file, "core.worktree", container_repository_folder], GeneralUtilities.get_temp_folder())
-            git_dir_docker_arguments = [
-                "-v", f"{real_git_folder}:{container_git_dir}",
-                "-v", f"{staged_git_config_file}:{container_git_dir}/config",
-                "-v", f"{staged_git_pointer_file}:{container_repository_folder}/.git",
-            ]
-            
+        #if the repository is a git-submodule then "<repository>/.git" is a pointer-file referencing its gitdir via a path relative to the repository
+        #(for example "gitdir: ../../.git/modules/Submodules/<product>"), and the gitdir's own "core.worktree" points back at the repository via a
+        #path relative to the gitdir. Both references are relative, so they resolve correctly inside the container as long as the mounted folder-structure
+        #preserves that relative path - which is what base_mount_folder is for: the caller has to mount a folder that also contains the repository's real
+        #gitdir (typically the parent-repository the submodule belongs to). No file-rewriting is required; a base_mount_folder that does not cover the
+        #real gitdir results in failing git-commands inside the container.
         test=True#TODO remove this
         if test:
             scbuildcodeunits_arguments=["bash","-c", "pip3 install scriptcollection --upgrade && scshowversion && "+" ".join(scbuildcodeunits_arguments)]
-        
-        #run scbuildcodeunits inside the SCBuilder-image. the repository is mounted into the container and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
+
+        #run scbuildcodeunits inside the SCBuilder-image. base_mount_folder is mounted into the container (covering the repository and, for submodules, its real gitdir) and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
         docker_arguments = [
             "run", "--rm",
-            "-v", f"{self.repository}:{container_repository_folder}",
+            "-v", f"{base_mount_folder}:{container_base_mount_folder}",
             "-v", "/var/run/docker.sock:/var/run/docker.sock",
-        ] + git_dir_docker_arguments + [
             "-w", container_repository_folder,
             image,
         ] + scbuildcodeunits_arguments
         self.sc.log.log(f"Build codeunits in container using image \"{image}\"...")
-        try:
-            # the exitcode is evaluated by the caller (returned as part of the result-tuple), so the program-runner must not raise on a non-zero exitcode here.
-            result=self.sc.run_program_argsasarray("docker", docker_arguments, throw_exception_if_exitcode_is_not_zero=False, print_live_output=True)
-        finally:
-            if staged_git_pointer_file is not None:
-                GeneralUtilities.ensure_file_does_not_exist(staged_git_pointer_file)
-            if staged_git_config_file is not None:
-                GeneralUtilities.ensure_file_does_not_exist(staged_git_config_file)
+        # the exitcode is evaluated by the caller (returned as part of the result-tuple), so the program-runner must not raise on a non-zero exitcode here.
+        result=self.sc.run_program_argsasarray("docker", docker_arguments, throw_exception_if_exitcode_is_not_zero=False, print_live_output=True)
         exit_code:int=result[0]
         stdout:str=result[1] or GeneralUtilities.empty_string
         stderr:str=result[2] or GeneralUtilities.empty_string
