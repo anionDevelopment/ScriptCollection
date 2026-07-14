@@ -613,6 +613,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         GeneralUtilities.ensure_directory_exists(test_working_directory)
         try:
             program_output=self._protected_sc.run_program_argsasarray("dotnet", args, test_working_directory, print_live_output=self.get_verbosity()==LogLevel.Debug, timeoutInSeconds=60*20, env_vars={"MSBUILDDISABLENODEREUSE": "1"})
+            test_output:str=program_output[1]
             output_lines=program_output[1].split("\n")
             output_lines=[line for line in output_lines if GeneralUtilities.string_has_content(line)]
             generated_coverage_file: str = output_lines[-1].strip()#the cobertura file is printed in the end of the output by the xplat collector
@@ -635,7 +636,21 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             if os.path.basename(subfolder).startswith("BuildResultTests_DotNet_"):
                 GeneralUtilities.ensure_directory_does_not_exist(subfolder)
 
+        amount_of_ignored_testcases:int=self.__get_amount_of_ignored_testcases(test_output)
+        project_has_ignored_testcases:bool=0<amount_of_ignored_testcases
+        if project_has_ignored_testcases:
+            raise ValueError(f"Project '{codeunit_name}' has {amount_of_ignored_testcases} ignored testcases.", LogLevel.Warning)
 
+    @GeneralUtilities.check_arguments
+    def __get_amount_of_ignored_testcases(self, test_output: str) -> int:
+        # Ignored (=skipped) testcases are counted in the summary-line which dotnet-test prints for each test-project.
+        # The summary of the VSTest-runner looks like "Failed: 0, Passed: 3, Skipped: 1, Total: 4" and the summary of the
+        # Microsoft-Testing-Platform-runner looks like "total: 4 / failed: 0 / succeeded: 3 / skipped: 1".
+        result: int = 0
+        for match in re.finditer(r"skipped:\s*(\d+)", test_output, re.IGNORECASE):
+            result = result+int(match.group(1))
+        return result
+    
     @GeneralUtilities.check_arguments
     def __remove_unrelated_package_from_testcoverage_file(self, file: str, codeunit_name: str) -> None:
         root: etree._ElementTree = etree.parse(file)
