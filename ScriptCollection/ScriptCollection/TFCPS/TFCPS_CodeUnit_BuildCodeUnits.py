@@ -427,7 +427,11 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
     @GeneralUtilities.check_arguments
     def add_ready_to_merge_flag(self) -> bool:
-        return self.__add_ready_to_merge_flag
+        if self.__add_ready_to_merge_flag:
+            return True
+        if self.sc.git_get_current_branch_name(self.repository)=="other/maintenance":
+            return True
+        return False
 
     @GeneralUtilities.check_arguments
     def update_dependencies(self) -> None:
