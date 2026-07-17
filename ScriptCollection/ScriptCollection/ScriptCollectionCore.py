@@ -2657,7 +2657,9 @@ class ScriptCollectionCore:
     def get_version_from_gitversion(self, folder: str, variable: str) -> str:
         git_folder:str=self.get_real_git_folder(folder)
         cache_folder:str=os.path.join(git_folder,"gitversion_cache")
-        GeneralUtilities.ensure_directory_does_not_exist(cache_folder)
+        enable_cache:bool=False
+        if enable_cache:
+            GeneralUtilities.ensure_directory_does_not_exist(cache_folder)
         # /nofetch and /nonormalize: avoid network calls / branch normalization (no auth, no DNS, deterministic in containers and offline).
         # called twice as workaround for issue 1877 in gitversion ( https://github.com/GitTools/GitVersion/issues/1877 )
         # timeoutInSeconds: gitversion finishes within seconds on a normal repository; enforce a timeout so a hanging gitversion-process (observed in some build-containers) aborts the build instead of waiting forever.
