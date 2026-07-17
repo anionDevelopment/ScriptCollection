@@ -357,7 +357,7 @@ def GenerateCertificateSignRequest() -> int:
     parser.add_argument('--subj_o', required=True)
     parser.add_argument('--subj_ou', required=True)
     args = parser.parse_args()
-    ScriptCollectionCore().generate_certificate_sign_request(os.getcwd(), args.domain, args.filename, args.subj_c, args.subj_st, args.subj_l, args.subj_o, args.sub_ou)
+    ScriptCollectionCore().generate_certificate_sign_request(os.getcwd(), args.domain, args.filename, args.subj_c, args.subj_st, args.subj_l, args.subj_o, args.subj_ou)
     return 0
 
 
@@ -369,7 +369,7 @@ def SignCertificate() -> int:
     parser.add_argument('--filename', required=True)
     parser.add_argument('--days_until_expire', required=False, default=None, type=int)
     args = parser.parse_args()
-    ScriptCollectionCore().sign_certificate(os.getcwd(), args.cafolder, args.caname, args.targetcertificate, args.filename, args.args.days_until_expire)
+    ScriptCollectionCore().sign_certificate(os.getcwd(), args.cafolder, args.caname, args.targetcertificate, args.filename, args.days_until_expire)
     return 0
 
 
