@@ -1217,7 +1217,7 @@ def ShowProjectVersion() -> int:
     args = parser.parse_args()
     repository = GeneralUtilities.resolve_relative_path(args.repository, os.getcwd()) if args.repository is not None else os.getcwd()
     sc: ScriptCollectionCore = ScriptCollectionCore()
-    GeneralUtilities.write_message_to_stdout(sc.get_semver_version_from_gitversion(repository))
+    GeneralUtilities.write_message_to_stdout(sc.get_semver_version(repository))
     return 0
 
 

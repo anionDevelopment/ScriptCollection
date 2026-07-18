@@ -1641,7 +1641,7 @@ class ScriptCollectionCore:
     def SCCreateSimpleMergeWithoutRelease(self, repository: str, sourcebranch: str, targetbranch: str, remotename: str, remove_source_branch: bool) -> None:
         commitid = self.git_merge(repository, sourcebranch, targetbranch, False, True)
         self.git_merge(repository, targetbranch, sourcebranch, True, True)
-        created_version = self.get_semver_version_from_gitversion(repository)
+        created_version = self.get_semver_version(repository)
         self.git_create_tag(repository, commitid, f"v{created_version}", True)
         self.git_push(repository, remotename, targetbranch, targetbranch, False, True)
         if (GeneralUtilities.string_has_nonwhitespace_content(remotename)):
@@ -2489,7 +2489,7 @@ class ScriptCollectionCore:
         return f"{major}.{minor}.{patch}"
 
     @GeneralUtilities.check_arguments
-    def get_semver_version_from_gitversion(self, repository_folder: str) -> str:
+    def get_semver_version(self, repository_folder: str) -> str:
         self.assert_is_git_repository(repository_folder)
         if (self.git_repository_has_commits(repository_folder)):
             has_tags=self.git_repository_has_tags(repository_folder)
@@ -2499,17 +2499,16 @@ class ScriptCollectionCore:
                 current_branch_name:str=self.git_get_current_branch_name(repository_folder)
                 latest_version_tag=self.get_latest_git_tag(repository_folder)
                 current_version=latest_version_tag[1:]#remove "v"-prefix
+                result = current_version
                 if current_branch_name in ("main", "master", "stable"):
                     GeneralUtilities.assert_condition(not repo_has_uncommitted_changes, f"Repository '{repository_folder}' is on branch '{current_branch_name}' and has uncommitted changes. This is not allowed.")
                     GeneralUtilities.assert_condition(current_commit_is_on_tag, f"Repository '{repository_folder}' does not have a tag. This is not allowed.")
-                    result = current_version
                 else:
-                    if current_commit_is_on_tag and not repo_has_uncommitted_changes:
-                        result = current_version
-                    else:
-                        result = self.get_version_from_gitversion(repository_folder, "MajorMinorPatch")
-                        if current_commit_is_on_tag and repo_has_uncommitted_changes:
-                            result = self.__get_next_version_from_gitversion(repository_folder, current_branch_name)
+                    if not current_commit_is_on_tag or repo_has_uncommitted_changes:
+                        pass#TODO increase the version in "result" (there is probably a function for that in this class which can maybe used):
+                        #if the current branch starts with "feature/" increase the minor version and set the patch version to 0.
+                        #if the current branch starts with "major/" increase the major version and set the patch version to 0 and set the minor version to 0.
+                        #otherwise increase only the patch version.                        
             else:
                 result = "0.1.0"
         else:
