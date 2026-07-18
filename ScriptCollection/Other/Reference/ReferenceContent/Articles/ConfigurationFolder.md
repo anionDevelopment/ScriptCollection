@@ -131,7 +131,7 @@ MyPrivateFeed,https://my-nuget.example.com/v3/index.json,user,pa$$w0rD
 
 ## Per-repository configuration
 
-In addition to the machine-wide `~/.ScriptCollection`-folder, each repository has its own `<repository>/.ScriptCollection`-folder. The most relevant file there is:
+In addition to the machine-wide `~/.ScriptCollection`-folder, each repository has its own `<repository>/.ScriptCollection`-folder. The most relevant files there are:
 
 - `<repository>/.ScriptCollection/OCIImages/ImageDefinition.csv`: Defines which OCI-images the repository uses, their upstream- (fallback-) registry and the default-tag. Columns: `ImageName;UpstreamRegistryAddress;DefaultTag`.
 
@@ -141,3 +141,20 @@ Debian;docker.io/library/debian;13.4-slim
 ```
 
 This file (per repository) defines the fallback-registry and tag, while `~/.ScriptCollection/GlobalCache/OCIImages/ImageRegistries.csv` (machine-wide) defines the custom registry to prefer.
+
+### `<repository>/.ScriptCollection/RequiredEnvVariables.csv`
+
+Defines environment-variables which are passed into the container when the repository's codeunits are built in a container (`scbuildcodeunitsc`), without having to specify them explicitly on every `scbuildcodeunitsc`-call. The file is optional; if it does not exist, no additional environment-variables are passed. Columns: `EnvVariableName;Kind;Value`.
+
+`Kind` is one of:
+
+- `literal`: `Value` is the value of the environment-variable itself.
+- `hostenvvariable`: `Value` is the name of an environment-variable which must be set on the host-system; its value is used.
+- `file`: `Value` is a path (resolved relative to the repository if not absolute) to a text-file whose content (without a trailing linebreak) is used.
+
+```csv
+EnvVariableName;Kind;Value
+MyLiteralVariable;literal;MyValue
+MyHostVariable;hostenvvariable;MY_HOST_ENV_VARIABLE
+MySecretVariable;file;Other/Secrets/MySecretVariable.txt
+```

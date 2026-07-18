@@ -165,6 +165,61 @@ items:
         # assert
         assert expected_result == actual_result
 
+    def test_get_required_env_variables_returns_empty_dict_when_file_does_not_exist(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository:
+
+            # act
+            actual_result = t.get_required_env_variables(repository)
+
+            # assert
+            assert not actual_result
+
+    def test_get_required_env_variables_resolves_all_kinds(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository:
+            value_file = os.path.join(repository, "MySecretVariable.txt")
+            GeneralUtilities.write_text_to_file(value_file, "ValueFromFile\n")
+            required_env_variables_file = t.get_required_env_variables_file(repository)
+            GeneralUtilities.ensure_directory_exists(os.path.dirname(required_env_variables_file))
+            GeneralUtilities.ensure_file_exists(required_env_variables_file)
+            GeneralUtilities.write_text_to_file(required_env_variables_file, "EnvVariableName;Kind;Value\n"
+                                                 "MyLiteralVariable;literal;MyValue\n"
+                                                 "MyHostVariable;hostenvvariable;MY_HOST_ENV_VARIABLE_FOR_TEST\n"
+                                                 "MySecretVariable;file;MySecretVariable.txt\n")
+            os.environ["MY_HOST_ENV_VARIABLE_FOR_TEST"] = "ValueFromHost"
+            expected_result = {
+                "MyLiteralVariable": "MyValue",
+                "MyHostVariable": "ValueFromHost",
+                "MySecretVariable": "ValueFromFile",
+            }
+
+            try:
+                # act
+                actual_result = t.get_required_env_variables(repository)
+            finally:
+                del os.environ["MY_HOST_ENV_VARIABLE_FOR_TEST"]
+
+            # assert
+            assert actual_result == expected_result
+
+    def test_get_required_env_variables_throws_when_host_env_variable_is_not_set(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository:
+            required_env_variables_file = t.get_required_env_variables_file(repository)
+            GeneralUtilities.ensure_directory_exists(os.path.dirname(required_env_variables_file))
+            GeneralUtilities.ensure_file_exists(required_env_variables_file)
+            GeneralUtilities.write_text_to_file(required_env_variables_file, "EnvVariableName;Kind;Value\n"
+                                                 "MyHostVariable;hostenvvariable;MY_NOT_EXISTING_HOST_ENV_VARIABLE_FOR_TEST\n")
+            os.environ.pop("MY_NOT_EXISTING_HOST_ENV_VARIABLE_FOR_TEST", None)
+
+            # act/assert
+            with self.assertRaises(ValueError):
+                t.get_required_env_variables(repository)
+
     def test_generate_toc_md_file_content_with_toc_without_items_property(self) -> None:
         # arrange
         function_input = """- uid: Example.Core

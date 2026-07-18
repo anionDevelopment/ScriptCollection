@@ -114,7 +114,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
                 self.__collect_metrics()
                 self.__generate_loc_diagram()
 
-        except Exception as exception:
+        except Exception:
             error_occurred=True
             raise
         finally:
@@ -205,12 +205,18 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if test:
             scbuildcodeunits_arguments=["bash","-c", "pip3 install scriptcollection --upgrade && scshowversion && "+" ".join(scbuildcodeunits_arguments)]
 
+        #pass the env-variables defined in <repository>/.ScriptCollection/RequiredEnvVariables.csv (if any) into the container so they do not have to be specified explicitly on every scbuildcodeunitsc-call.
+        env_arguments: list[str] = []
+        for env_variable_name, env_variable_value in self.tfcps_tools_general.get_required_env_variables(self.repository).items():
+            env_arguments += ["-e", f"{env_variable_name}={env_variable_value}"]
+
         #run scbuildcodeunits inside the SCBuilder-image. base_mount_folder is mounted into the container (covering the repository and, for submodules, its real gitdir) and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
         docker_arguments = [
             "run", "--rm",
             "-v", f"{base_mount_folder}:{container_base_mount_folder}",
             "-v", "/var/run/docker.sock:/var/run/docker.sock",
             "-w", container_repository_folder,
+        ] + env_arguments + [
             image,
         ] + scbuildcodeunits_arguments
         self.sc.log.log(f"Build codeunits in container using image \"{image}\"...")
