@@ -453,6 +453,41 @@ class TFCPS_Tools_General:
         return str(root.xpath('/cps:productinformation/cps:producttitle/text()', namespaces={'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'})[0])
 
     @GeneralUtilities.check_arguments
+    def get_required_env_variables_file(self, repository: str) -> str:
+        return os.path.join(repository, ".ScriptCollection", "RequiredEnvVariables.csv")
+
+    @GeneralUtilities.check_arguments
+    def get_required_env_variables(self, repository: str) -> dict[str, str]:
+        """Reads '<repository>/.ScriptCollection/RequiredEnvVariables.csv' and resolves the value of each environment-variable
+        defined in it. The file is optional; if it does not exist an empty dict is returned. Columns: EnvVariableName;Kind;Value.
+        'Kind' is one of 'literal' (Value is used as-is), 'hostenvvariable' (Value is the name of an environment-variable which
+        must be set on the host-system) or 'file' (Value is a path - resolved relative to the repository if not absolute - to a
+        text-file whose content, without a trailing linebreak, is used). This function centralizes that resolution so every
+        caller which needs these environment-variables (for example to pass them into a build-container) obtains identical
+        values instead of re-implementing the resolution-logic."""
+        result: dict[str, str] = {}
+        file = self.get_required_env_variables_file(repository)
+        if not os.path.isfile(file):
+            return result
+        allowed_kinds = ["literal", "hostenvvariable", "file"]
+        for entry in GeneralUtilities.read_csv_file(file, True):
+            env_variable_name = entry[0]
+            kind = entry[1]
+            value = entry[2]
+            GeneralUtilities.assert_condition(kind in allowed_kinds, f"Unknown kind '{kind}' for required environment-variable '{env_variable_name}' defined in '{file}'. Allowed values are: {', '.join(allowed_kinds)}.")
+            if kind == "literal":
+                resolved_value = value
+            elif kind == "hostenvvariable":
+                resolved_value = os.environ.get(value)
+                GeneralUtilities.assert_condition(resolved_value is not None, f"The environment-variable '{env_variable_name}' defined in '{file}' is supposed to be taken from the host-environment-variable '{value}', but that environment-variable is not set.")
+            else:  # file
+                value_file = GeneralUtilities.resolve_relative_path(value, repository)
+                GeneralUtilities.assert_file_exists(value_file, f"The environment-variable '{env_variable_name}' defined in '{file}' is supposed to be taken from the file '{value_file}', but that file does not exist.")
+                resolved_value = GeneralUtilities.read_text_from_file(value_file).strip()
+            result[env_variable_name] = resolved_value
+        return result
+
+    @GeneralUtilities.check_arguments
     def set_constant(self, codeunit_folder: str, constantname: str, constant_value: str, documentationsummary: str = None, constants_valuefile: str = None) -> None:
         self.assert_is_codeunit_folder(codeunit_folder)
         if documentationsummary is None:
