@@ -7,7 +7,6 @@ The following requirements from the [tools-list](https://github.com/anionDevevlo
 - `coverage`
 - `docfx`
 - `git`
-- `gitversion`
 - `python`
 - `reportgenerator`
 - `scriptcollection`

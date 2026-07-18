@@ -2490,6 +2490,18 @@ class ScriptCollectionCore:
 
     @GeneralUtilities.check_arguments
     def get_semver_version(self, repository_folder: str) -> str:
+        """
+        Calculates the semantic version of the current state of the given repository.
+        The result is based on the latest git-tag (which is expected to have the format "v<major>.<minor>.<patch>") and the name of the current branch:
+        - If the repository does not have any commits or does not have any tags then the version "0.1.0" is returned.
+        - If the current branch is "main", "master" or "stable" then the repository must not have uncommitted changes and the current commit must be tagged.
+          In this case the version of the tag of the current commit is returned. Otherwise an exception will be thrown.
+        - On all other branches the version of the latest tag is returned as long as the current commit is tagged and the repository does not have uncommitted changes.
+          If the current commit is not tagged or the repository has uncommitted changes then the version of the latest tag will be incremented depending on the name of the current branch:
+          - Branches with the prefix "major/" increase the major-version and reset the minor- and the patch-version to 0.
+          - Branches with the prefix "feature/" increase the minor-version and reset the patch-version to 0.
+          - All other branches increase the patch-version.
+        """
         self.assert_is_git_repository(repository_folder)
         if (self.git_repository_has_commits(repository_folder)):
             has_tags=self.git_repository_has_tags(repository_folder)
@@ -2505,10 +2517,16 @@ class ScriptCollectionCore:
                     GeneralUtilities.assert_condition(current_commit_is_on_tag, f"Repository '{repository_folder}' does not have a tag. This is not allowed.")
                 else:
                     if not current_commit_is_on_tag or repo_has_uncommitted_changes:
-                        pass#TODO increase the version in "result" (there is probably a function for that in this class which can maybe used):
-                        #if the current branch starts with "feature/" increase the minor version and set the patch version to 0.
-                        #if the current branch starts with "major/" increase the major version and set the patch version to 0 and set the minor version to 0.
-                        #otherwise increase only the patch version.                        
+                        if current_branch_name.startswith("major/"):
+                            incremented = self.increment_version(current_version, True, False, False)
+                            major = incremented.split(".")[0]
+                            result = f"{major}.0.0"
+                        elif current_branch_name.startswith("feature/"):
+                            incremented = self.increment_version(current_version, False, True, False)
+                            splitted = incremented.split(".")
+                            result = f"{splitted[0]}.{splitted[1]}.0"
+                        else:
+                            result = self.increment_version(current_version, False, False, True)
             else:
                 result = "0.1.0"
         else:
