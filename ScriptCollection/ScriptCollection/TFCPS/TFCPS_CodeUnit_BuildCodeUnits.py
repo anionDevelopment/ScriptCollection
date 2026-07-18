@@ -42,88 +42,95 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     def build_codeunits(self) -> None:
         self.sc.log.log(GeneralUtilities.get_line())
         start_time:datetime=GeneralUtilities.get_now()
-
-        #assert that the product-information-file exists
-        product_information_file = os.path.join(self.repository, ".ScriptCollection", "ProductInformation.xml")
-        GeneralUtilities.assert_file_exists(product_information_file, f"The file '{product_information_file}' does not exist.")
-        
-        #when the build runs inside a container, ensure the used SCBuilder-image is at least the version required by this repository (defined in .ScriptCollection/OCIImages/ImageDefinition.csv)
-        if self.sc.is_runnning_in_container():
-            scbuilder_version_environment_value = os.environ.get("SCBuilderVersion")
-            GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(scbuilder_version_environment_value), "The environment-variable 'SCBuilderVersion' is not set although the build runs inside a container (environment-variable 'ISRUNNINGINCONTAINER' is 'true').")
-            required_scbuilder_version = Version(self.tfcps_tools_general.oci_image_manager.get_tag_for_image(self.repository, "SCBuilder"))
-            version_match = re.search(r"\d+(\.\d+)+", scbuilder_version_environment_value)
-            GeneralUtilities.assert_condition(version_match is not None, f"The environment-variable 'SCBuilderVersion' (value: '{scbuilder_version_environment_value}') does not contain a version-string.")
-            actual_scbuilder_version = Version(version_match.group(0))
-            GeneralUtilities.assert_condition(actual_scbuilder_version >= required_scbuilder_version, f"The used SCBuilder-version {actual_scbuilder_version} is older than the version {required_scbuilder_version} required by '{self.tfcps_tools_general.get_product_name(self.repository)}' (defined in .ScriptCollection/OCIImages/ImageDefinition.csv). Please update to a newer SCBuilder-image.")
-        
-        if self.is_pre_merge():
-            GeneralUtilities.assert_condition(not self.__assert_no_new_changes,f"A pre-merge build can not be done with the assert-no-new-changes-option.")
         ready_to_merge_file=os.path.join(self.repository,".ScriptCollection",".IsReadyToMerge")
-        GeneralUtilities.ensure_file_does_not_exist(ready_to_merge_file)
-
-        #ensure <repo>/.ScriptCollection/.gitignore is set up (ignores the cache-folder so cache-files never show up as uncommitted changes)
-        self.sc.ensure_scriptcollection_gitignore_is_setup(self.repository)
-
-        self.sc.log.log(f"Start building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(start_time,False)}. (Target environment-type: {self.target_environment_type})")
-        if self.__assert_no_new_changes:
-            self.sc.assert_no_uncommitted_changes(self.repository,"Can not build codeunit: There are uncommitted changes in the repository.")
-
+        error_occurred=False
         try:
-            xmlschema.validate(product_information_file, "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/main/Conventions/RepositoryStructure/CommonProjectStructure/projectinformation.xsd")
-        except Exception as exception:
-            self.sc.log.log_exception(f"'{product_information_file}' could not be validated against the XSD:", exception, LogLevel.Warning)
+            #assert that the product-information-file exists
+            product_information_file = os.path.join(self.repository, ".ScriptCollection", "ProductInformation.xml")
+            GeneralUtilities.assert_file_exists(product_information_file, f"The file '{product_information_file}' does not exist.")
+            
+            #when the build runs inside a container, ensure the used SCBuilder-image is at least the version required by this repository (defined in .ScriptCollection/OCIImages/ImageDefinition.csv)
+            if self.sc.is_runnning_in_container():
+                scbuilder_version_environment_value = os.environ.get("SCBuilderVersion")
+                GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(scbuilder_version_environment_value), "The environment-variable 'SCBuilderVersion' is not set although the build runs inside a container (environment-variable 'ISRUNNINGINCONTAINER' is 'true').")
+                required_scbuilder_version = Version(self.tfcps_tools_general.oci_image_manager.get_tag_for_image(self.repository, "SCBuilder"))
+                version_match = re.search(r"\d+(\.\d+)+", scbuilder_version_environment_value)
+                GeneralUtilities.assert_condition(version_match is not None, f"The environment-variable 'SCBuilderVersion' (value: '{scbuilder_version_environment_value}') does not contain a version-string.")
+                actual_scbuilder_version = Version(version_match.group(0))
+                GeneralUtilities.assert_condition(actual_scbuilder_version >= required_scbuilder_version, f"The used SCBuilder-version {actual_scbuilder_version} is older than the version {required_scbuilder_version} required by '{self.tfcps_tools_general.get_product_name(self.repository)}' (defined in .ScriptCollection/OCIImages/ImageDefinition.csv). Please update to a newer SCBuilder-image.")
+            
+            if self.is_pre_merge():
+                GeneralUtilities.assert_condition(not self.__assert_no_new_changes,f"A pre-merge build can not be done with the assert-no-new-changes-option.")
 
-        #run prepare-script
-        self.run_prepare_script()
 
-        #check if changelog exists
-        changelog_file=os.path.join(self.repository,"Other","Resources","Changelog",f"v{self.tfcps_tools_general.get_version_of_project(self.repository)}.md")
-        GeneralUtilities.assert_file_exists(changelog_file,f"Changelogfile \"{changelog_file}\" does not exist. Try to create it for example using \"sccreatechangelogentry -m ...\".") 
+            #ensure <repo>/.ScriptCollection/.gitignore is set up (ignores the cache-folder so cache-files never show up as uncommitted changes)
+            self.sc.ensure_scriptcollection_gitignore_is_setup(self.repository)
 
-        #mark current version as supported
-        now = GeneralUtilities.get_now()
-        project_version:str=self.tfcps_tools_general.get_version_of_project(self.repository)
-        if not self.tfcps_tools_general.suport_information_exists(self.repository, project_version):
-            amount_of_years_for_support:int=1
-            support_time = timedelta(days=365*amount_of_years_for_support+30*3+1) 
-            until = now + support_time
-            until_day = datetime(until.year, until.month, until.day, 0, 0, 0)
-            from_day = datetime(now.year, now.month, now.day, 0, 0, 0)
-            self.tfcps_tools_general.mark_current_version_as_supported(self.repository,project_version,from_day,until_day)
+            self.sc.log.log(f"Start building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(start_time,False)}. (Target environment-type: {self.target_environment_type})")
+            if self.__assert_no_new_changes:
+                self.sc.assert_no_uncommitted_changes(self.repository,"Can not build codeunit: There are uncommitted changes in the repository.")
 
-        codeunits:list[str]=self.tfcps_tools_general.get_codeunits(self.repository)
-        GeneralUtilities.assert_condition(0<len(codeunits),f"No codeunits found in repository {self.repository}.")
-        self.sc.log.log("Codeunits will be built in the following order:")
-        for codeunit_name in codeunits:
-            self.sc.log.log(f"  - {codeunit_name}")
-        for codeunit_name in codeunits:
-            tFCPS_CodeUnit_BuildCodeUnit:TFCPS_CodeUnit_BuildCodeUnit = TFCPS_CodeUnit_BuildCodeUnit(os.path.join(self.repository,codeunit_name),self.sc.log.loglevel,self.target_environment_type,self.additionalargumentsfile,self.use_cache(),self.is_pre_merge())
+            try:
+                xmlschema.validate(product_information_file, "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/main/Conventions/RepositoryStructure/CommonProjectStructure/projectinformation.xsd")
+            except Exception as exception:
+                self.sc.log.log_exception(f"'{product_information_file}' could not be validated against the XSD:", exception, LogLevel.Warning)
+
+            #run prepare-script
+            self.run_prepare_script()
+
+            #check if changelog exists
+            changelog_file=os.path.join(self.repository,"Other","Resources","Changelog",f"v{self.tfcps_tools_general.get_version_of_project(self.repository)}.md")
+            GeneralUtilities.assert_file_exists(changelog_file,f"Changelogfile \"{changelog_file}\" does not exist. Try to create it for example using \"sccreatechangelogentry -m ...\".") 
+
+            #mark current version as supported
+            now = GeneralUtilities.get_now()
+            project_version:str=self.tfcps_tools_general.get_version_of_project(self.repository)
+            if not self.tfcps_tools_general.suport_information_exists(self.repository, project_version):
+                amount_of_years_for_support:int=1
+                support_time = timedelta(days=365*amount_of_years_for_support+30*3+1) 
+                until = now + support_time
+                until_day = datetime(until.year, until.month, until.day, 0, 0, 0)
+                from_day = datetime(now.year, now.month, now.day, 0, 0, 0)
+                self.tfcps_tools_general.mark_current_version_as_supported(self.repository,project_version,from_day,until_day)
+
+            codeunits:list[str]=self.tfcps_tools_general.get_codeunits(self.repository)
+            GeneralUtilities.assert_condition(0<len(codeunits),f"No codeunits found in repository {self.repository}.")
+            self.sc.log.log("Codeunits will be built in the following order:")
+            for codeunit_name in codeunits:
+                self.sc.log.log(f"  - {codeunit_name}")
+            for codeunit_name in codeunits:
+                tFCPS_CodeUnit_BuildCodeUnit:TFCPS_CodeUnit_BuildCodeUnit = TFCPS_CodeUnit_BuildCodeUnit(os.path.join(self.repository,codeunit_name),self.sc.log.loglevel,self.target_environment_type,self.additionalargumentsfile,self.use_cache(),self.is_pre_merge())
+                self.sc.log.log(GeneralUtilities.get_line())
+                tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()
+
             self.sc.log.log(GeneralUtilities.get_line())
-            tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()
 
-        self.sc.log.log(GeneralUtilities.get_line())
+            self.search_for_secrets()
+            self.__normalize_md_and_txt_line_endings()
+            self.tfcps_tools_general.generate_svg_files_from_plantuml_files_for_repository(self.repository, self.use_cache())
 
-        self.search_for_secrets()
-        self.__normalize_md_and_txt_line_endings()
-        self.tfcps_tools_general.generate_svg_files_from_plantuml_files_for_repository(self.repository, self.use_cache())
+            if self.is_pre_merge():
+                self.__translate()
+                self.__collect_metrics()
+                self.__generate_loc_diagram()
 
-        if self.is_pre_merge():
-            self.__translate()
-            self.__collect_metrics()
-            self.__generate_loc_diagram()
+        except Exception as exception:
+            error_occurred=True
+            raise
+        finally:
+            if error_occurred:
+                GeneralUtilities.ensure_file_does_not_exist(ready_to_merge_file)
+            else:
+                if self.is_pre_merge():
+                    GeneralUtilities.ensure_file_does_not_exist(ready_to_merge_file)#ensure it does not exist because the flag is not supposed to be on the main branch
+                else:
+                    if self.is_working_branch():
+                        if self.add_ready_to_merge_flag():
+                            GeneralUtilities.ensure_file_exists(ready_to_merge_file)
+
 
         if self.__assert_no_new_changes:
             self.sc.assert_no_uncommitted_changes(self.repository,"There are new uncommitted changes in the repository.")
-
-        #the ready-to-merge-flag-file itself must not be part of the uncommitted-changes-check above, otherwise setting/clearing it would always trigger that assertion.
-        if self.is_pre_merge():
-            GeneralUtilities.ensure_file_does_not_exist(ready_to_merge_file)
-        else:
-            if self.is_working_branch():
-                if self.add_ready_to_merge_flag():
-                    GeneralUtilities.ensure_file_exists(ready_to_merge_file)
-
         end_time:datetime=GeneralUtilities.get_now()
         duration=end_time-start_time
         self.sc.log.log(f"Finished building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(end_time,False)}. (Duration: {GeneralUtilities.timedelta_to_simple_string(duration)})")
