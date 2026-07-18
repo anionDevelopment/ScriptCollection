@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.37"
+version = "4.3.38"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -1641,7 +1641,7 @@ class ScriptCollectionCore:
     def SCCreateSimpleMergeWithoutRelease(self, repository: str, sourcebranch: str, targetbranch: str, remotename: str, remove_source_branch: bool) -> None:
         commitid = self.git_merge(repository, sourcebranch, targetbranch, False, True)
         self.git_merge(repository, targetbranch, sourcebranch, True, True)
-        created_version = self.get_semver_version_from_gitversion(repository)
+        created_version = self.get_semver_version(repository)
         self.git_create_tag(repository, commitid, f"v{created_version}", True)
         self.git_push(repository, remotename, targetbranch, targetbranch, False, True)
         if (GeneralUtilities.string_has_nonwhitespace_content(remotename)):
@@ -2489,7 +2489,19 @@ class ScriptCollectionCore:
         return f"{major}.{minor}.{patch}"
 
     @GeneralUtilities.check_arguments
-    def get_semver_version_from_gitversion(self, repository_folder: str) -> str:
+    def get_semver_version(self, repository_folder: str) -> str:
+        """
+        Calculates the semantic version of the current state of the given repository.
+        The result is based on the latest git-tag (which is expected to have the format "v<major>.<minor>.<patch>") and the name of the current branch:
+        - If the repository does not have any commits or does not have any tags then the version "0.1.0" is returned.
+        - If the current branch is "main", "master" or "stable" then the repository must not have uncommitted changes and the current commit must be tagged.
+          In this case the version of the tag of the current commit is returned. Otherwise an exception will be thrown.
+        - On all other branches the version of the latest tag is returned as long as the current commit is tagged and the repository does not have uncommitted changes.
+          If the current commit is not tagged or the repository has uncommitted changes then the version of the latest tag will be incremented depending on the name of the current branch:
+          - Branches with the prefix "major/" increase the major-version and reset the minor- and the patch-version to 0.
+          - Branches with the prefix "feature/" increase the minor-version and reset the patch-version to 0.
+          - All other branches increase the patch-version.
+        """
         self.assert_is_git_repository(repository_folder)
         if (self.git_repository_has_commits(repository_folder)):
             has_tags=self.git_repository_has_tags(repository_folder)
@@ -2499,17 +2511,22 @@ class ScriptCollectionCore:
                 current_branch_name:str=self.git_get_current_branch_name(repository_folder)
                 latest_version_tag=self.get_latest_git_tag(repository_folder)
                 current_version=latest_version_tag[1:]#remove "v"-prefix
+                result = current_version
                 if current_branch_name in ("main", "master", "stable"):
                     GeneralUtilities.assert_condition(not repo_has_uncommitted_changes, f"Repository '{repository_folder}' is on branch '{current_branch_name}' and has uncommitted changes. This is not allowed.")
                     GeneralUtilities.assert_condition(current_commit_is_on_tag, f"Repository '{repository_folder}' does not have a tag. This is not allowed.")
-                    result = current_version
                 else:
-                    if current_commit_is_on_tag and not repo_has_uncommitted_changes:
-                        result = current_version
-                    else:
-                        result = self.get_version_from_gitversion(repository_folder, "MajorMinorPatch")
-                        if current_commit_is_on_tag and repo_has_uncommitted_changes:
-                            result = self.__get_next_version_from_gitversion(repository_folder, current_branch_name)
+                    if not current_commit_is_on_tag or repo_has_uncommitted_changes:
+                        if current_branch_name.startswith("major/"):
+                            incremented = self.increment_version(current_version, True, False, False)
+                            major = incremented.split(".")[0]
+                            result = f"{major}.0.0"
+                        elif current_branch_name.startswith("feature/"):
+                            incremented = self.increment_version(current_version, False, True, False)
+                            splitted = incremented.split(".")
+                            result = f"{splitted[0]}.{splitted[1]}.0"
+                        else:
+                            result = self.increment_version(current_version, False, False, True)
             else:
                 result = "0.1.0"
         else:

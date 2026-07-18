@@ -550,7 +550,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def get_version_of_project(self,repositoryfolder:str) -> str:
         self.__sc.assert_is_git_repository(repositoryfolder)
-        return self.__sc.get_semver_version_from_gitversion(repositoryfolder)
+        return self.__sc.get_semver_version(repositoryfolder)
 
     @GeneralUtilities.check_arguments
     def __try_calculate_changelog_message(self, repositoryfolder: str):
@@ -1702,7 +1702,7 @@ class TFCPS_Tools_General:
         self.__sc.git_fetch(submodule_folder, remote)
         self.__sc.git_checkout(submodule_folder, local_branch)
         self.__sc.git_pull(submodule_folder, remote, local_branch, remote_branch, True)
-        current_version = self.__sc.get_semver_version_from_gitversion(repository_folder)
+        current_version = self.__sc.get_semver_version(repository_folder)
         changelog_file = os.path.join(repository_folder, "Other", "Resources", "Changelog", f"v{current_version}.md")
         if (not os.path.isfile(changelog_file)):
             GeneralUtilities.ensure_file_exists(changelog_file)
