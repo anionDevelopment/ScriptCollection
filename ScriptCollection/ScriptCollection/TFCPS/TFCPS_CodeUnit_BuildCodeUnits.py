@@ -106,7 +106,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.sc.log.log(GeneralUtilities.get_line())
 
             self.search_for_secrets()
-            self.__normalize_md_and_txt_line_endings()
+            self.__normalize_line_endings_of_common_files()
             self.tfcps_tools_general.generate_svg_files_from_plantuml_files_for_repository(self.repository, self.use_cache())
 
             if self.is_pre_merge():
@@ -137,9 +137,9 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.sc.log.log(GeneralUtilities.get_line())
 
     @GeneralUtilities.check_arguments
-    def __normalize_md_and_txt_line_endings(self) -> None:
-        #TODO add option do define exceptions (means: files which should not be normalized).
-        for text_file_extension in [".txt", ".md"]:
+    def __normalize_line_endings_of_common_files(self) -> None:
+        #TODO add option to define exceptions (means: files which should not be normalized).
+        for text_file_extension in [".txt", ".md", ".json", ".xml", ".csv", ".yml", ".yaml"]:
             for text_file in self.sc.get_not_git_ignored_files_of_folder(self.repository, text_file_extension):
                 self.sc.normalize_line_endings(text_file)
 
