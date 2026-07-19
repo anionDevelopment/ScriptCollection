@@ -1,10 +1,11 @@
 name: buildpipeline
 on:
-  push:
-    branches:
-      - main
-      - other/next-release
   workflow_dispatch:
+    inputs:
+      TargetEnvironmentType:
+        description: "Target environment-type for the build (e.g. QualityCheck, Productive)."
+        required: false
+        default: QualityCheck
 jobs:
   build-pipeline:
     runs-on: [self-hosted, scriptcollection]
@@ -28,7 +29,7 @@ jobs:
       - name: Prepare build-pipeline
         run: scpreparebuildpipelineforgitlab
       - name: Build codeunits
-        run: scbuildcodeunits -v 4 --assertnonewchanges
+        run: scbuildcodeunits -v 4 -e "${{ inputs.TargetEnvironmentType }}" --assertnonewchanges
       - name: Upload artifacts
         if: success()
         uses: actions/upload-artifact@v4
