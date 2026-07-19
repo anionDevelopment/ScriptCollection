@@ -639,7 +639,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         amount_of_ignored_testcases:int=self.__get_amount_of_ignored_testcases(test_output)
         project_has_ignored_testcases:bool=0<amount_of_ignored_testcases
         if project_has_ignored_testcases:
-            raise ValueError(f"Project '{codeunit_name}' has {amount_of_ignored_testcases} ignored testcases.", LogLevel.Warning)
+            self._protected_sc.log.log(f"Project '{codeunit_name}' has {amount_of_ignored_testcases} ignored testcases.", LogLevel.Warning)
 
     @GeneralUtilities.check_arguments
     def __get_amount_of_ignored_testcases(self, test_output: str) -> int:
