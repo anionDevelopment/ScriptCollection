@@ -62,6 +62,9 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             if self.is_pre_merge():
                 GeneralUtilities.assert_condition(not self.__assert_no_new_changes,f"A pre-merge build can not be done with the assert-no-new-changes-option.")
 
+            #disable autocrlf for this repository so git does not rewrite line-endings on checkout/commit. otherwise the line-endings normalized by __normalize_line_endings_of_common_files would be converted back to crlf, which results in spurious uncommitted changes (and therefore in failing assert-no-new-changes-builds) on windows.
+            self.sc.git_set_local_configuration_value(self.repository, "core.autocrlf", "false")
+
 
             #ensure <repo>/.ScriptCollection/.gitignore is set up (ignores the cache-folder so cache-files never show up as uncommitted changes)
             self.sc.ensure_scriptcollection_gitignore_is_setup(self.repository)
@@ -131,10 +134,24 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
         if self.__assert_no_new_changes:
             self.sc.assert_no_uncommitted_changes(self.repository,"There are new uncommitted changes in the repository.")
+
+        self.__log_hashes_of_artifacts(codeunits)
+
         end_time:datetime=GeneralUtilities.get_now()
         duration=end_time-start_time
         self.sc.log.log(f"Finished building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(end_time,False)}. (Duration: {GeneralUtilities.timedelta_to_simple_string(duration)})")
         self.sc.log.log(GeneralUtilities.get_line())
+
+    @GeneralUtilities.check_arguments
+    def __log_hashes_of_artifacts(self, codeunits:list[str]) -> None:
+        self.sc.log.log("Hashes of the artifacts of the codeunits:")
+        for codeunit_name in codeunits:
+            artifacts_folder = os.path.join(self.repository, codeunit_name, "Other", "Artifacts")
+            if os.path.isdir(artifacts_folder):
+                hash_of_artifacts:str = self.sc.create_hash_of_folder(artifacts_folder)
+                self.sc.log.log(f"  - {codeunit_name}: {hash_of_artifacts}")
+            else:
+                self.sc.log.log(f"  - {codeunit_name}: (no artifacts-folder available)")
 
     @GeneralUtilities.check_arguments
     def __normalize_line_endings_of_common_files(self) -> None:

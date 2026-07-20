@@ -343,7 +343,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
             GeneralUtilities.write_lines_to_file(testfile, example_input)
 
             # act
-            ScriptCollectionCore().sc_organize_lines_in_file(testfile, ScriptCollectionCoreTests.encoding, True, True, True, True)
+            ScriptCollectionCore().organize_lines_in_file(testfile, ScriptCollectionCoreTests.encoding, True, True, True, True)
             # arguments: sort ,remove_duplicated_lines, ignore_first_line, remove_empty_lines, ignored_character
 
             # assert
@@ -361,7 +361,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
             GeneralUtilities.write_lines_to_file(testfile, example_input)
 
             # act
-            ScriptCollectionCore().sc_organize_lines_in_file(testfile, ScriptCollectionCoreTests. encoding, True, True, True, True)
+            ScriptCollectionCore().organize_lines_in_file(testfile, ScriptCollectionCoreTests. encoding, True, True, True, True)
             # arguments: sort ,remove_duplicated_lines, ignore_first_line, remove_empty_lines, ignored_character
 
             # assert
@@ -379,7 +379,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
             GeneralUtilities.write_lines_to_file(testfile, example_input)
 
             # act
-            ScriptCollectionCore().sc_organize_lines_in_file(testfile, ScriptCollectionCoreTests.encoding, True, True, False, True, [])
+            ScriptCollectionCore().organize_lines_in_file(testfile, ScriptCollectionCoreTests.encoding, True, True, False, True, [])
             # arguments: sort ,remove_duplicated_lines, ignore_first_line, remove_empty_lines, ignored_character
 
             # assert
@@ -396,7 +396,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
             GeneralUtilities.write_lines_to_file(testfile, example_input)
 
             # act
-            ScriptCollectionCore().sc_organize_lines_in_file(testfile,  ScriptCollectionCoreTests.encoding, True, True, False, True, ["#", " "])
+            ScriptCollectionCore().organize_lines_in_file(testfile,  ScriptCollectionCoreTests.encoding, True, True, False, True, ["#", " "])
             # arguments: sort ,remove_duplicated_lines, ignore_first_line, remove_empty_lines, ignored_character
 
             # assert

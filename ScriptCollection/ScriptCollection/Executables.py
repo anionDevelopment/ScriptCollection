@@ -21,12 +21,11 @@ Caution: This script can cause harm if you pass a wrong inputfolder-argument.'''
 
     parser.add_argument('--printtableheadline', type=GeneralUtilities.string_to_boolean, const=True, default=True, nargs='?', help='Prints column-titles in the name-mapping-csv-file')
     parser.add_argument('--namemappingfile', default="NameMapping.csv", help='Specifies the file where the name-mapping will be written to')
-    parser.add_argument('--extensions', default="exe,py,sh",
-                        help='Comma-separated list of file-extensions of files where this tool should be applied. Use "*" to obfuscate all')
+    parser.add_argument('--extensions', default="exe,py,sh", help='Comma-separated list of file-extensions of files where this tool should be applied. Use "*" to obfuscate all')
     parser.add_argument('--inputfolder', help='Specifies the foldere where the files are stored whose names should be obfuscated', required=True)
 
     args = parser.parse_args()
-    ScriptCollectionCore().SCFilenameObfuscator(args.inputfolder, args.printtableheadline, args.namemappingfile, args.extensions)
+    ScriptCollectionCore().filenameObfuscator(args.inputfolder, args.printtableheadline, args.namemappingfile, args.extensions)
     return 0
 
 
@@ -41,7 +40,7 @@ This script does not process subfolders transitively.''')
     parser.add_argument('--extensions', default="exe,py,sh", help='Comma-separated list of file-extensions of files where this tool should be applied. Use "*" to obfuscate all')
     args = parser.parse_args()
 
-    ScriptCollectionCore().SCCreateISOFileWithObfuscatedFiles(args.inputfolder, args.outputfile, args.printtableheadline, not args.createnoisofile, args.extensions)
+    ScriptCollectionCore().createISOFileWithObfuscatedFiles(args.inputfolder, args.outputfile, args.printtableheadline, not args.createnoisofile, args.extensions)
     return 0
 
 
@@ -49,7 +48,7 @@ def ChangeHashOfProgram() -> int:
     parser = argparse.ArgumentParser(description='Changes the hash-value of arbitrary files by appending data at the end of the file.')
     parser.add_argument('--inputfile', help='Specifies the script/executable-file whose hash-value should be changed', required=True)
     args = parser.parse_args()
-    ScriptCollectionCore().SCChangeHashOfProgram(args.inputfile)
+    ScriptCollectionCore().changeHashOfProgram(args.inputfile)
     return 0
 
 
@@ -64,7 +63,7 @@ def CalculateBitcoinBlockHash() -> int:
     args = parser.parse_args()
 
     args = parser.parse_args()
-    GeneralUtilities.write_message_to_stdout(ScriptCollectionCore().SCCalculateBitcoinBlockHash(args.version, args.previousblockhash,                                                                                                args.transactionsmerkleroot, args.timestamp, args.target, args.nonce))
+    GeneralUtilities.write_message_to_stdout(ScriptCollectionCore().calculateBitcoinBlockHash(args.version, args.previousblockhash,                                                                                                args.transactionsmerkleroot, args.timestamp, args.target, args.nonce))
     return 0
 
 
@@ -88,7 +87,7 @@ Hints:
 -30 is the commonly used value for the period""")
     parser.add_argument('csvfile', help='File where the 2fa-codes are stored')
     args = parser.parse_args()
-    ScriptCollectionCore().SCShow2FAAsQRCode(args.csvfile)
+    ScriptCollectionCore().show2FAAsQRCode(args.csvfile)
     return 0
 
 
@@ -100,7 +99,7 @@ This program prints all files where the given searchstring was found to the cons
     parser.add_argument('searchstring', help='string to look for')
 
     args = parser.parse_args()
-    ScriptCollectionCore().SCSearchInFiles(args.folder, args.searchstring)
+    ScriptCollectionCore().searchInFiles(args.folder, args.searchstring)
     return 0
 
 
@@ -115,7 +114,7 @@ def ReplaceSubstringsInFilenames() -> int:
 
     args = parser.parse_args()
 
-    ScriptCollectionCore().SCReplaceSubstringsInFilenames(args.folder, args.substringInFilename, args.newSubstringInFilename, args.conflictResolveMode)
+    ScriptCollectionCore().replaceSubstringsInFilenames(args.folder, args.substringInFilename, args.newSubstringInFilename, args.conflictResolveMode)
     return 0
 
 
@@ -126,7 +125,7 @@ def GenerateSnkFiles() -> int:
     parser.add_argument('--amountofkeys', default='10')
 
     args = parser.parse_args()
-    ScriptCollectionCore().SCGenerateSnkFiles(args.outputfolder, args.keysize, args.amountofkeys)
+    ScriptCollectionCore().generateSnkFiles(args.outputfolder, args.keysize, args.amountofkeys)
     return 0
 
 
@@ -142,14 +141,15 @@ def OrganizeLinesInFile() -> int:
     parser.add_argument('--ignored_start_character', default="", help='Characters which should not be considered at the begin of a line')
 
     args = parser.parse_args()
-    ScriptCollectionCore().sc_organize_lines_in_file(args.file, args.encoding, args.sort, args.remove_duplicated_lines, args.ignore_first_line, args.remove_empty_lines, list(args.ignored_start_character))
+    ScriptCollectionCore().organize_lines_in_file(args.file, args.encoding, args.sort, args.remove_duplicated_lines, args.ignore_first_line, args.remove_empty_lines, list(args.ignored_start_character))
 
 
-def CreateHashOfAllFiles() -> int:
+def CreateHashOfFolder() -> int:
     parser = argparse.ArgumentParser(description='Calculates the SHA-256-value of all files in the given folder and stores the hash-value in a file next to the hashed file.')
-    parser.add_argument('folder', help='Folder where the files are stored which should be hashed')
+    parser.add_argument('folder', default=".", help='Folder where the files are stored which should be hashed')
     args = parser.parse_args()
-    ScriptCollectionCore().SCCreateHashOfAllFiles(args.folder)
+    folder:str=GeneralUtilities.resolve_relative_path(args.folder,os.getcwd())
+    ScriptCollectionCore().create_hash_of_folder(folder)
     return 0
 
 
@@ -163,7 +163,7 @@ def CreateSimpleMergeWithoutRelease() -> int:
     parser.add_argument('--no-remove-sourcebranch', dest='removesourcebranch', action='store_false', help='TODO')
     parser.set_defaults(removesourcebranch=False)
     args = parser.parse_args()
-    ScriptCollectionCore().SCCreateSimpleMergeWithoutRelease(args.repository, args.sourcebranch, args.targetbranch, args.remotename, args.removesourcebranch)
+    ScriptCollectionCore().createSimpleMergeWithoutRelease(args.repository, args.sourcebranch, args.targetbranch, args.remotename, args.removesourcebranch)
     return 0
 
 
@@ -172,7 +172,7 @@ def CreateEmptyFileWithSpecificSize() -> int:
     parser.add_argument('name', help='Specifies the name of the created file')
     parser.add_argument('size', help='Specifies the size of the created file')
     args = parser.parse_args()
-    return ScriptCollectionCore().SCCreateEmptyFileWithSpecificSize(args.name, args.size)
+    return ScriptCollectionCore().createEmptyFileWithSpecificSize(args.name, args.size)
 
 
 def ShowMissingFiles() -> int:
@@ -241,15 +241,8 @@ Caution: This script can cause harm if you pass a wrong inputfolder-argument.'''
     parser.add_argument('--inputfolder', help='Specifies the folder where the files are stored whose names should be obfuscated', required=True)
 
     args = parser.parse_args()
-    ScriptCollectionCore().SCObfuscateFilesFolder(args.inputfolder, args.printtableheadline, args.namemappingfile, args.extensions)
+    ScriptCollectionCore().obfuscateFilesFolder(args.inputfolder, args.printtableheadline, args.namemappingfile, args.extensions)
     return 0
-
-
-def HealthCheck() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--file', required=True)
-    args = parser.parse_args()
-    return ScriptCollectionCore().SCHealthcheck(args.file)
 
 
 def BuildCodeUnits() -> int:
