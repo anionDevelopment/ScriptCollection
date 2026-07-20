@@ -1168,17 +1168,7 @@ def SearchForSecrets() -> int:
     return 0
 
 
-def __prepare_build_pipeline(verbosity: int) -> None:
-    # Common preparation for the build-pipeline. The actual buildx-build (see TFCPS_CodeUnitSpecific_Docker.build)
-    # exports the image via "--output type=docker,dest=...tar". The default "docker"-driver can not do that unless
-    # the containerd-image-store is enabled on the daemon, so a "docker-container"-builder is created and selected
-    # here. This is required for GitLab and GitHub (and any other CI) alike, so both entry-points share this logic.
-    sc: ScriptCollectionCore = ScriptCollectionCore()
-    sc.log.loglevel = LogLevel(verbosity)
-    GeneralUtilities.assert_condition(sc.is_running_in_build_container(), "This function should only be run in the build container.")
-    sc.run_program("update-ca-certificates")
-    sc.run_program_argsasarray("sh",["-c","docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder"])
-    sc.run_program("docker","buildx inspect --bootstrap")
+
 
 
 def PrepareBuildPipelineForGitlab() -> int:
@@ -1186,7 +1176,9 @@ def PrepareBuildPipelineForGitlab() -> int:
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
     args = parser.parse_args()
-    __prepare_build_pipeline(int(args.verbosity))
+    sc=ScriptCollectionCore()
+    sc.log.loglevel=LogLevel(int(args.verbosity))
+    sc.prepare_build_pipeline_for_gitlab()
     return 0
 
 
@@ -1195,7 +1187,9 @@ def PrepareBuildPipelineForGithub() -> int:
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
     args = parser.parse_args()
-    __prepare_build_pipeline(int(args.verbosity))
+    sc=ScriptCollectionCore()
+    sc.log.loglevel=LogLevel(int(args.verbosity))
+    sc.prepare_build_pipeline_for_github()
     return 0
 
 
