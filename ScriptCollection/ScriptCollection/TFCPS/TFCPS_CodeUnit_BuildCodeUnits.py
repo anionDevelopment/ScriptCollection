@@ -173,8 +173,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             f"Creation-timestamp: {GeneralUtilities.datetime_to_string_for_readable_entry(creation_timestamp,False)}",
         ]
         GeneralUtilities.write_lines_to_file(target_file_infotxt,information_lines)
-
-        self.sc.log.log(f"Created artifacts-archive \"{GeneralUtilities.normalize_path(os.path.relpath(target_file_zip, self.repository))}\":")
+        normalized_relative_path=GeneralUtilities.normalize_path(os.path.relpath(target_file_zip, self.repository).replace("\\","/"))
+        self.sc.log.log(f"Created artifacts-archive \"{normalized_relative_path}\":")
         for information_line in information_lines:
             self.sc.log.log(f"  {information_line}")
 
