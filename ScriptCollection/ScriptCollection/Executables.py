@@ -257,17 +257,17 @@ def BuildCodeUnits() -> int:
     parser.add_argument('-p','--ispremerge', required=False, default=False, action='store_true')
     parser.add_argument('-u','--assertnonewchanges', required=False, default=False, action='store_true')
     parser.add_argument('-m','--addreadytomergeflag', required=False, default=False, action='store_true')
-
+    parser.add_argument('-c','--runincontainer', required=False, default=False, action='store_true')
     args = parser.parse_args()
 
     verbosity=LogLevel(int(args.verbosity))
-
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
-
     t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges,args.addreadytomergeflag)
-    t.build_codeunits()
+    if args.runincontainer:
+        t.build_codeunits_in_container(repo)
+    else:
+        t.build_codeunits()
     return 0
-
 
 def BuildCodeUnitsC() -> int:
     parser = argparse.ArgumentParser()
@@ -283,6 +283,7 @@ def BuildCodeUnitsC() -> int:
     parser.add_argument('-u','--assertnonewchanges', required=False, default=False, action='store_true')
     parser.add_argument('-m','--addreadytomergeflag', required=False, default=False, action='store_true')
     args = parser.parse_args()
+
     GeneralUtilities.reconfigure_standard_input_and_outputs()
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
     verbosity=LogLevel(int(args.verbosity))
@@ -302,6 +303,7 @@ def UpdateDependencies() -> int:
     parser.add_argument('--additionalargumentsfile', required=False, default=None)
     parser.add_argument("-c",'--nocache', required=False, default=False, action='store_true')
     args = parser.parse_args()
+
     verbosity=LogLevel(int(args.verbosity))
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
     t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,False,False) 
@@ -320,6 +322,7 @@ def GenerateCertificateAuthority() -> int:
     parser.add_argument('--days_until_expire', required=False, default=None, type=int)
     parser.add_argument('--password', required=False, default=None)
     args = parser.parse_args()
+    
     ScriptCollectionCore().generate_certificate_authority(os.getcwd(), args.name, args.subj_c, args.subj_st, args.subj_l, args.subj_o, args.subj_ou, args.days_until_expire, args.password)
     return 0
 
@@ -1167,26 +1170,14 @@ def SearchForSecrets() -> int:
     t.search_for_secrets()
     return 0
 
-
-def __prepare_build_pipeline(verbosity: int) -> None:
-    # Common preparation for the build-pipeline. The actual buildx-build (see TFCPS_CodeUnitSpecific_Docker.build)
-    # exports the image via "--output type=docker,dest=...tar". The default "docker"-driver can not do that unless
-    # the containerd-image-store is enabled on the daemon, so a "docker-container"-builder is created and selected
-    # here. This is required for GitLab and GitHub (and any other CI) alike, so both entry-points share this logic.
-    sc: ScriptCollectionCore = ScriptCollectionCore()
-    sc.log.loglevel = LogLevel(verbosity)
-    GeneralUtilities.assert_condition(sc.is_running_in_build_container(), "This function should only be run in the build container.")
-    sc.run_program("update-ca-certificates")
-    sc.run_program_argsasarray("sh",["-c","docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder"])
-    sc.run_program("docker","buildx inspect --bootstrap")
-
-
 def PrepareBuildPipelineForGitlab() -> int:
     parser = argparse.ArgumentParser(description="Prepares the build-pipeline-configuration for GitLab.")
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
     args = parser.parse_args()
-    __prepare_build_pipeline(int(args.verbosity))
+    sc=ScriptCollectionCore()
+    sc.log.loglevel=LogLevel(int(args.verbosity))
+    sc.prepare_build_pipeline_for_gitlab()
     return 0
 
 
@@ -1195,7 +1186,9 @@ def PrepareBuildPipelineForGithub() -> int:
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
     args = parser.parse_args()
-    __prepare_build_pipeline(int(args.verbosity))
+    sc=ScriptCollectionCore()
+    sc.log.loglevel=LogLevel(int(args.verbosity))
+    sc.prepare_build_pipeline_for_github()
     return 0
 
 
