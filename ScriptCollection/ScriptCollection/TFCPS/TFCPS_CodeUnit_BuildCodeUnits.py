@@ -49,6 +49,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             product_information_file = os.path.join(self.repository, ".ScriptCollection", "ProductInformation.xml")
             GeneralUtilities.assert_file_exists(product_information_file, f"The file '{product_information_file}' does not exist.")
             
+
             #when the build runs inside a container, ensure the used SCBuilder-image is at least the version required by this repository (defined in .ScriptCollection/OCIImages/ImageDefinition.csv)
             if self.sc.is_runnning_in_container():
                 scbuilder_version_environment_value = os.environ.get("SCBuilderVersion")
@@ -62,9 +63,10 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             if self.is_pre_merge():
                 GeneralUtilities.assert_condition(not self.__assert_no_new_changes,f"A pre-merge build can not be done with the assert-no-new-changes-option.")
 
-            #disable autocrlf for this repository so git does not rewrite line-endings on checkout/commit. otherwise the line-endings normalized by __normalize_line_endings_of_common_files would be converted back to crlf, which results in spurious uncommitted changes (and therefore in failing assert-no-new-changes-builds) on windows.
             self.sc.git_set_local_configuration_value(self.repository, "core.autocrlf", "false")
 
+            #ensure the artifacts-folder of the repository is git-ignored so build-results never show up as uncommitted changes
+            self.sc.ensure_line_is_in_gitignore(self.repository, "Other/Resources/Artifacts")
 
             #ensure <repo>/.ScriptCollection/.gitignore is set up (ignores the cache-folder so cache-files never show up as uncommitted changes)
             self.sc.ensure_scriptcollection_gitignore_is_setup(self.repository)
@@ -135,7 +137,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if self.__assert_no_new_changes:
             self.sc.assert_no_uncommitted_changes(self.repository,"There are new uncommitted changes in the repository.")
 
-        self.__log_hashes_of_artifacts(codeunits)
+        self.__create_artifacts_archive(codeunits)
 
         end_time:datetime=GeneralUtilities.get_now()
         duration=end_time-start_time
@@ -143,22 +145,43 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.sc.log.log(GeneralUtilities.get_line())
 
     @GeneralUtilities.check_arguments
-    def __log_hashes_of_artifacts(self, codeunits:list[str]) -> None:
-        self.sc.log.log("Hashes of the artifacts of the codeunits:")
+    def __create_artifacts_archive(self, codeunits:list[str]) -> str:
+        product_name:str=self.tfcps_tools_general.get_product_name(self.repository)
+        product_version:str=self.tfcps_tools_general.get_version_of_project(self.repository)
+        target_folder:str=os.path.join(self.repository,"Other","Resources","Artifacts")
+        target_file_zip:str=os.path.join(target_folder,f"{product_name}_Artifacts_v{product_version}.zip")
+        target_file_infotxt:str=os.path.join(target_folder,f"{product_name}_Artifacts_v{product_version}.information.txt")
+
+        artifacts_folders:dict[str,str]={}
         for codeunit_name in codeunits:
             artifacts_folder = os.path.join(self.repository, codeunit_name, "Other", "Artifacts")
-            if os.path.isdir(artifacts_folder):
-                hash_of_artifacts:str = self.sc.create_hash_of_folder(artifacts_folder)
-                self.sc.log.log(f"  - {codeunit_name}: {hash_of_artifacts}")
-            else:
-                self.sc.log.log(f"  - {codeunit_name}: (no artifacts-folder available)")
+            GeneralUtilities.assert_folder_exists(artifacts_folder,f"The artifacts-folder '{artifacts_folder}' of codeunit '{codeunit_name}' does not exist.")
+            artifacts_folders[codeunit_name]=artifacts_folder
+
+        GeneralUtilities.ensure_directory_exists(target_folder)
+        GeneralUtilities.ensure_file_does_not_exist(target_file_zip)#ensure the archive of a previous build gets replaced
+        self.sc.create_zip_archive_of_folders(artifacts_folders,target_file_zip)
+
+        hash_of_zip_file:str=GeneralUtilities.get_sha256_of_file(target_file_zip)
+        creation_timestamp:datetime=GeneralUtilities.get_now()
+        GeneralUtilities.ensure_file_does_not_exist(target_file_infotxt)
+        GeneralUtilities.ensure_file_exists(target_file_infotxt)
+        information_lines:list[str]=[
+            f"Product: {product_name}",
+            f"Version: {product_version}",
+            f"Artifacts-archive-hash: {hash_of_zip_file}",
+            f"Creation-timestamp: {GeneralUtilities.datetime_to_string_for_readable_entry(creation_timestamp,False)}",
+        ]
+        GeneralUtilities.write_lines_to_file(target_file_infotxt,information_lines)
+
+        self.sc.log.log(f"Created artifacts-archive \"{target_file_zip}\":")
+        for information_line in information_lines:
+            self.sc.log.log(f"  {information_line}")
 
     @GeneralUtilities.check_arguments
     def __normalize_line_endings_of_common_files(self) -> None:
         #TODO add option to define exceptions (means: files which should not be normalized).
-        for text_file_extension in [".txt", ".md", ".json", ".xml", ".csv", ".yml", ".yaml"]:
-            for text_file in self.sc.get_not_git_ignored_files_of_folder(self.repository, text_file_extension):
-                self.sc.normalize_line_endings(text_file)
+        self.sc.normalize_line_endings_of_files_in_folder(self.repository, ["txt", "md", "json", "xml", "csv", "yml", "yaml", "gitignore"])
 
     @GeneralUtilities.check_arguments
     def is_working_branch(self)->bool:

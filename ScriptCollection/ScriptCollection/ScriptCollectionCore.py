@@ -2549,6 +2549,17 @@ class ScriptCollectionCore:
         GeneralUtilities.write_lines_to_file(gitignore_file, lines)
 
     @GeneralUtilities.check_arguments
+    def ensure_line_is_in_gitignore(self, repository_folder: str, line: str) -> None:
+        """Ensures that "<repository>/.gitignore" exists and contains the given line. The line is appended if it is not contained yet."""
+        gitignore_file = os.path.join(repository_folder, ".gitignore")
+        if os.path.isfile(gitignore_file):
+            existing_lines = GeneralUtilities.read_lines_from_file(gitignore_file)
+        else:
+            existing_lines = []
+        if line not in existing_lines:
+            GeneralUtilities.write_lines_to_file(gitignore_file, existing_lines+[line])
+
+    @GeneralUtilities.check_arguments
     def check_python_ast(self, path: str) -> list[tuple[str, int, int, str]]:
         """
         Parses python-source-files with the ast-module to detect syntax-errors without executing them.
@@ -3426,6 +3437,21 @@ OCR-content:
                     file_path = os.path.join(root, file)
                     arcname = os.path.relpath(file_path, start=folder)
                     zipf.write(file_path, arcname)
+
+    @GeneralUtilities.check_arguments
+    def create_zip_archive_of_folders(self, folders:dict[str,str],zip_file:str) -> None:
+        """Creates a zip-archive which contains the content of all given folders. The keys of 'folders' are the
+        folder-names which are used inside the archive and the values are the paths of the folders which should be added."""
+        GeneralUtilities.assert_file_does_not_exist(zip_file)
+        with zipfile.ZipFile(zip_file, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for folder_name_in_archive, folder in folders.items():
+                GeneralUtilities.assert_folder_exists(folder)
+                folder = os.path.abspath(folder)
+                for root, _, files in os.walk(folder):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.join(folder_name_in_archive, os.path.relpath(file_path, start=folder))
+                        zipf.write(file_path, arcname)
 
     @GeneralUtilities.check_arguments
     def start_local_test_service(self, file: str):
