@@ -33,6 +33,7 @@ import qrcode
 import pycdlib
 import send2trash
 from pypdf import PdfReader, PdfWriter
+from packaging.version import Version
 from .GeneralUtilities import GeneralUtilities,Platform
 from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
@@ -4165,16 +4166,22 @@ OCR-content:
         return os.environ.get("ISRUNNINGINBUILDCONTAINER") == "true"
     
     def prepare_build_pipeline_for_gitlab(self):
-        repository_folder:str=os.getcwd()#pylint: disable=unused-variable
-        self.__prepare_build_pipeline()
+        repository_folder:str=os.getcwd()
+        self.__prepare_build_pipeline(repository_folder)
 
     def prepare_build_pipeline_for_github(self):
         repository_folder:str=os.getcwd()
         self.assert_scbuilder_image_in_github_workflow_matches_image_definition(repository_folder)
-        self.__prepare_build_pipeline()
+        self.__prepare_build_pipeline(repository_folder)
 
-    def __prepare_build_pipeline(self) -> None:
+    def __prepare_build_pipeline(self,repository_folder:str) -> None:
         GeneralUtilities.assert_condition(self.is_running_in_build_container(), "This function should only be run in the build container.")
+        
+        expected_image = self.__get_scbuilder_image_from_image_definition_file(repository_folder)
+        minimal_required_scbuilder_version = Version("1.2.5")#the preparation-steps below require at least this SCBuilder-version
+        defined_scbuilder_version = self.__get_version_of_scbuilder_image(expected_image)#TODO remove this check after 2026-12-31
+        GeneralUtilities.assert_condition(defined_scbuilder_version >= minimal_required_scbuilder_version, f"The SCBuilder-version {defined_scbuilder_version} defined in the image-definition-file of the repository is older than the minimal required version {minimal_required_scbuilder_version}. Please update the SCBuilder-image.")
+
         self.run_program("update-ca-certificates")
         self.run_program_argsasarray("sh",["-c","docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder"])
         self.run_program("docker","buildx inspect --bootstrap")
@@ -4189,6 +4196,13 @@ OCR-content:
         GeneralUtilities.assert_condition(1==len(used_images), f"No SCBuilder-image found in '{workflow_file}'.")
         used_image = used_images[0]
         GeneralUtilities.assert_condition(used_image == expected_image, f"The SCBuilder-image '{used_image}' used in '{workflow_file}' does not match the image '{expected_image}' defined in the image-definition-file of the repository.")
+
+    @GeneralUtilities.check_arguments
+    def __get_version_of_scbuilder_image(self, image: str) -> Version:
+        """Returns the version of a SCBuilder-image-address including tag (example: "aniondev/scbuilder:v1.2.5" results in the version 1.2.5)."""
+        version_match = re.search(r"\d+(\.\d+)+", image.split(":")[-1])
+        GeneralUtilities.assert_condition(version_match is not None, f"The SCBuilder-image '{image}' does not contain a version-string.")
+        return Version(version_match.group(0))
 
     @GeneralUtilities.check_arguments
     def __get_scbuilder_image_from_image_definition_file(self, repository: str) -> str:
