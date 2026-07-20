@@ -328,9 +328,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         codeunit_name = self.get_codeunit_name()
         codeunit_folder = self.get_codeunit_folder()
         # Normalize the line-endings of all non-git-ignored *.cs-files in the codeunit- and the test-project to LF.
-        for cs_source_folder in [os.path.join(codeunit_folder, codeunit_name), os.path.join(codeunit_folder, codeunit_name + "Tests")]:
-            for cs_file in self._protected_sc.get_not_git_ignored_files_of_folder(cs_source_folder, ".cs"):
-                self._protected_sc.normalize_line_endings(cs_file)
+        self._protected_sc.normalize_line_endings_of_files_in_folder(codeunit_folder, ["cs"])
         self._protected_sc.format_xml_file(os.path.join(codeunit_folder, codeunit_name, codeunit_name + ".csproj"), add_xml_declaration=False)
         self._protected_sc.format_xml_file(os.path.join(codeunit_folder, codeunit_name + "Tests", codeunit_name + "Tests.csproj"), add_xml_declaration=False)
         self.standardized_task_verify_standard_format_csproj_files()

@@ -85,7 +85,9 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def linting(self) -> None:
-        pass#TODO
+        codeunit_folder = self.get_codeunit_folder()
+        self._protected_sc.normalize_line_endings_of_files_in_folder(codeunit_folder, ["java","dart", "kt", "html"])
+        #TODO call the flutter-linting here when available
 
     @GeneralUtilities.check_arguments
     def do_common_tasks(self,current_codeunit_version:str )-> None:

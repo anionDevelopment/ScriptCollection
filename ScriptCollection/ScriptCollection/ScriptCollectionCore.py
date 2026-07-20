@@ -3080,6 +3080,14 @@ TXDX
             GeneralUtilities.write_binary_to_file(file, normalized_content)
 
     @GeneralUtilities.check_arguments
+    def normalize_line_endings_of_files_in_folder(self, folder: str, file_extensions: list[str]) -> None:
+        """Normalizes the line-endings of all not-git-ignored files inside 'folder' which have one of the given
+        file-extensions. The file-extensions must be given without a leading dot (example: ["ts", "js"])."""
+        for file_extension in file_extensions:
+            for file in self.get_not_git_ignored_files_of_folder(folder, f".{file_extension}"):
+                self.normalize_line_endings(file)
+
+    @GeneralUtilities.check_arguments
     def remove_trailing_linebreak(self, file: str) -> None:
         content = GeneralUtilities.read_binary_from_file(file)
         if content.endswith(b"\r\n"):
