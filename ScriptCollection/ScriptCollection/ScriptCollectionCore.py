@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.44"
+version = "4.3.45"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -1001,6 +1001,12 @@ class ScriptCollectionCore:
         return result[1].replace("\r", GeneralUtilities.empty_string).replace("\n", GeneralUtilities.empty_string)
 
     @GeneralUtilities.check_arguments
+    def git_set_local_configuration_value(self, repository: str, key: str, value: str) -> None:
+        """Sets a git-configuration-value in the local configuration of the given repository (does not modify the global or system configuration)."""
+        self.assert_is_git_repository(repository)
+        self.run_program_argsasarray("git", ["config", "--local", key, value], repository, throw_exception_if_exitcode_is_not_zero=True)
+
+    @GeneralUtilities.check_arguments
     def git_get_commitid_of_tag(self, repository: str, tag: str) -> str:
         self.is_git_or_bare_git_repository(repository)
         stdout = self.run_program_argsasarray("git", ["rev-list", "-n", "1", tag], repository)
@@ -1601,7 +1607,7 @@ class ScriptCollectionCore:
             GeneralUtilities.write_message_to_stdout(file)
 
     @GeneralUtilities.check_arguments
-    def SCCreateEmptyFileWithSpecificSize(self, name: str, size_string: str) -> int:
+    def createEmptyFileWithSpecificSize(self, name: str, size_string: str) -> int:
         if size_string.isdigit():
             size = int(size_string)
         else:
@@ -1630,13 +1636,23 @@ class ScriptCollectionCore:
         return 0
 
     @GeneralUtilities.check_arguments
-    def SCCreateHashOfAllFiles(self, folder: str) -> None:
-        for file in GeneralUtilities.absolute_file_paths(folder):
-            with open(file+".sha256", "w+", encoding="utf-8") as f:
-                f.write(GeneralUtilities.get_sha256_of_file(file))
+    def create_hash_of_folder(self, folder: str) -> str:
+        hasher = hashlib.sha256()
+        hasher.update(os.path.basename(folder).encode())
+        root = Path(folder)
+
+        for file in sorted(root.rglob("*")):
+            if file.is_file():
+                relative_path =GeneralUtilities.normalize_path(file.relative_to(root).as_posix())
+                hasher.update(relative_path.encode())
+                with file.open("rb") as f:
+                    while chunk := f.read(8192):
+                        hasher.update(chunk)
+
+        return hasher.hexdigest()
 
     @GeneralUtilities.check_arguments
-    def SCCreateSimpleMergeWithoutRelease(self, repository: str, sourcebranch: str, targetbranch: str, remotename: str, remove_source_branch: bool) -> None:
+    def createSimpleMergeWithoutRelease(self, repository: str, sourcebranch: str, targetbranch: str, remotename: str, remove_source_branch: bool) -> None:
         commitid = self.git_merge(repository, sourcebranch, targetbranch, False, True)
         self.git_merge(repository, targetbranch, sourcebranch, True, True)
         created_version = self.get_semver_version(repository)
@@ -1648,7 +1664,7 @@ class ScriptCollectionCore:
             self.git_remove_branch(repository, sourcebranch)
 
     @GeneralUtilities.check_arguments
-    def sc_organize_lines_in_file(self, file: str, encoding: str="utf-8", sort: bool = False, remove_duplicated_lines: bool = False, ignore_first_line: bool = False, remove_empty_lines: bool = True, ignored_start_character: list = list()):
+    def organize_lines_in_file(self, file: str, encoding: str="utf-8", sort: bool = False, remove_duplicated_lines: bool = False, ignore_first_line: bool = False, remove_empty_lines: bool = True, ignored_start_character: list = list()):
         GeneralUtilities.assert_file_exists(file)
 
         # read file
@@ -1692,7 +1708,7 @@ class ScriptCollectionCore:
         return result
 
     @GeneralUtilities.check_arguments
-    def SCGenerateSnkFiles(self, outputfolder, keysize=4096, amountofkeys=10) -> int:
+    def generateSnkFiles(self, outputfolder, keysize=4096, amountofkeys=10) -> int:
         GeneralUtilities.ensure_directory_exists(outputfolder)
         for _ in range(amountofkeys):
             file = os.path.join(outputfolder, str(uuid.uuid4())+".snk")
@@ -1733,7 +1749,7 @@ class ScriptCollectionCore:
                 os.rename(file, new_filename)
 
     @GeneralUtilities.check_arguments
-    def SCReplaceSubstringsInFilenames(self, folder: str, substringInFilename: str, newSubstringInFilename: str, conflictResolveMode: str) -> None:
+    def replaceSubstringsInFilenames(self, folder: str, substringInFilename: str, newSubstringInFilename: str, conflictResolveMode: str) -> None:
         for file in GeneralUtilities.absolute_file_paths(folder):
             self.__process_file(file, substringInFilename, newSubstringInFilename, conflictResolveMode)
 
@@ -1753,7 +1769,7 @@ class ScriptCollectionCore:
                 GeneralUtilities.write_message_to_stdout(file)
 
     @GeneralUtilities.check_arguments
-    def SCSearchInFiles(self, folder: str, searchstring: str) -> None:
+    def searchInFiles(self, folder: str, searchstring: str) -> None:
         for file in GeneralUtilities.absolute_file_paths(folder):
             self.__check_file(file, searchstring)
 
@@ -1774,7 +1790,7 @@ class ScriptCollectionCore:
         GeneralUtilities.write_message_to_stdout(self.get_string_as_qr_code(qrcode_content))
 
     @GeneralUtilities.check_arguments
-    def SCShow2FAAsQRCode(self, csvfile: str) -> None:
+    def show2FAAsQRCode(self, csvfile: str) -> None:
         lines = GeneralUtilities.read_csv_file(csvfile, True)
         lines.sort(key=lambda items: ''.join(items).lower())
         for line in lines:
@@ -1782,7 +1798,7 @@ class ScriptCollectionCore:
             GeneralUtilities.write_message_to_stdout(GeneralUtilities.get_longline())
 
     @GeneralUtilities.check_arguments
-    def SCCalculateBitcoinBlockHash(self, block_version_number: str, previousblockhash: str, transactionsmerkleroot: str, timestamp: str, target: str, nonce: str) -> str:
+    def calculateBitcoinBlockHash(self, block_version_number: str, previousblockhash: str, transactionsmerkleroot: str, timestamp: str, target: str, nonce: str) -> str:
         # Example-values:
         # block_version_number: "00000020"
         # previousblockhash: "66720b99e07d284bd4fe67ff8c49a5db1dd8514fcdab61000000000000000000"
@@ -1794,7 +1810,7 @@ class ScriptCollectionCore:
         return binascii.hexlify(hashlib.sha256(hashlib.sha256(binascii.unhexlify(header)).digest()).digest()[::-1]).decode('utf-8')
 
     @GeneralUtilities.check_arguments
-    def SCChangeHashOfProgram(self, inputfile: str) -> None:
+    def changeHashOfProgram(self, inputfile: str) -> None:
         valuetoappend = str(uuid.uuid4())
 
         outputfile = inputfile + '.modified'
@@ -1840,12 +1856,12 @@ class ScriptCollectionCore:
         iso.close()
 
     @GeneralUtilities.check_arguments
-    def SCCreateISOFileWithObfuscatedFiles(self, inputfolder: str, outputfile: str, printtableheadline, createisofile, extensions) -> None:
+    def createISOFileWithObfuscatedFiles(self, inputfolder: str, outputfile: str, printtableheadline, createisofile, extensions) -> None:
         if (os.path.isdir(inputfolder)):
             namemappingfile = "name_map.csv"
             files_directory = inputfolder
             files_directory_obf = f"{files_directory}_Obfuscated"
-            self.SCObfuscateFilesFolder(
+            self.obfuscateFilesFolder(
                 inputfolder, printtableheadline, namemappingfile, extensions)
             os.rename(namemappingfile, os.path.join(
                 files_directory_obf, namemappingfile))
@@ -1856,7 +1872,7 @@ class ScriptCollectionCore:
             raise ValueError(f"Directory not found: '{inputfolder}'")
 
     @GeneralUtilities.check_arguments
-    def SCFilenameObfuscator(self, inputfolder: str, printtableheadline, namemappingfile: str, extensions: str) -> None:
+    def filenameObfuscator(self, inputfolder: str, printtableheadline, namemappingfile: str, extensions: str) -> None:
         obfuscate_all_files = extensions == "*"
         if (obfuscate_all_files):
             obfuscate_file_extensions = None
@@ -1894,22 +1910,9 @@ class ScriptCollectionCore:
                 return True
         return False
 
-    @GeneralUtilities.check_arguments
-    def SCHealthcheck(self, file: str) -> int:
-        lines = GeneralUtilities.read_lines_from_file(file)
-        for line in reversed(lines):
-            if not GeneralUtilities.string_is_none_or_whitespace(line):
-                if "RunningHealthy (" in line:  # TODO use regex
-                    GeneralUtilities.write_message_to_stderr(f"Healthy running due to line '{line}' in file '{file}'.")
-                    return 0
-                else:
-                    GeneralUtilities.write_message_to_stderr(f"Not healthy running due to line '{line}' in file '{file}'.")
-                    return 1
-        GeneralUtilities.write_message_to_stderr(f"No valid line found for healthycheck in file '{file}'.")
-        return 2
 
     @GeneralUtilities.check_arguments
-    def SCObfuscateFilesFolder(self, inputfolder: str, printtableheadline, namemappingfile: str, extensions: str) -> None:
+    def obfuscateFilesFolder(self, inputfolder: str, printtableheadline, namemappingfile: str, extensions: str) -> None:
         obfuscate_all_files = extensions == "*"
         if (obfuscate_all_files):
             obfuscate_file_extensions = None
@@ -1924,10 +1927,10 @@ class ScriptCollectionCore:
         if (os.path.isdir(inputfolder)):
             for file in GeneralUtilities.absolute_file_paths(inputfolder):
                 if obfuscate_all_files or self.__extension_matchs(file, obfuscate_file_extensions):
-                    self.SCChangeHashOfProgram(file)
+                    self.changeHashOfProgram(file)
                     os.remove(file)
                     os.rename(file + ".modified", file)
-            self.SCFilenameObfuscator(inputfolder, printtableheadline, namemappingfile, extensions)
+            self.filenameObfuscator(inputfolder, printtableheadline, namemappingfile, extensions)
         else:
             raise ValueError(f"Directory not found: '{inputfolder}'")
 
