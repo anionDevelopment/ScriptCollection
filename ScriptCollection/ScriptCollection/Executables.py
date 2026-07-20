@@ -257,17 +257,17 @@ def BuildCodeUnits() -> int:
     parser.add_argument('-p','--ispremerge', required=False, default=False, action='store_true')
     parser.add_argument('-u','--assertnonewchanges', required=False, default=False, action='store_true')
     parser.add_argument('-m','--addreadytomergeflag', required=False, default=False, action='store_true')
-
+    parser.add_argument('-c','--runincontainer', required=False, default=False, action='store_true')
     args = parser.parse_args()
 
     verbosity=LogLevel(int(args.verbosity))
-
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
-
     t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges,args.addreadytomergeflag)
-    t.build_codeunits()
+    if args.runincontainer:
+        t.build_codeunits_in_container(repo)
+    else:
+        t.build_codeunits()
     return 0
-
 
 def BuildCodeUnitsC() -> int:
     parser = argparse.ArgumentParser()
@@ -283,6 +283,7 @@ def BuildCodeUnitsC() -> int:
     parser.add_argument('-u','--assertnonewchanges', required=False, default=False, action='store_true')
     parser.add_argument('-m','--addreadytomergeflag', required=False, default=False, action='store_true')
     args = parser.parse_args()
+
     GeneralUtilities.reconfigure_standard_input_and_outputs()
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
     verbosity=LogLevel(int(args.verbosity))
@@ -302,6 +303,7 @@ def UpdateDependencies() -> int:
     parser.add_argument('--additionalargumentsfile', required=False, default=None)
     parser.add_argument("-c",'--nocache', required=False, default=False, action='store_true')
     args = parser.parse_args()
+
     verbosity=LogLevel(int(args.verbosity))
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
     t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,False,False) 
@@ -320,6 +322,7 @@ def GenerateCertificateAuthority() -> int:
     parser.add_argument('--days_until_expire', required=False, default=None, type=int)
     parser.add_argument('--password', required=False, default=None)
     args = parser.parse_args()
+    
     ScriptCollectionCore().generate_certificate_authority(os.getcwd(), args.name, args.subj_c, args.subj_st, args.subj_l, args.subj_o, args.subj_ou, args.days_until_expire, args.password)
     return 0
 
@@ -1166,10 +1169,6 @@ def SearchForSecrets() -> int:
     t: TFCPS_CodeUnit_BuildCodeUnits = TFCPS_CodeUnit_BuildCodeUnits(repository, LogLevel(int(args.verbosity)), "QualityCheck", None, True, False, False)
     t.search_for_secrets()
     return 0
-
-
-
-
 
 def PrepareBuildPipelineForGitlab() -> int:
     parser = argparse.ArgumentParser(description="Prepares the build-pipeline-configuration for GitLab.")
