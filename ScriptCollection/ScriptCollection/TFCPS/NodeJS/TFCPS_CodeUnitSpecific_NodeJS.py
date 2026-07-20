@@ -25,16 +25,7 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
     @GeneralUtilities.check_arguments
     def linting(self) -> None:
         codeunit_folder = self.get_codeunit_folder()
-        for ts_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".ts"):
-            self._protected_sc.normalize_line_endings(ts_file)
-        for js_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".js"):
-            self._protected_sc.normalize_line_endings(js_file)
-        for css_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".css"):
-            self._protected_sc.normalize_line_endings(css_file)
-        for scss_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".scss"):
-            self._protected_sc.normalize_line_endings(scss_file)
-        for sass_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".sass"):
-            self._protected_sc.normalize_line_endings(sass_file)
+        self._protected_sc.normalize_line_endings_of_files_in_folder(codeunit_folder, ["ts", "js", "css", "scss", "sass"])
         # The OpenAPI-generator writes its '.openapi-generator/FILES' metadata-file with the host's native
         # line-endings (CRLF on Windows, LF on Linux). Normalize it to LF like the other generated text-files
         # so the committed file does not drift between build-hosts.

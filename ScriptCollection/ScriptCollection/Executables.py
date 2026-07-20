@@ -253,7 +253,7 @@ def BuildCodeUnits() -> int:
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
     parser.add_argument('-e','--targetenvironment', required=False, default="QualityCheck")
     parser.add_argument('-a','--additionalargumentsfile', required=False, default=None)
-    parser.add_argument("-c",'--nocache', required=False, default=False, action='store_true')
+    parser.add_argument("-n",'--nocache', required=False, default=False, action='store_true')
     parser.add_argument('-p','--ispremerge', required=False, default=False, action='store_true')
     parser.add_argument('-u','--assertnonewchanges', required=False, default=False, action='store_true')
     parser.add_argument('-m','--addreadytomergeflag', required=False, default=False, action='store_true')
