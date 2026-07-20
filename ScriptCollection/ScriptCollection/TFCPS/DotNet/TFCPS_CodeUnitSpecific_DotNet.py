@@ -347,6 +347,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
     @GeneralUtilities.check_arguments
     def do_common_tasks(self,current_codeunit_version:str,certificateGeneratorInformation:CertificateGeneratorInformationBase)-> None:
         self.do_common_tasks_base(current_codeunit_version)
+        self.update_year_for_dotnet_codeunit()
         codeunit_name =self.get_codeunit_name()
         codeunit_version = self.tfcps_Tools_General.get_version_of_project(self.get_repository_folder())  # Should always be the same as the project-version #TODO make this configurable from outside
         folder_of_current_file =os.path.join(self.get_codeunit_folder(),"Other")
@@ -680,7 +681,6 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
 
     def set_dependency_version(self,name:str,new_version:str)->None:
         raise ValueError(f"Operation is not implemented.")
-        #self.update_year_for_dotnet_codeunit()
         #csproj_file:str=os.path.join(self.get_codeunit_folder(), self.get_codeunit_name(), self.get_codeunit_name() + ".csproj")
         #self._protected_sc.update_dependencies_of_dotnet_project(csproj_file,[])#TODO set ignored codeunits
     
