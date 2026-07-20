@@ -174,7 +174,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         ]
         GeneralUtilities.write_lines_to_file(target_file_infotxt,information_lines)
 
-        self.sc.log.log(f"Created artifacts-archive \"{os.path.relpath(target_file_zip, self.repository)}\":")
+        self.sc.log.log(f"Created artifacts-archive \"{GeneralUtilities.normalize_path(os.path.relpath(target_file_zip, self.repository))}\":")
         for information_line in information_lines:
             self.sc.log.log(f"  {information_line}")
 
