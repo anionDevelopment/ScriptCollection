@@ -38,7 +38,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.45"
+version = "4.3.46"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -4165,13 +4165,13 @@ OCR-content:
         return os.environ.get("ISRUNNINGINBUILDCONTAINER") == "true"
     
     def prepare_build_pipeline_for_gitlab(self):
-        repository_folder:str=os.getcwd()
+        repository_folder:str=os.getcwd()#pylint: disable=unused-variable
         self.__prepare_build_pipeline()
 
     def prepare_build_pipeline_for_github(self):
         repository_folder:str=os.getcwd()
-        self.__prepare_build_pipeline()
         self.assert_scbuilder_image_in_github_workflow_matches_image_definition(repository_folder)
+        self.__prepare_build_pipeline()
 
     def __prepare_build_pipeline(self) -> None:
         GeneralUtilities.assert_condition(self.is_running_in_build_container(), "This function should only be run in the build container.")
@@ -4186,10 +4186,9 @@ OCR-content:
         GeneralUtilities.assert_file_exists(workflow_file, f"The file '{workflow_file}' does not exist.")
         expected_image = self.__get_scbuilder_image_from_image_definition_file(repository)
         used_images = re.findall(r"^\s*image:\s*[\"']?(\S*scbuilder:\S+?)[\"']?\s*$", GeneralUtilities.read_text_from_file(workflow_file), re.IGNORECASE | re.MULTILINE)
-        GeneralUtilities.assert_condition(0 < len(used_images), f"No SCBuilder-image found in '{workflow_file}'.")
-        for used_image in used_images:
-            GeneralUtilities.assert_condition(used_image == expected_image, f"The SCBuilder-image '{used_image}' used in '{workflow_file}' does not match the image '{expected_image}' defined in the image-definition-file of the repository.")
-        self.log.log(f"The SCBuilder-image used in '{workflow_file}' matches the image defined in the image-definition-file of the repository ({expected_image}).", LogLevel.Debug)
+        GeneralUtilities.assert_condition(1==len(used_images), f"No SCBuilder-image found in '{workflow_file}'.")
+        used_image = used_images[0]
+        GeneralUtilities.assert_condition(used_image == expected_image, f"The SCBuilder-image '{used_image}' used in '{workflow_file}' does not match the image '{expected_image}' defined in the image-definition-file of the repository.")
 
     @GeneralUtilities.check_arguments
     def __get_scbuilder_image_from_image_definition_file(self, repository: str) -> str:
