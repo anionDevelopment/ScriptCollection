@@ -337,7 +337,7 @@ class GeneralUtilities:
     @staticmethod
     @check_arguments
     def replace_xmltag_in_file(file: str, tag: str, new_value: str, encoding="utf-8") -> None:
-        GeneralUtilities.assert_condition(tag.isalnum(tag), f"Invalid tag: \"{tag}\"")
+        GeneralUtilities.assert_condition(tag.isalnum(), f"Invalid tag: \"{tag}\"")
         GeneralUtilities.replace_regex_in_file(file, f"<{tag}>.*</{tag}>", f"<{tag}>{new_value}</{tag}>", encoding)
 
     @staticmethod

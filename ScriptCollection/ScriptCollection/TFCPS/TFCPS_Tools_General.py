@@ -1561,7 +1561,9 @@ class TFCPS_Tools_General:
         version_file = os.path.join(dependency_folder, "Version.txt")
         if not os.path.isfile(version_file):
             raise ValueError(f"Version-file for dependency {dependency_name} does not exist. Expected location: {version_file}")
-        return GeneralUtilities.read_text_from_file(version_file)
+        # strip() so a trailing line-break in the Version.txt-file does not become part of the version (consistent with
+        # get_jre_version); the raw value is often used verbatim, e.g. as a docker-build-arg or inside a download-url.
+        return GeneralUtilities.read_text_from_file(version_file).strip()
 
     @GeneralUtilities.check_arguments
     def update_dependency_in_resources_folder(self, update_dependencies_file, dependency_name: str, latest_version_function: str) -> None:
