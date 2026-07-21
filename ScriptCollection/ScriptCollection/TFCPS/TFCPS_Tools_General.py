@@ -29,6 +29,9 @@ class TFCPS_Tools_General:
     # Relative path (inside the source-repository and inside the ScriptCollection.Resources-package) of the
     # file that pins the OpenAPIGenerator-version used as default when no repository-specific version is given.
     __openapigenerator_version_resource_relative_path:str="Dependencies/OpenAPIGenerator/Version.txt"
+    # Relative path (inside the source-repository and inside the ScriptCollection.Resources-package) of the
+    # file that pins the PlantUML-version used as default when no repository-specific version is given.
+    __plantuml_version_resource_relative_path:str="Dependencies/PlantUML/Version.txt"
     # Font used for rendering all PlantUML-diagrams. Pinning it makes the resulting SVG identical across machines
     # (PlantUML's default 'sans-serif' otherwise resolves to different host-fonts on Windows vs Linux, which changes
     # the computed text-lengths and coordinates and thus produces spurious diffs). The font is available in the
@@ -113,7 +116,10 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def download_plantuml(self, enforce_update: bool = False) -> None:
         self.__sc.log.log("Download cachable tool \"PlantUML\" into global cache...", LogLevel.Debug)
-        self.ensure_plantuml_is_available(enforce_update)
+        # No repository-context is available when warming the global cache (e.g. scdownloadcachabletools in a
+        # build-image), so download the default version pinned by the ScriptCollection-package. Actual builds
+        # pass the version pinned in their own '<repo>/Other/Resources/Dependencies/PlantUML/Version.txt'.
+        self.ensure_plantuml_is_available(enforce_update, self.get_default_plantuml_version())
 
     @GeneralUtilities.check_arguments
     def download_jre(self, enforce_update: bool = False) -> None:
@@ -679,7 +685,7 @@ class TFCPS_Tools_General:
     def generate_svg_files_from_plantuml_files_for_repository(self, repository_folder: str,use_cache:bool) -> None:
         self.__sc.log.log("Generate svg-files from plantuml-files...")
         self.__sc.assert_is_git_repository(repository_folder)
-        plantuml_jar_file=self.ensure_plantuml_is_available(not use_cache, repository_folder)
+        plantuml_jar_file=self.ensure_plantuml_is_available(not use_cache, self.get_plantuml_version(repository_folder))
         java_executable=self.ensure_jre_is_available(not use_cache, repository_folder)
         target_folder = os.path.join(repository_folder, "Other",  "Reference")
         self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file, java_executable)
@@ -687,19 +693,43 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def generate_svg_files_from_plantuml_files_for_codeunit(self, codeunit_folder: str,use_cache:bool) -> None:
         self.assert_is_codeunit_folder(codeunit_folder)
-        plantuml_jar_file=self.ensure_plantuml_is_available(not use_cache, os.path.dirname(codeunit_folder))
+        plantuml_jar_file=self.ensure_plantuml_is_available(not use_cache, self.get_plantuml_version(os.path.dirname(codeunit_folder)))
         java_executable=self.ensure_jre_is_available(not use_cache, os.path.dirname(codeunit_folder))
         target_folder = os.path.join(codeunit_folder, "Other", "Reference")
         self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file, java_executable)
 
     @GeneralUtilities.check_arguments
-    def ensure_plantuml_is_available(self, enforce_update: bool, repository_folder: str = None) -> str:
-        pinned_version: str = None
+    def ensure_plantuml_is_available(self, enforce_update: bool, version: str) -> str:
+        """Ensures the plantuml.jar for the given version is available in the global cache and returns its absolute path.
+        The jar is stored under a version-specific subfolder ('<cache>/Tools/PlantUML/<version>/plantuml.jar') so that
+        different versions coexist without evicting each other. The version must be given explicitly (there is no default);
+        callers resolve it via get_plantuml_version (the repository-pin or the bundled default)."""
+        local_resource_name = os.path.join("PlantUML", version)
+        return self.ensure_file_from_github_assets_is_available_with_retry("plantuml", "plantuml", local_resource_name, "plantuml.jar", lambda latest_version: "plantuml.jar", enforce_update=enforce_update, pinned_version=version)
+
+    @GeneralUtilities.check_arguments
+    def get_plantuml_version(self, repository_folder: str = None) -> str:
+        """Resolves the PlantUML-version to use: the repository-specific pin in
+        '<repo>/Other/Resources/Dependencies/PlantUML/Version.txt' if present, otherwise the default
+        bundled with ScriptCollection (see get_default_plantuml_version)."""
         if repository_folder is not None:
             version_file = os.path.join(repository_folder, "Other", "Resources", "Dependencies", "PlantUML", "Version.txt")
             if os.path.isfile(version_file):
-                pinned_version = GeneralUtilities.read_text_from_file(version_file).strip()
-        return self.ensure_file_from_github_assets_is_available_with_retry("plantuml", "plantuml", "PlantUML", "plantuml.jar", lambda latest_version: "plantuml.jar", enforce_update=enforce_update, pinned_version=pinned_version)
+                return GeneralUtilities.read_text_from_file(version_file).strip()
+        return self.get_default_plantuml_version()
+
+    @GeneralUtilities.check_arguments
+    def get_default_plantuml_version(self) -> str:
+        """Returns the PlantUML-version used when no repository-specific version is pinned (for example when warming
+        the global cache via scdownloadcachabletools). The value is read from the version-file bundled with the
+        ScriptCollection-package, with a fallback to the source-file for an unbuilt source-checkout."""
+        try:
+            content = GeneralUtilities._internal_load_resource(TFCPS_Tools_General.__plantuml_version_resource_relative_path)
+            return content.decode("utf-8").strip()
+        except (FileNotFoundError, ModuleNotFoundError):
+            source_version_file = GeneralUtilities.resolve_relative_path(f"../../../Other/Resources/{TFCPS_Tools_General.__plantuml_version_resource_relative_path}", os.path.dirname(__file__))
+            GeneralUtilities.assert_file_exists(source_version_file)
+            return GeneralUtilities.read_text_from_file(source_version_file).strip()
 
     @GeneralUtilities.check_arguments
     def get_default_jre_version(self) -> str:
