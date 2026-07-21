@@ -548,12 +548,11 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         result: list[str] = []
         regex_lines = GeneralUtilities.string_to_lines(regex)
         file_content_lines = GeneralUtilities.string_to_lines(file_content)
-        #amount_of_regexes = len(regex_lines)
         amount_of_lines = len(file_content_lines)
         if amount_of_lines< len(regex_lines):
             result.append("csproj-file has less lines than the regex requires.")
             return result
-        for i in range(35):
+        for i in range(35):#you can do this check only for the first 35 lines
             s = file_content_lines[i]
             r = regex_lines[i]
             if not re.match(r, s):

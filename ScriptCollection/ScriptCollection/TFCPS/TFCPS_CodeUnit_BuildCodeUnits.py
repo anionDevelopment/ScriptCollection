@@ -433,6 +433,15 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             scan_args = scan_args + ["-c", f"{repository_in_scan_container}/.betterleaks.toml"]
         else:
             self.sc.log.log(f"No betterleaks-config found at '{config_file}'; scanning with default ruleset only.", LogLevel.Warning)
+        # Verify that the docker-daemon is reachable before running the scan. The scan runs betterleaks via "docker run",
+        # and "docker run" returns exit-code 1 both when the daemon is unreachable and when betterleaks actually finds
+        # secrets. Without this pre-check an unreachable daemon (e.g. the socket is not forwarded into a build-container)
+        # would be misreported below as "found secrets", which is a misleading infrastructure-error. "docker version
+        # --format {{.Server.Version}}" queries the daemon (the server-part) and exits non-zero exactly when it can not
+        # be reached, so it distinguishes "docker not available" from a real scan-result.
+        daemon_check = self.sc.run_program_argsasarray("docker", ["version", "--format", "{{.Server.Version}}"], throw_exception_if_exitcode_is_not_zero=False, print_live_output=False)
+        if daemon_check[0] != 0:
+            raise ValueError(f"The secret-scan can not be performed because the docker-daemon is not reachable (exit-code {daemon_check[0]}: {daemon_check[2].strip()}). The scan runs betterleaks via 'docker run', which requires a running docker-daemon (inside a build-container its socket must be forwarded to the host-daemon). This is an infrastructure-problem, not a secret-finding in the repository.")
         args = ["run", "--rm"] + mount_arguments + [image] + scan_args
         result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==LogLevel.Debug)
         if result[0] != 0:
