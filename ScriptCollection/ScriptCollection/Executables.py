@@ -272,16 +272,16 @@ def BuildCodeUnits() -> int:
 def BuildCodeUnitsC() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('-r','--repositoryfolder', required=False, default=".")
-    parser.add_argument('-b','--basemountfolder', required=False, default=None)
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
-    parser.add_argument('--targetenvironment', required=False, default="QualityCheck")
-    parser.add_argument('--additionalargumentsfile', required=False, default=None)
-    parser.add_argument("-c",'--nocache', required=False, default=False, action='store_true')
+    parser.add_argument('-e','--targetenvironment', required=False, default="QualityCheck")
+    parser.add_argument('-a','--additionalargumentsfile', required=False, default=None)
+    parser.add_argument("-n",'--nocache', required=False, default=False, action='store_true')
     parser.add_argument('-p','--ispremerge', required=False, default=False, action='store_true')
     parser.add_argument('--image', required=False, default="scbuilder:latest")
     parser.add_argument('-u','--assertnonewchanges', required=False, default=False, action='store_true')
     parser.add_argument('-m','--addreadytomergeflag', required=False, default=False, action='store_true')
+    parser.add_argument('-b','--basemountfolder', required=False, default=None)
     args = parser.parse_args()
 
     GeneralUtilities.reconfigure_standard_input_and_outputs()
@@ -565,6 +565,16 @@ def NormalizeLineEndings() -> int:
         GeneralUtilities.write_message_to_stderr(f"File '{args.path}' does not exist.")
         return 1
     ScriptCollectionCore().normalize_line_endings(args.path)
+    return 0
+
+
+def RemoveInvisibleCharactersFromFile() -> int:
+    parser = argparse.ArgumentParser(description="Removes invisible characters from a file. The only exception is the line-feed character, which is kept.")
+    parser.add_argument('-p', '--path', required=True)
+    parser.add_argument('-e', '--encoding', default="utf-8")
+    args = parser.parse_args()
+    file = GeneralUtilities.resolve_relative_path(args.path, os.getcwd())
+    GeneralUtilities.remove_invisible_characters_from_file(file, args.encoding)
     return 0
 
 
