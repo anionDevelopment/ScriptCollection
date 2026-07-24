@@ -705,7 +705,7 @@ class TFCPS_Tools_General:
         different versions coexist without evicting each other. The version must be given explicitly (there is no default);
         callers resolve it via get_plantuml_version (the repository-pin or the bundled default)."""
         local_resource_name = os.path.join("PlantUML", program_version)
-        return self.ensure_file_from_github_assets_is_available_with_retry("plantuml", "plantuml", local_resource_name, "plantuml.jar", lambda latest_version: "plantuml.jar", enforce_update=enforce_update, pinned_version=version)
+        return self.ensure_file_from_github_assets_is_available_with_retry("plantuml", "plantuml", local_resource_name, "plantuml.jar", lambda latest_version: "plantuml.jar", enforce_update=enforce_update, pinned_version=program_version)
 
     @GeneralUtilities.check_arguments
     def get_plantuml_version(self, repository_folder: str = None) -> str:
