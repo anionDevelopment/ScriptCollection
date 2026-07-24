@@ -369,6 +369,18 @@ class GeneralUtilities:
 
     @staticmethod
     @check_arguments
+    def remove_invisible_characters(text: str) -> str:
+        return "".join(character for character in text if character == "\n" or character.isprintable())
+
+    @staticmethod
+    @check_arguments
+    def remove_invisible_characters_from_file(file: str, encoding: str = "utf-8") -> None:
+        text = GeneralUtilities.read_text_from_file(file, encoding)
+        text = GeneralUtilities.remove_invisible_characters(text)
+        GeneralUtilities.write_text_to_file(file, text, encoding)
+
+    @staticmethod
+    @check_arguments
     def print_text(text: str, print_to_stdout: bool = True):
         stream: object = sys.stdout if print_to_stdout else sys.stderr
         GeneralUtilities.__print_text_to_console(text, stream)
