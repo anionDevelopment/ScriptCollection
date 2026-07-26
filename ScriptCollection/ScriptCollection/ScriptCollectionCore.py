@@ -39,7 +39,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.52"
+version = "4.3.54"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2545,10 +2545,7 @@ class ScriptCollectionCore:
         scriptcollection_folder = os.path.join(repository_folder, ".ScriptCollection")
         GeneralUtilities.ensure_directory_exists(scriptcollection_folder)
         gitignore_file = os.path.join(scriptcollection_folder, ".gitignore")
-        lines = [
-            "/Cache/",
-            "RequiredEnvVariables.local.csv",
-        ]
+        lines = ["/Cache/"]
         GeneralUtilities.write_lines_to_file(gitignore_file, lines)
 
     @GeneralUtilities.check_arguments

@@ -702,13 +702,13 @@ class TFCPS_Tools_General:
         self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file, java_executable)
 
     @GeneralUtilities.check_arguments
-    def ensure_plantuml_is_available(self, enforce_update: bool, version: str) -> str:
+    def ensure_plantuml_is_available(self, enforce_update: bool, program_version: str) -> str:
         """Ensures the plantuml.jar for the given version is available in the global cache and returns its absolute path.
         The jar is stored under a version-specific subfolder ('<cache>/Tools/PlantUML/<version>/plantuml.jar') so that
         different versions coexist without evicting each other. The version must be given explicitly (there is no default);
         callers resolve it via get_plantuml_version (the repository-pin or the bundled default)."""
-        local_resource_name = os.path.join("PlantUML", version)
-        return self.ensure_file_from_github_assets_is_available_with_retry("plantuml", "plantuml", local_resource_name, "plantuml.jar", lambda latest_version: "plantuml.jar", enforce_update=enforce_update, pinned_version=version)
+        local_resource_name = os.path.join("PlantUML", program_version)
+        return self.ensure_file_from_github_assets_is_available_with_retry("plantuml", "plantuml", local_resource_name, "plantuml.jar", lambda latest_version: "plantuml.jar", enforce_update=enforce_update, pinned_version=program_version)
 
     @GeneralUtilities.check_arguments
     def get_plantuml_version(self, repository_folder: str = None) -> str:
