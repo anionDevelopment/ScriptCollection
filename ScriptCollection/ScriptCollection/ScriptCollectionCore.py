@@ -2545,7 +2545,10 @@ class ScriptCollectionCore:
         scriptcollection_folder = os.path.join(repository_folder, ".ScriptCollection")
         GeneralUtilities.ensure_directory_exists(scriptcollection_folder)
         gitignore_file = os.path.join(scriptcollection_folder, ".gitignore")
-        lines = ["/Cache/"]
+        lines = [
+            "/Cache/",
+             "RequiredEnvVariables.local.csv",
+        ]
         GeneralUtilities.write_lines_to_file(gitignore_file, lines)
 
     @GeneralUtilities.check_arguments
