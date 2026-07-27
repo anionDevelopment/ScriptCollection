@@ -258,16 +258,22 @@ def BuildCodeUnits() -> int:
     parser.add_argument('-u','--assertnonewchanges', required=False, default=False, action='store_true')
     parser.add_argument('-m','--addreadytomergeflag', required=False, default=False, action='store_true')
     parser.add_argument('-c','--runincontainer', required=False, default=False, action='store_true')
+    parser.add_argument('-b','--basemountfolder', required=False, default=None, help="Only used if -c is set.")
     args = parser.parse_args()
 
     verbosity=LogLevel(int(args.verbosity))
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
+
     t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges,args.addreadytomergeflag)
     if args.runincontainer:
-        t.build_codeunits_in_container(repo)
+        base_mount_folder:str=args.basemountfolder
+        if base_mount_folder is None:
+            base_mount_folder=repo
+        success, _ = t.build_codeunits_in_container(base_mount_folder)
+        return 0 if success else 1
     else:
         t.build_codeunits()
-    return 0
+        return 0
 
 def BuildCodeUnitsC() -> int:
     parser = argparse.ArgumentParser()

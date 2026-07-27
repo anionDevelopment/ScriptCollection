@@ -2548,6 +2548,7 @@ class ScriptCollectionCore:
         lines = [
             "/Cache/",
              "RequiredEnvVariables.local.csv",
+             "CustomPreCodeUnitBuildScriptInContainer.local.py",
         ]
         GeneralUtilities.write_lines_to_file(gitignore_file, lines)
 

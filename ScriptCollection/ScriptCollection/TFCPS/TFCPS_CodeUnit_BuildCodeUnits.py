@@ -202,6 +202,16 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             else:
                 args=args+["--nocache"]
 
+        if self.sc.is_running_in_build_container():
+            
+            if  os.path.isfile( os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS","CustomPreCodeUnitBuildScriptInContainer.py")):
+                self.sc.log.log("Run custom pre-codeunitbuild script...")
+                self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["CustomPreCodeUnitBuildScriptInContainer.py"]+args, os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS"),print_live_output=True)
+
+            if  os.path.isfile( os.path.join(self.repository,".ScriptCollection","CustomPreCodeUnitBuildScriptInContainer.local.py")):
+                self.sc.log.log("Prepare build codeunits...")
+                self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["CustomPreCodeUnitBuildScriptInContainer.local.py"]+args, os.path.join(self.repository,".ScriptCollection"),print_live_output=True)
+
         if  os.path.isfile( os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS","CustomPreCodeUnitBuildScript.py")):
             self.sc.log.log("Run custom pre-codeunitbuild script...")
             self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["CustomPreCodeUnitBuildScript.py"]+args, os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS"),print_live_output=True)
