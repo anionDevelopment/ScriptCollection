@@ -246,19 +246,24 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             scbuildcodeunits_arguments=["bash","-c", "pip3 install scriptcollection --upgrade && scshowversion && "+" ".join(scbuildcodeunits_arguments)]
 
         args=["--repository",self.repository,"--targetenvironmenttype",self.target_environment_type,"--verbosity",str(int(self.sc.log.loglevel))]
-        
+
         if  os.path.isfile( os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS","CustomPreCodeUnitBuildScriptForContainer.py")):
             self.sc.log.log("Run custom pre-codeunitbuild script for container...")
             self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["CustomPreCodeUnitBuildScriptForContainer.py"]+args, os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS"),print_live_output=True)
-
+            
         if  os.path.isfile( os.path.join(self.repository,"Other","Scripts","CustomPreCodeUnitBuildScriptForContainer.py")):
             self.sc.log.log("Prepare build codeunits for container...")
             self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["CustomPreCodeUnitBuildScriptForContainer.py"]+args, os.path.join(self.repository,"Other","Scripts"),print_live_output=True)
+
+        if  os.path.isfile( os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS","CustomPreCodeUnitBuildScriptInContainer.py")):
+            args += ["-v", os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS","CustomPreCodeUnitBuildScriptInContainer.py")+f":~/.ScriptCollection/TFCPS/CustomPreCodeUnitBuildScriptInContainer.py" ]
 
         #pass the env-variables defined in <repository>/.ScriptCollection/RequiredEnvVariables.csv (if any) into the container so they do not have to be specified explicitly on every scbuildcodeunitsc-call.
         env_arguments: list[str] = []
         for env_variable_name, env_variable_value in self.tfcps_tools_general.get_required_env_variables(self.repository).items():
             env_arguments += ["-e", f"{env_variable_name}={env_variable_value}"]
+
+
 
         #run scbuildcodeunits inside the SCBuilder-image. base_mount_folder is mounted into the container (covering the repository and, for submodules, its real gitdir) and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
         docker_arguments = [
