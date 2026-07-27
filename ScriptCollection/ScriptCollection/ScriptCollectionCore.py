@@ -39,7 +39,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.56"
+version = "4.3.57"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2548,6 +2548,7 @@ class ScriptCollectionCore:
         lines = [
             "/Cache/",
              "RequiredEnvVariables.local.csv",
+             "CustomPreCodeUnitBuildScriptInContainer.local.py",
         ]
         GeneralUtilities.write_lines_to_file(gitignore_file, lines)
 

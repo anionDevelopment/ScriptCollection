@@ -1386,6 +1386,7 @@ class GeneralUtilities:
     @check_arguments
     def normalize_path(path)->str:
         path=str(path)
+        path=os.path.expandvars(path)
         if GeneralUtilities.current_system_is_windows():
             path=path.replace("/","\\")
         else:
