@@ -1,1 +1,3 @@
 /Cache/
+RequiredEnvVariables.local.csv
+CustomPreCodeUnitBuildScriptInContainer.local.py
