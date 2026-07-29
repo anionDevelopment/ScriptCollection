@@ -270,6 +270,7 @@ def BuildCodeUnits() -> int:
         base_mount_folder:str=args.basemountfolder
         if base_mount_folder is None:
             base_mount_folder=repo
+        base_mount_folder:str=GeneralUtilities.resolve_relative_path(base_mount_folder,os.getcwd())
         success, _ = t.build_codeunits_in_container(base_mount_folder)
         return 0 if success else 1
     else:
