@@ -9,8 +9,47 @@ from packaging.version import Version
 from ..GeneralUtilities import GeneralUtilities
 from ..ScriptCollectionCore import ScriptCollectionCore
 from ..SCLog import  LogLevel
+from .TFCPS_BuildCodeUnitsHook import TFCPS_BuildCodeUnitsHook
 from .TFCPS_CodeUnit_BuildCodeUnit import TFCPS_CodeUnit_BuildCodeUnit
+from .TFCPS_OCIImageSecretScan import TFCPS_OCIImageSecretScan
 from .TFCPS_Tools_General import TFCPS_Tools_General
+
+
+class TFCPS_UpdateDependenciesHook(TFCPS_BuildCodeUnitsHook):
+    """Updates the dependencies of the repository and of its codeunits while the codeunits are built.
+    The dependency-update is implemented as a hook of the regular codeunit-build (and not as an own reduced build-process, which is how
+    it was implemented before) so that it runs with exactly the same preparation as a normal build: the required environment-variables
+    are set, the custom pre-codeunit-build-script runs and therefore the package-sources which are needed to resolve the dependencies of
+    a codeunit are available. Without that preparation an update fails as soon as a codeunit has a dependency which is not available on a
+    public package-source - which was the case for an update inside a build-container."""
+
+    __sc: ScriptCollectionCore = None
+    __tfcps_tools_general: TFCPS_Tools_General = None
+
+    def __init__(self, sc: ScriptCollectionCore, tfcps_tools_general: TFCPS_Tools_General):
+        self.__sc = sc
+        self.__tfcps_tools_general = tfcps_tools_general
+
+    @GeneralUtilities.check_arguments
+    def run_after_preparation(self, repository: str) -> None:
+        update_dependencies_script_folder: str = os.path.join(repository, "Other", "Scripts")
+        if os.path.isfile(os.path.join(update_dependencies_script_folder, "UpdateDependencies.py")):
+            self.__sc.log.log("Update dependencies of the repository...")
+            self.__sc.run_program(GeneralUtilities.get_python_executable(), "UpdateDependencies.py", update_dependencies_script_folder)
+
+    @GeneralUtilities.check_arguments
+    def run_after_codeunit_was_built(self, codeunit_build: TFCPS_CodeUnit_BuildCodeUnit) -> None:
+        codeunit_name: str = codeunit_build.codeunit_name
+        codeunit_folder: str = codeunit_build.codeunit_folder
+        repository: str = codeunit_build.repository_folder
+        if not self.__tfcps_tools_general.codeunit_has_updatable_dependencies(os.path.join(codeunit_folder, f"{codeunit_name}.codeunit.xml")):
+            return
+        self.__sc.log.log(f"Update dependencies of codeunit {codeunit_name}...")
+        self.__sc.run_program(GeneralUtilities.get_python_executable(), "UpdateDependencies.py", os.path.join(codeunit_folder, "Other"))
+        if self.__sc.git_repository_has_uncommitted_changes(repository):
+            #the update changed something, so it has to be verified that the codeunit is still buildable with the updated dependencies.
+            self.__sc.log.log(f"Build codeunit {codeunit_name} again to verify it is still buildable with the updated dependencies...")
+            codeunit_build.build_codeunit()
 
 class TFCPS_CodeUnit_BuildCodeUnits:
     repository:str=None
@@ -39,7 +78,11 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.__add_ready_to_merge_flag=add_ready_to_merge_flag
 
     @GeneralUtilities.check_arguments
-    def build_codeunits(self) -> None:
+    def build_codeunits(self, hook: TFCPS_BuildCodeUnitsHook = None) -> None:
+        """Builds all codeunits of the repository. The optional hook allows a caller inside ScriptCollection to run additional actions
+        between the regular build-steps (see TFCPS_BuildCodeUnitsHook); a caller which only wants to build passes nothing."""
+        if hook is None:
+            hook = TFCPS_BuildCodeUnitsHook()
         self.sc.log.log(GeneralUtilities.get_line())
         start_time:datetime=GeneralUtilities.get_now()
         ready_to_merge_file=os.path.join(self.repository,".ScriptCollection",".IsReadyToMerge")
@@ -72,16 +115,23 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.sc.ensure_scriptcollection_gitignore_is_setup(self.repository)
 
             self.sc.log.log(f"Start building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(start_time,False)}. (Target environment-type: {self.target_environment_type})")
+
+            self.tfcps_tools_general.ensure_required_environment_variables_are_set(self.repository)
+
+            self.__run_custom_pre_codeunit_build_script()
+
             if self.__assert_no_new_changes:
                 self.sc.assert_no_uncommitted_changes(self.repository,"Can not build codeunit: There are uncommitted changes in the repository.")
 
             try:
-                xmlschema.validate(product_information_file, "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/main/Conventions/RepositoryStructure/CommonProjectStructure/projectinformation.xsd")
+                xmlschema.validate(product_information_file, "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/main/Conventions/RepositoryStructure/CommonProjectStructure/productinformation.xsd")
             except Exception as exception:
                 self.sc.log.log_exception(f"'{product_information_file}' could not be validated against the XSD:", exception, LogLevel.Warning)
 
             #run prepare-script
             self.run_prepare_script()
+
+            hook.run_after_preparation(self.repository)
 
             #check if changelog exists
             changelog_file=os.path.join(self.repository,"Other","Resources","Changelog",f"v{self.tfcps_tools_general.get_version_of_project(self.repository)}.md")
@@ -107,6 +157,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
                 tFCPS_CodeUnit_BuildCodeUnit:TFCPS_CodeUnit_BuildCodeUnit = TFCPS_CodeUnit_BuildCodeUnit(os.path.join(self.repository,codeunit_name),self.sc.log.loglevel,self.target_environment_type,self.additionalargumentsfile,self.use_cache(),self.is_pre_merge())
                 self.sc.log.log(GeneralUtilities.get_line())
                 tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()
+                hook.run_after_codeunit_was_built(tFCPS_CodeUnit_BuildCodeUnit)
 
             self.sc.log.log(GeneralUtilities.get_line())
 
@@ -192,30 +243,42 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         return False
 
     @GeneralUtilities.check_arguments
-    def run_prepare_script(self):
-        args=["--repository",self.repository,"--targetenvironmenttype",self.target_environment_type,"--verbosity",str(int(self.sc.log.loglevel))]
+    def __get_build_arguments(self, repository: str) -> list[str]:
+        """Returns the arguments which describe the current build. They are passed to every script which is called by this build
+        (the prepare-script of the repository as well as the optional user-specific custom scripts), so such a script can behave
+        differently depending on the repository and the target-environment-type it is called for."""
+        result: list[str] = ["--repository", repository, "--targetenvironmenttype", self.target_environment_type, "--verbosity", str(int(self.sc.log.loglevel))]
         if GeneralUtilities.string_has_content(self.additionalargumentsfile):
-            args=args+["--additionalargumentsfile", self.additionalargumentsfile]
+            result = result+["--additionalargumentsfile", self.additionalargumentsfile]
         if not self.__use_cache:
-            if self.sc.git_repository_has_uncommitted_changes(self.repository):
-                self.sc.log.log("No-cache-option can not be applied because there are uncommited changes in the repository.",LogLevel.Warning)
+            if self.sc.git_repository_has_uncommitted_changes(repository):
+                self.sc.log.log("No-cache-option can not be applied because there are uncommited changes in the repository.", LogLevel.Warning)
             else:
-                args=args+["--nocache"]
+                result = result+["--nocache"]
+        return result
 
-        if self.sc.is_running_in_build_container():
-            
-            if  os.path.isfile( os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS","CustomPreCodeUnitBuildScriptInContainer.py")):
-                self.sc.log.log("Run custom pre-codeunitbuild script...")
-                self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["CustomPreCodeUnitBuildScriptInContainer.py"]+args, os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS"),print_live_output=True)
+    @GeneralUtilities.check_arguments
+    def __run_custom_pre_codeunit_build_script(self) -> None:
+        """Runs the optional user-specific script which prepares this machine for a codeunit-build. The script is located in
+        '~/.ScriptCollection/TFCPS', so it is outside of any repository and is not part of a product's sourcecode.
+        Which script is used depends on where the build runs, because both cases need different preparation-steps:
+        - build directly on the host ('scbuildcodeunits'): 'CustomPreCodeUnitBuildScript.py'
+        - build inside the container ('scbuildcodeunitsc' or a build-pipeline): 'CustomPreCodeUnitBuildScriptInContainer.py'. It is
+          searched in the folder into which 'scbuildcodeunitsc' mounts that single script and - if it is not there - in the
+          configuration-folder, because a build-runner usually gets the whole configuration-folder mounted instead (see the article
+          'Build-runner-configuration'). The script which the host itself runs before it starts the container is
+          'CustomPreCodeUnitBuildScriptForContainer.py' and is therefore run there and not here."""
+        if self.sc.is_runnning_in_container():
+            script_file: str = os.path.join(self.tfcps_tools_general.get_folder_of_custom_scripts_in_container(), "CustomPreCodeUnitBuildScriptInContainer.py")
+            if not os.path.isfile(script_file):
+                script_file = self.tfcps_tools_general.get_custom_script_file("CustomPreCodeUnitBuildScriptInContainer.py")
+        else:
+            script_file: str = self.tfcps_tools_general.get_custom_script_file("CustomPreCodeUnitBuildScript.py")
+        self.tfcps_tools_general.run_custom_script_if_available(script_file, self.__get_build_arguments(self.repository))
 
-            if  os.path.isfile( os.path.join(self.repository,".ScriptCollection","CustomPreCodeUnitBuildScriptInContainer.local.py")):
-                self.sc.log.log("Prepare build codeunits...")
-                self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["CustomPreCodeUnitBuildScriptInContainer.local.py"]+args, os.path.join(self.repository,".ScriptCollection"),print_live_output=True)
-
-        if  os.path.isfile( os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS","CustomPreCodeUnitBuildScript.py")):
-            self.sc.log.log("Run custom pre-codeunitbuild script...")
-            self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["CustomPreCodeUnitBuildScript.py"]+args, os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS"),print_live_output=True)
-
+    @GeneralUtilities.check_arguments
+    def run_prepare_script(self):
+        args = self.__get_build_arguments(self.repository)
         if  os.path.isfile( os.path.join(self.repository,"Other","Scripts","PrepareBuildCodeunits.py")):
             self.sc.log.log("Prepare build codeunits...")
             self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["PrepareBuildCodeunits.py"]+args, os.path.join(self.repository,"Other","Scripts"),print_live_output=True)
@@ -255,25 +318,26 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if test:
             scbuildcodeunits_arguments=["bash","-c", "pip3 install scriptcollection --upgrade && scshowversion && "+" ".join(scbuildcodeunits_arguments)]
 
-        args=["--repository",self.repository,"--targetenvironmenttype",self.target_environment_type,"--verbosity",str(int(self.sc.log.loglevel))]
+        #run the optional user-specific script which prepares this host for a container-build (for example to log in to the registry the image is pulled from).
+        #it runs before the environment-variables are resolved, so it can also create the files their values are read from.
+        self.tfcps_tools_general.run_custom_script_if_available(self.tfcps_tools_general.get_custom_script_file("CustomPreCodeUnitBuildScriptForContainer.py"), self.__get_build_arguments(self.repository))
 
-        if  os.path.isfile( os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS","CustomPreCodeUnitBuildScriptForContainer.py")):
-            self.sc.log.log("Run custom pre-codeunitbuild script for container...")
-            self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["CustomPreCodeUnitBuildScriptForContainer.py"]+args, os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS"),print_live_output=True)
-            
-        if  os.path.isfile( os.path.join(self.repository,"Other","Scripts","CustomPreCodeUnitBuildScriptForContainer.py")):
-            self.sc.log.log("Prepare build codeunits for container...")
-            self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["CustomPreCodeUnitBuildScriptForContainer.py"]+args, os.path.join(self.repository,"Other","Scripts"),print_live_output=True)
+        #mount the optional user-specific script which prepares the container itself. it is mounted read-only because the container is not supposed to change the host-configuration.
+        #the build inside the container runs it (see __run_custom_pre_codeunit_build_script); if the file does not exist on the host nothing is mounted and nothing is run.
+        mount_arguments: list[str] = []
+        custom_script_for_inside_the_container: str = self.tfcps_tools_general.get_custom_script_file("CustomPreCodeUnitBuildScriptInContainer.py")
+        if os.path.isfile(custom_script_for_inside_the_container):
+            mount_arguments += ["-v", f"{custom_script_for_inside_the_container}:{self.tfcps_tools_general.get_folder_of_custom_scripts_in_container()}/CustomPreCodeUnitBuildScriptInContainer.py:ro"]
 
-        if  os.path.isfile( os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS","CustomPreCodeUnitBuildScriptInContainer.py")):
-            args += ["-v", os.path.join( GeneralUtilities.get_scriptcollection_configuration_folder(),"TFCPS","CustomPreCodeUnitBuildScriptInContainer.py")+f":~/.ScriptCollection/TFCPS/CustomPreCodeUnitBuildScriptInContainer.py" ]
-
-        #pass the env-variables defined in <repository>/.ScriptCollection/RequiredEnvVariables.csv (if any) into the container so they do not have to be specified explicitly on every scbuildcodeunitsc-call.
+        #pass the environment-variables which are declared as required in <repository>/.ScriptCollection/ProductInformation.xml into the container
+        #so they do not have to be specified explicitly on every scbuildcodeunits-call. Their values are resolved from the user-specific
+        #configuration-file (see TFCPS_Tools_General.get_environment_variables_configuration_file), which only exists on the host.
+        #only the names are passed as arguments; the values are given to the docker-client through its own environment, because arguments
+        #are written to the log and are visible in the process-list of this host, which must not happen for a value which is typically a secret.
+        required_environment_variables: dict[str, str] = self.tfcps_tools_general.get_required_environment_variables(self.repository)
         env_arguments: list[str] = []
-        for env_variable_name, env_variable_value in self.tfcps_tools_general.get_required_env_variables(self.repository).items():
-            env_arguments += ["-e", f"{env_variable_name}={env_variable_value}"]
-
-
+        for env_variable_name in required_environment_variables:
+            env_arguments += ["-e", env_variable_name]
 
         #run scbuildcodeunits inside the SCBuilder-image. base_mount_folder is mounted into the container (covering the repository and, for submodules, its real gitdir) and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
         docker_arguments = [
@@ -281,12 +345,12 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             "-v", f"{base_mount_folder}:{container_base_mount_folder}",
             "-v", "/var/run/docker.sock:/var/run/docker.sock",
             "-w", container_repository_folder,
-        ] + env_arguments + [
+        ] + mount_arguments + env_arguments + [
             image,
         ] + scbuildcodeunits_arguments
         self.sc.log.log(f"Build codeunits in container using image \"{image}\"...")
         # the exitcode is evaluated by the caller (returned as part of the result-tuple), so the program-runner must not raise on a non-zero exitcode here.
-        result=self.sc.run_program_argsasarray("docker", docker_arguments, throw_exception_if_exitcode_is_not_zero=False, print_live_output=True)
+        result=self.sc.run_program_argsasarray("docker", docker_arguments, throw_exception_if_exitcode_is_not_zero=False, print_live_output=True, env_vars=required_environment_variables)
         exit_code:int=result[0]
         stdout:str=result[1] or GeneralUtilities.empty_string
         stderr:str=result[2] or GeneralUtilities.empty_string
@@ -428,12 +492,47 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     @GeneralUtilities.check_arguments
     def search_for_secrets(self) -> None:
         self.sc.log.log("Search for secrets...")
+        self.__search_for_secrets_in_repository()
+        self.__search_for_secrets_in_oci_images()
+
+    @GeneralUtilities.check_arguments
+    def __search_for_secrets_in_oci_images(self) -> None:
+        #the repository-scan above can not find secrets which are only contained in a built image (build-arguments recorded in the
+        #image-history, environment-variables of the image and files which are generated during the image-build), and betterleaks
+        #does not look into the "*.tar"-files the image-builds produce. Since these images get published, they are scanned separately.
+        scan: TFCPS_OCIImageSecretScan = TFCPS_OCIImageSecretScan(self.sc)
+        findings: list[str] = []
+        for image in self.__get_oci_images_of_repository():
+            findings = findings+scan.search_for_secrets_in_image(image, self.repository)
+        if 0 < len(findings):
+            for finding in findings:
+                self.sc.log.log(finding, LogLevel.Error)
+            raise ValueError(f"Found {len(findings)} secret-finding(s) in the built OCI-image(s). A secret which is part of an image is readable by everybody who is allowed to pull that image. See {os.path.join(self.repository, '.betterleaks.toml')} to ignore known false positives.")
+
+    @GeneralUtilities.check_arguments
+    def __get_oci_images_of_repository(self) -> list[str]:
+        """Returns the references of the images which were built by the codeunits of this repository. A codeunit builds an image
+        exactly if it has an OCI-image-artifacts-folder; the built image is loaded into the local docker-instance by the
+        codeunit-build, tagged with the lowercase codeunit-name and the codeunit-version."""
+        result: list[str] = []
+        for codeunit_name in self.tfcps_tools_general.get_codeunits(self.repository):
+            codeunit_folder: str = os.path.join(self.repository, codeunit_name)
+            if not os.path.isdir(os.path.join(codeunit_folder, "Other", "Artifacts", "BuildResult_OCIImage")):
+                continue
+            codeunit_version: str = self.tfcps_tools_general.get_version_of_codeunit(os.path.join(codeunit_folder, f"{codeunit_name}.codeunit.xml"))
+            result.append(f"{codeunit_name}:{codeunit_version}".lower())
+        return result
+
+    @GeneralUtilities.check_arguments
+    def __search_for_secrets_in_repository(self) -> None:
         try:
             image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "Betterleaks")
         except Exception:
             image="ghcr.io/betterleaks/betterleaks:latest"
         config_file = os.path.join(self.repository, ".betterleaks.toml")
-        running_in_container = os.path.exists("/.dockerenv") or self.sc.is_running_in_build_container()
+        #the filesystem-marker is checked in addition to the convention-based environment-variable (which the rest of this class uses as well),
+        #because a wrong result here does not only change a message but makes the scan analyse the wrong folder.
+        running_in_container = os.path.exists("/.dockerenv") or self.sc.is_runnning_in_container()
         if running_in_container:
             # We run inside the build-container with the docker-socket forwarded to the host-daemon.
             # A bind-mount of our in-container repository-path (e.g. "/__w/<repo>/<repo>" on a
@@ -468,7 +567,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if daemon_check[0] != 0:
             raise ValueError(f"The secret-scan can not be performed because the docker-daemon is not reachable (exit-code {daemon_check[0]}: {daemon_check[2].strip()}). The scan runs betterleaks via 'docker run', which requires a running docker-daemon (inside a build-container its socket must be forwarded to the host-daemon). This is an infrastructure-problem, not a secret-finding in the repository.")
         args = ["run", "--rm"] + mount_arguments + [image] + scan_args
-        result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==LogLevel.Debug)
+        result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==LogLevel.Debug,print_errors_as_information=True)
         if result[0] != 0:
             for line in GeneralUtilities.string_to_lines(result[1]):
                 self.sc.log.log(line, LogLevel.Information)
@@ -527,29 +626,19 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.update_year_in_license_file()
         self.sc.assert_is_git_repository(repository)
         self.sc.assert_no_uncommitted_changes(repository)
-        self.run_prepare_script()
-        if os.path.isfile(os.path.join(repository,"Other","Scripts","UpdateDependencies.py")):
-            self.sc.run_program(GeneralUtilities.get_python_executable(),"UpdateDependencies.py",os.path.join(repository,"Other","Scripts"))
-        codeunits:list[str]=self.tfcps_tools_general.get_codeunits(repository)   
-        for codeunit_name in codeunits:
-            self.sc.log.log(f"Update dependencies of codeunit {codeunit_name}...")
-            codeunit_folder=os.path.join(repository,codeunit_name)
-            tFCPS_CodeUnit_BuildCodeUnit:TFCPS_CodeUnit_BuildCodeUnit = TFCPS_CodeUnit_BuildCodeUnit(codeunit_folder,self.sc.log.loglevel,"QualityCheck",None,True,False)
-            if self.sc.git_repository_has_uncommitted_changes(repository):
-                tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()#ensure requirements for updating are there (some programming-languages needs this)
-            if self.tfcps_tools_general.codeunit_has_updatable_dependencies(os.path.join(codeunit_folder,f"{codeunit_name}.codeunit.xml")):
-                self.sc.run_program(GeneralUtilities.get_python_executable(),"UpdateDependencies.py",os.path.join(codeunit_folder,"Other"))
-            if self.sc.git_repository_has_uncommitted_changes(repository):
-                tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()#check if codeunit is still buildable
+        #the update is done while the codeunits are built regularly (see TFCPS_UpdateDependenciesHook): a codeunit is built before its
+        #dependencies are updated (some programming-languages need that) and again afterwards if the update changed something. Using the
+        #regular build means the update also gets all preparation-steps of a build - especially the package-sources which are required to
+        #resolve dependencies which are not available on a public package-source.
+        self.build_codeunits(TFCPS_UpdateDependenciesHook(self.sc, self.tfcps_tools_general))
         if self.sc.git_repository_has_uncommitted_changes(repository):
             changelog_folder = os.path.join(repository, "Other", "Resources", "Changelog")
             project_version:str=self.tfcps_tools_general.get_version_of_project(repository)
             changelog_file = os.path.join(changelog_folder, f"v{project_version}.md")
             if not os.path.isfile(changelog_file):
                 self.__ensure_changelog_file_is_added(repository, project_version)
-            t=TFCPS_CodeUnit_BuildCodeUnits(repository,self.sc.log.loglevel,"QualityCheck",None,True,False,False)
-            t.build_codeunits()#check codeunits are buildable at all
-            self.sc.git_commit(repository, "Updated dependencies", stage_all_changes=True) 
+            self.build_codeunits()#check the codeunits are buildable at all with all updates together
+            self.sc.git_commit(repository, "Updated dependencies", stage_all_changes=True)
 
     @GeneralUtilities.check_arguments
     def __ensure_changelog_file_is_added(self, repository_folder: str, version_of_project: str):

@@ -39,7 +39,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.3.57"
+version = "4.3.58"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2547,8 +2547,6 @@ class ScriptCollectionCore:
         gitignore_file = os.path.join(scriptcollection_folder, ".gitignore")
         lines = [
             "/Cache/",
-             "RequiredEnvVariables.local.csv",
-             "CustomPreCodeUnitBuildScriptInContainer.local.py",
         ]
         GeneralUtilities.write_lines_to_file(gitignore_file, lines)
 
@@ -2694,16 +2692,15 @@ DNS                 = {domain}
 
     @GeneralUtilities.check_arguments
     def update_dependencies_of_python_in_requirementstxt_file(self, file: str, ignored_dependencies: list[str]):
-        # TODO consider ignored_dependencies
         lines = GeneralUtilities.read_lines_from_file(file)
         new_lines = []
         for line in lines:
             if GeneralUtilities.string_has_content(line):
-                new_lines.append(self.__get_updated_line_for_python_requirements(line.strip()))
+                new_lines.append(self.__get_updated_line_for_python_requirements(ignored_dependencies,line.strip()))
         GeneralUtilities.write_lines_to_file(file, new_lines)
 
     @GeneralUtilities.check_arguments
-    def __get_updated_line_for_python_requirements(self, line: str) -> str:
+    def __get_updated_line_for_python_requirements(self, ignored_dependencies: list[str],line: str) -> str:
         if "==" in line or "<" in line:
             return line
         elif ">" in line:
@@ -2711,6 +2708,8 @@ DNS                 = {domain}
                 # line is something like "cyclonedx-bom>=2.0.2" and the function must return with the updated version
                 # (something like "cyclonedx-bom>=2.11.0" for example)
                 package = line.split(">")[0]
+                if package in ignored_dependencies:
+                    return line
                 operator = ">=" if ">=" in line else ">"
                 headers = {'Cache-Control': 'no-cache'}
                 response = requests.get(f'https://pypi.org/pypi/{package}/json', timeout=5, headers=headers)
@@ -2725,7 +2724,6 @@ DNS                 = {domain}
 
     @GeneralUtilities.check_arguments
     def update_dependencies_of_python_in_setupcfg_file(self, setup_cfg_file: str, ignored_dependencies: list[str]):
-        # TODO consider ignored_dependencies
         lines = GeneralUtilities.read_lines_from_file(setup_cfg_file)
         new_lines = []
         requirement_parsing_mode = False
@@ -2733,7 +2731,7 @@ DNS                 = {domain}
             new_line = line
             if (requirement_parsing_mode):
                 if ("<" in line or "=" in line or ">" in line):
-                    updated_line = f"    {self.__get_updated_line_for_python_requirements(line.strip())}"
+                    updated_line = f"    {self.__get_updated_line_for_python_requirements(ignored_dependencies,line.strip())}"
                     new_line = updated_line
                 else:
                     requirement_parsing_mode = False
@@ -3221,34 +3219,11 @@ TXDX
         return result
 
     @GeneralUtilities.check_arguments
-    def get_pip_index_url_arguments_from_local_cache(self)->list[str]:
-        arguments=[]
-        pip_folder=GeneralUtilities.normalize_path(self.get_global_cache_folder()+"/Pip")
-        if os.path.isdir(pip_folder):
-            main_index_file=GeneralUtilities.normalize_path(os.path.join(pip_folder, "MainIndex.txt"))
-            if os.path.isfile(main_index_file):
-                lines=GeneralUtilities.read_nonempty_lines_from_file(main_index_file)
-                url=[line for line in lines if line.startswith("IndexURL: ")][0].split(":", 1)[1].strip()
-                arguments.append("--index-url")
-                arguments.append(url)
-            extra_index_folder=GeneralUtilities.normalize_path(os.path.join(pip_folder, "ExtraIndexURLs"))
-            if os.path.isdir(extra_index_folder):
-                index_files=GeneralUtilities.get_direct_files_of_folder(extra_index_folder)
-                if len(index_files) > 0:
-                    for indexurl_file in index_files:
-                        lines=GeneralUtilities.read_nonempty_lines_from_file(indexurl_file)
-                        url=[line for line in lines if line.startswith("IndexURL: ")][0].split(":", 1)[1].strip()
-                        arguments.append("--extra-index-url")
-                        arguments.append(url)
-        return arguments
-
-    @GeneralUtilities.check_arguments
     def install_requirementstxt_file(self, requirements_txt_file: str):
+        #TODO add the package-sources (including their credentials) which are required to install the dependencies
         folder: str = os.path.dirname(requirements_txt_file)
         filename: str = os.path.basename(requirements_txt_file)
         arguments= ["install", "-r", filename]
-        for argument in self.get_pip_index_url_arguments_from_local_cache():
-            arguments.append(argument)
         self.run_program_argsasarray("pip", arguments, folder,print_live_output=self.log.loglevel==LogLevel.Debug)
 
     @GeneralUtilities.check_arguments

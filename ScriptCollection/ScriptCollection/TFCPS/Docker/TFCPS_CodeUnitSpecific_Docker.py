@@ -31,10 +31,7 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
             for custom_argument_key, custom_argument_value in custom_arguments.items():
                 args.append("--build-arg")
                 args.append(f"{custom_argument_key}={custom_argument_value}")
-            pip_args=self._protected_sc.get_pip_index_url_arguments_from_local_cache()
-            if len(pip_args)>0:
-                args.append("--build-arg")
-                args.append(f"PipIndexUrlArguments={' '.join(pip_args)}")
+            #TODO pass the package-sources (including their credentials) which are required to install the dependencies inside the image
             args = args+["--tag", f"{codeunitname_lower}:latest", "--tag", f"{codeunitname_lower}:{codeunitversion}", "--file", f"{codeunitname}/Dockerfile"]
             if not self.use_cache():
                 args.append("--no-cache")

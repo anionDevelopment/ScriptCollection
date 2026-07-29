@@ -12,6 +12,7 @@ from .ScriptCollectionCore import ScriptCollectionCore
 from .GeneralUtilities import GeneralUtilities, VersionEcholon
 from .SCLog import LogLevel, SCLog
 from .TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
+from .TFCPS.TFCPS_OCIImageSecretScan import TFCPS_OCIImageSecretScan
 from .TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
 from .OCIImages.OCIImageManager import OCIImageManager
 
@@ -1185,6 +1186,30 @@ def SearchForSecrets() -> int:
     t: TFCPS_CodeUnit_BuildCodeUnits = TFCPS_CodeUnit_BuildCodeUnits(repository, LogLevel(int(args.verbosity)), "QualityCheck", None, True, False, False)
     t.search_for_secrets()
     return 0
+
+def SearchForSecretsInImage() -> int:
+    parser = argparse.ArgumentParser(description="Scans an OCI-image which is available in the local docker-instance for secrets. Exit-code 0: no secrets found. Exit-code 1: secrets found. Exit-code 2: an error occurred.")
+    parser.add_argument('-i', '--image', required=True, help="Reference of the image which should be scanned, for example \"myimage:1.0.0\". The image must already be available in the local docker-instance.")
+    parser.add_argument('-r', '--repository', required=False, default=None, help="Optional path to a repository whose \".betterleaks.toml\" is used to allowlist known false positives.")
+    verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
+    parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
+    args = parser.parse_args()
+    sc: ScriptCollectionCore = ScriptCollectionCore()
+    try:
+        sc.log.loglevel = LogLevel(int(args.verbosity))
+        repository = GeneralUtilities.resolve_relative_path(args.repository, os.getcwd()) if args.repository is not None else None
+        findings: list[str] = TFCPS_OCIImageSecretScan(sc).search_for_secrets_in_image(args.image, repository)
+        if len(findings) == 0:
+            sc.log.log(f"No secrets found in image \"{args.image}\".")
+            return 0
+        for finding in findings:
+            sc.log.log(finding, LogLevel.Error)
+        sc.log.log(f"Found {len(findings)} secret-finding(s) in image \"{args.image}\". A secret which is part of an image is readable by everybody who is allowed to pull that image.", LogLevel.Error)
+        return 1
+    except Exception as exception:  # pylint:disable=broad-exception-caught
+        #an error must be distinguishable from a found secret, because "no secrets found" and "the scan could not be done" have opposite meanings for the caller.
+        sc.log.log_exception(f"The image \"{args.image}\" could not be scanned:", exception, LogLevel.Error)
+        return 2
 
 def PrepareBuildPipelineForGitlab() -> int:
     parser = argparse.ArgumentParser(description="Prepares the build-pipeline-configuration for GitLab.")
