@@ -297,6 +297,7 @@ def BuildCodeUnitsC() -> int:
     base_mount_folder:str=args.basemountfolder
     if base_mount_folder is None:
         base_mount_folder=repo
+    base_mount_folder:str=GeneralUtilities.resolve_relative_path(base_mount_folder,os.getcwd())
     t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges,args.addreadytomergeflag)
     success, _ = t.build_codeunits_in_container(base_mount_folder)
     return 0 if success else 1
