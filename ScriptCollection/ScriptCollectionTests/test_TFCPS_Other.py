@@ -337,7 +337,9 @@ items:
     def test_get_declared_package_sources_returns_empty_list_when_nothing_is_declared(self) -> None:
         # arrange
         t = TFCPS_Tools_General(ScriptCollectionCore())
-        with patch.dict(os.environ, {"Dependency_CSharp_Incomplete_Username": "MyUser"}):
+        #cleared so that package-sources which are declared in the real environment (for example inside a build-container which
+        #declares real package-sources for its own dependency-resolution) do not leak into this test and make it non-deterministic.
+        with patch.dict(os.environ, {"Dependency_CSharp_Incomplete_Username": "MyUser"}, clear=True):
 
             # act
             actual_result = t.get_declared_package_sources("CSharp")
@@ -356,7 +358,9 @@ items:
             "Dependency_CSharp_MyPublicFeed_URL": "https://example.com/public/index.json",
             "Dependency_Python_MyPythonFeed_URL": "https://example.com/pypi",
         }
-        with patch.dict(os.environ, declarations):
+        #cleared so that package-sources which are declared in the real environment (for example inside a build-container which
+        #declares real package-sources for its own dependency-resolution) do not leak into this test and make it non-deterministic.
+        with patch.dict(os.environ, declarations, clear=True):
 
             # act
             actual_result = t.get_declared_package_sources("CSharp")
