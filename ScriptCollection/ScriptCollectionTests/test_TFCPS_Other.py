@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from ..ScriptCollection.GeneralUtilities import GeneralUtilities
 from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
 from ..ScriptCollection.TFCPS.TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base
@@ -15,6 +16,37 @@ def generate_toc_md_file_content_for_toc_yml_content(toc_yml_content: str) -> st
         toc_file = os.path.join(temporary_folder, "toc.yml")
         GeneralUtilities.write_text_to_file(toc_file, toc_yml_content)
         return generate_toc_md_file_content(toc_file)
+
+
+def write_product_information_file(repository: str, required_environment_variable_names: list[str], declare_required_environment_variables: bool = True) -> str:
+    """Writes a minimal '<repository>/.ScriptCollection/ProductInformation.xml' which declares the given environment-variables as required.
+    The declaration-element is always written (empty when no variable is given), because it is required; only a test which verifies
+    exactly that sets 'declare_required_environment_variables' to false."""
+    scriptcollection_folder = os.path.join(repository, ".ScriptCollection")
+    GeneralUtilities.ensure_directory_exists(scriptcollection_folder)
+    product_information_file = os.path.join(scriptcollection_folder, "ProductInformation.xml")
+    if declare_required_environment_variables:
+        declarations = GeneralUtilities.empty_string.join(f"<cps:requiredenvironmentvariable>{name}</cps:requiredenvironmentvariable>" for name in required_environment_variable_names)
+        required_environment_variables_element = f"<cps:requiredenvironmentvariables>{declarations}</cps:requiredenvironmentvariables>"
+    else:
+        required_environment_variables_element = GeneralUtilities.empty_string
+    GeneralUtilities.write_text_to_file(product_information_file, f"""<?xml version="1.0" encoding="UTF-8"?>
+<cps:productinformation xmlns:cps="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure">
+    <cps:producttitle>TestProduct</cps:producttitle>
+    <cps:remoteaddress>https://example.com/TestProduct</cps:remoteaddress>
+    {required_environment_variables_element}
+</cps:productinformation>
+""")
+    return product_information_file
+
+
+def write_environment_variables_configuration_file(configuration_folder: str, lines: list[str]) -> str:
+    """Writes the file which defines where the values of the required environment-variables come from into the given
+    configuration-folder (which a test uses instead of the configuration-folder of the current user)."""
+    file = os.path.join(configuration_folder, "TFCPS", "EnvironmentVariables.csv")
+    GeneralUtilities.ensure_directory_exists(os.path.dirname(file))
+    GeneralUtilities.write_lines_to_file(file, ["EnvVariableName;Kind;Value"]+lines)
+    return file
 
 
 class TasksForCommonProjectStructureTests(unittest.TestCase):
@@ -165,17 +197,210 @@ items:
         # assert
         assert expected_result == actual_result
 
-    def test_get_required_env_variables_returns_empty_dict_when_file_does_not_exist(self) -> None:
+    def test_get_required_environment_variable_names_returns_empty_list_when_nothing_is_declared(self) -> None:
         # arrange
         t = TFCPS_Tools_General(ScriptCollectionCore())
         with tempfile.TemporaryDirectory() as repository:
+            write_product_information_file(repository, [])
 
             # act
-            actual_result = t.get_required_env_variables(repository)
+            actual_result = t.get_required_environment_variable_names(repository)
 
             # assert
             assert not actual_result
 
+    def test_get_required_environment_variable_names_returns_declared_names(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository:
+            write_product_information_file(repository, ["MyFirstVariable", "MySecondVariable"])
+
+            # act
+            actual_result = t.get_required_environment_variable_names(repository)
+
+            # assert
+            assert actual_result == ["MyFirstVariable", "MySecondVariable"]
+
+    def test_get_required_environment_variable_names_throws_exception_when_the_declaration_is_missing(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository:
+            write_product_information_file(repository, [], declare_required_environment_variables=False)
+
+            # act & assert
+            #a missing declaration is a mistake and must not be treated like the statement "this product does not need any environment-variable".
+            with self.assertRaises(ValueError):
+                t.get_required_environment_variable_names(repository)
+
+    def test_get_required_environment_variables_returns_empty_dict_when_nothing_is_declared(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository:
+            write_product_information_file(repository, [])
+
+            # act
+            actual_result = t.get_required_environment_variables(repository)
+
+            # assert
+            assert not actual_result
+
+    def test_ensure_required_environment_variables_are_set_does_nothing_when_nothing_is_declared(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository:
+            write_product_information_file(repository, [])
+
+            # act
+            t.ensure_required_environment_variables_are_set(repository)
+
+            # assert
+            assert "MyVariable" not in os.environ
+
+    def test_get_required_environment_variables_resolves_the_configured_kinds(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
+            write_product_information_file(repository, ["MyLiteralVariable", "MyHostVariable", "MySecretVariable"])
+            write_environment_variables_configuration_file(configuration_folder, [
+                "MyLiteralVariable;literal;MyLiteralValue",
+                "MyHostVariable;hostenvvariable;MY_HOST_ENV_VARIABLE",
+                "MySecretVariable;file;Secrets/MySecret.txt",
+            ])
+            secret_file = os.path.join(configuration_folder, "TFCPS", "Secrets", "MySecret.txt")
+            GeneralUtilities.ensure_directory_exists(os.path.dirname(secret_file))
+            GeneralUtilities.write_text_to_file(secret_file, "MySecretValue\n")
+            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.dict(os.environ, {"MY_HOST_ENV_VARIABLE": "MyHostValue"}):
+
+                # act
+                actual_result = t.get_required_environment_variables(repository)
+
+                # assert
+                #a relative path of a secret-file is resolved against the configuration-folder, so it also resolves when that folder is mounted into a build-container.
+                assert actual_result == {"MyLiteralVariable": "MyLiteralValue", "MyHostVariable": "MyHostValue", "MySecretVariable": "MySecretValue"}
+
+    def test_get_required_environment_variables_prefers_the_configuration_file_over_the_environment(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
+            write_product_information_file(repository, ["MyVariable"])
+            write_environment_variables_configuration_file(configuration_folder, ["MyVariable;literal;ValueFromTheConfigurationFile"])
+            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.dict(os.environ, {"MyVariable": "ValueFromTheEnvironment"}):
+
+                # act
+                actual_result = t.get_required_environment_variables(repository)
+
+                # assert
+                #the configuration-file has precedence so a resolved value does not depend on what happens to be set in the environment of the caller.
+                assert actual_result == {"MyVariable": "ValueFromTheConfigurationFile"}
+
+    def test_get_required_environment_variables_takes_the_value_from_the_environment_when_it_is_not_configured(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
+            write_product_information_file(repository, ["MyVariableFromThePipeline"])
+            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.dict(os.environ, {"MyVariableFromThePipeline": "MyValue"}):
+
+                # act
+                #this is the case in a build-pipeline which provides the value from its own secret-store and has no configuration-file at all.
+                actual_result = t.get_required_environment_variables(repository)
+
+                # assert
+                assert actual_result == {"MyVariableFromThePipeline": "MyValue"}
+
+    def test_get_required_environment_variables_throws_exception_when_the_value_is_neither_configured_nor_set(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
+            write_product_information_file(repository, ["MyUnknownVariable"])
+            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+                os.environ.pop("MyUnknownVariable", None)
+
+                # act & assert
+                with self.assertRaises(ValueError):
+                    t.get_required_environment_variables(repository)
+
+    def test_ensure_required_environment_variables_are_set_sets_the_resolved_values(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
+            write_product_information_file(repository, ["MyVariableWhichHasToBeSet"])
+            write_environment_variables_configuration_file(configuration_folder, ["MyVariableWhichHasToBeSet;literal;MyValue"])
+            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.dict(os.environ, {}):
+
+                # act
+                t.ensure_required_environment_variables_are_set(repository)
+
+                # assert
+                #the value is set in the environment of the current process so every sub-process of the build inherits it.
+                assert os.environ["MyVariableWhichHasToBeSet"] == "MyValue"
+
+    def test_get_declared_package_sources_returns_empty_list_when_nothing_is_declared(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        #cleared so that package-sources which are declared in the real environment (for example inside a build-container which
+        #declares real package-sources for its own dependency-resolution) do not leak into this test and make it non-deterministic.
+        with patch.dict(os.environ, {"Dependency_CSharp_Incomplete_Username": "MyUser"}, clear=True):
+
+            # act
+            actual_result = t.get_declared_package_sources("CSharp")
+
+            # assert
+            #a source is declared by its url; a lonely username does not declare anything.
+            assert not actual_result
+
+    def test_get_declared_package_sources_returns_declared_sources(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        declarations = {
+            "Dependency_CSharp_MyPrivateFeed_URL": "https://example.com/nuget/index.json",
+            "Dependency_CSharp_MyPrivateFeed_Username": "MyUser",
+            "Dependency_CSharp_MyPrivateFeed_Password": "MyPassword",
+            "Dependency_CSharp_MyPublicFeed_URL": "https://example.com/public/index.json",
+            "Dependency_Python_MyPythonFeed_URL": "https://example.com/pypi",
+        }
+        #cleared so that package-sources which are declared in the real environment (for example inside a build-container which
+        #declares real package-sources for its own dependency-resolution) do not leak into this test and make it non-deterministic.
+        with patch.dict(os.environ, declarations, clear=True):
+
+            # act
+            actual_result = t.get_declared_package_sources("CSharp")
+
+            # assert
+            #the names are normalized to lowercase because the case of the name of an environment-variable can not be preserved on all operating-systems.
+            assert [package_source.name for package_source in actual_result] == ["myprivatefeed", "mypublicfeed"]
+            assert actual_result[0].url == "https://example.com/nuget/index.json"
+            assert actual_result[0].username == "MyUser"
+            assert actual_result[0].password == "MyPassword"
+            assert actual_result[0].has_credentials()
+            #the source of another technology must not be returned and a source without credentials must be usable.
+            assert not actual_result[1].has_credentials()
+
+    def test_run_custom_script_if_available_does_nothing_when_script_does_not_exist(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as folder:
+
+            # act
+            t.run_custom_script_if_available(os.path.join(folder, "NotExisting.py"), ["--repository", folder])
+
+            # assert
+            assert not os.listdir(folder)
+
+    def test_run_custom_script_if_available_runs_script_in_its_own_folder_with_the_given_arguments(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as folder:
+            script_file = os.path.join(folder, "CustomScript.py")
+            #the script writes its arguments and its working-directory into a file, so the test can verify both without mocking the program-runner.
+            GeneralUtilities.write_text_to_file(script_file, "import os,sys\nopen('Result.txt','w',encoding='utf-8').write(os.getcwd()+'\\n'+' '.join(sys.argv[1:]))\n")
+
+            # act
+            t.run_custom_script_if_available(script_file, ["--repository", "MyRepository"])
+
+            # assert
+            result_lines = GeneralUtilities.read_lines_from_file(os.path.join(folder, "Result.txt"))
+            assert os.path.realpath(result_lines[0]) == os.path.realpath(folder)
+            assert result_lines[1] == "--repository MyRepository"
 
     def test_generate_toc_md_file_content_with_toc_without_items_property(self) -> None:
         # arrange

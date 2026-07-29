@@ -3,12 +3,12 @@ import re
 import shutil
 import uuid
 import json
-import csv
 from lxml import etree
 import yaml
 from .CertificateGeneratorInformationBase import CertificateGeneratorInformationBase
 from ...GeneralUtilities import GeneralUtilities
 from ...SCLog import  LogLevel
+from ..PackageSource import PackageSource
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_CodeUnitSpecific_Base_CLI
 
 class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
@@ -20,10 +20,72 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         super().__init__(current_file, verbosity,targetenvironmenttype,use_cache,is_pre_merge)
         self.csproj_file=os.path.join(self.get_codeunit_folder(), self.get_codeunit_name(), self.get_codeunit_name() + ".csproj")
         self.is_library="<OutputType>Library</OutputType>" in GeneralUtilities.read_text_from_file(self.csproj_file)#TODO do a real check by checking this property using xpath
+        #every dotnet-operation of a codeunit (build, test, linting, ...) restores the dependencies of the codeunit, so the sources
+        #they are downloaded from have to be available for all of them and not only for the build.
+        self.__ensure_declared_package_sources_are_available()
+
+    @GeneralUtilities.check_arguments
+    def __ensure_declared_package_sources_are_available(self) -> None:
+        """Ensures that every NuGet-source which is declared for this machine (see TFCPS_Tools_General.get_declared_package_sources) is
+        registered with its current credentials, so a codeunit can also use dependencies which are not available on nuget.org.
+        Already existing sources are updated instead of being replaced, and sources which are not declared are not touched at all: the
+        registration is stored in the NuGet-configuration of the current user, which - when the build runs directly on the host - is
+        the configuration the user also uses for their own work and which must not be destroyed by a build."""
+        package_sources: list[PackageSource] = self.tfcps_Tools_General.get_declared_package_sources("CSharp")
+        if len(package_sources) == 0:
+            return
+        codeunit_folder: str = self.get_codeunit_folder()
+        registered_sources: dict[str, str] = self.__get_registered_nuget_sources(codeunit_folder)
+        for package_source in package_sources:
+            #a source which is already registered is updated instead of being added a second time. It is searched by its url and not only
+            #by its name, because the same feed can already be registered under a different name (which is the usual case on a machine on
+            #which the user configured the feed manually) and a second registration of the same url would let every restore query it twice.
+            existing_name: str = None
+            for registered_name, registered_url in registered_sources.items():
+                if self.__nuget_sources_are_equal(registered_url, package_source.url) or registered_name.lower() == package_source.name:
+                    existing_name = registered_name
+                    break
+            if existing_name is None:
+                arguments = ["nuget", "add", "source", package_source.url, "--name", package_source.name]
+            else:
+                #the credentials are set again even when the source already exists, because a token can have been rotated since it was registered.
+                arguments = ["nuget", "update", "source", existing_name, "--source", package_source.url]
+            if package_source.has_credentials():
+                arguments = arguments+["--username", package_source.username, "--password", package_source.password]
+                if not GeneralUtilities.current_system_is_windows():
+                    #without this the password can not be encrypted, which lets the command fail on the operating-systems which do not support the encryption.
+                    arguments.append("--store-password-in-clear-text")
+            arguments_for_log = list(arguments)
+            if package_source.has_credentials():
+                arguments_for_log[arguments_for_log.index(package_source.password)] = "***"#the password must not be written to the build-log
+            self._protected_sc.log.log(f"Add NuGet-source \"{package_source.name}\" ({package_source.url})..." if existing_name is None else f"Update the already registered NuGet-source \"{existing_name}\" ({package_source.url})...", LogLevel.Debug)
+            self._protected_sc.run_program_argsasarray("dotnet", arguments, codeunit_folder, arguments_for_log=arguments_for_log, print_live_output=False)
+
+    @GeneralUtilities.check_arguments
+    def __get_registered_nuget_sources(self, folder: str) -> dict[str, str]:
+        """Returns the NuGet-sources which are registered for the given folder as a mapping of their name to their url. The sources are
+        read from the output of "dotnet nuget list source", which prints the name (with its state) and the url of a source in two
+        consecutive lines."""
+        result: dict[str, str] = {}
+        list_result = self._protected_sc.run_program_argsasarray("dotnet", ["nuget", "list", "source"], folder, throw_exception_if_exitcode_is_not_zero=False, print_live_output=False)
+        name_pattern = re.compile(r"^\s*\d+\.\s+(.+?)\s+\[(?:Enabled|Disabled)\]\s*$")
+        current_name: str = None
+        for line in list_result[1].splitlines():
+            match = name_pattern.match(line)
+            if match is not None:
+                current_name = match.group(1).strip()
+            elif current_name is not None and GeneralUtilities.string_has_content(line):
+                result[current_name] = line.strip()
+                current_name = None
+        return result
+
+    @GeneralUtilities.check_arguments
+    def __nuget_sources_are_equal(self, url: str, other_url: str) -> bool:
+        """Compares two urls of package-sources. A trailing slash and the case are ignored because they do not address a different feed."""
+        return url.strip().rstrip("/").lower() == other_url.strip().rstrip("/").lower()
 
     @GeneralUtilities.check_arguments
     def build(self,runtimes:list[str],generate_open_api_spec:bool) -> None:
-        self.__reset_nuget_sources()
         if self.is_library:
             self.standardized_tasks_build_for_dotnet_library_project(runtimes)
             GeneralUtilities.assert_condition(not generate_open_api_spec,"OpenAPI-Specification can not be generated for a library.")
@@ -31,73 +93,6 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             self.standardized_tasks_build_for_dotnet_project(runtimes)
             if generate_open_api_spec:
                 self.generate_openapi_file(runtimes[0])
-
-    @GeneralUtilities.check_arguments
-    def __reset_nuget_sources(self) -> None:
-        if self._protected_sc.is_running_in_build_container():
-            
-            self._protected_sc.log.log("Remove all existing NuGet-sources...", LogLevel.Debug)
-            list_result = self._protected_sc.run_program_argsasarray("dotnet", ["nuget", "list", "source"], throw_exception_if_exitcode_is_not_zero=False,print_live_output=False)
-            existing_source_name_pattern = re.compile(r"^\s*\d+\.\s+(.+?)\s+\[(?:Enabled|Disabled)\]\s*$")
-            for line in list_result[1].splitlines():
-                m = existing_source_name_pattern.match(line)
-                if not m:
-                    continue
-                existing_source_name = m.group(1).strip()
-                self._protected_sc.log.log(f"Remove existing NuGet-source '{existing_source_name}'", LogLevel.Debug)
-                self._protected_sc.run_program_argsasarray("dotnet", ["nuget", "remove", "source", existing_source_name], throw_exception_if_exitcode_is_not_zero=False)
-
-            sources:list[tuple[str,str,str,str]] = []
-            
-            csv_file = os.path.join(self._protected_sc.get_scriptcollection_configuration_folder(), "TFCPS", "CustomC#Dependencies.csv")
-            if  os.path.isfile(csv_file):
-                self._protected_sc.log.log(f"Add custom NuGet-sources from '{csv_file}'...",LogLevel.Debug)
-                with open(csv_file, encoding="utf-8-sig", newline="") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        name = (row.get("Name") or "").strip()
-                        url = (row.get("Url") or "").strip()
-                        username = (row.get("Username") or "").strip()
-                        password = (row.get("Password") or "").strip()
-                        if not name or not url:
-                            continue
-                        sources.append((name, url, username, password))
-
-            if len(os.environ.items()) > 0:
-                self._protected_sc.log.log(f"Add custom NuGet-sources from environment variables...",LogLevel.Debug)
-            env_name_pattern = re.compile(r"^Dependency_CSharp_(.+?)_Name$")
-            for env_var_name, env_var_value in os.environ.items():
-                m = env_name_pattern.match(env_var_name)
-                if not m:
-                    continue
-                dependency_name = m.group(1)
-                name = (env_var_value or "").strip()
-                url = (os.environ.get(f"Dependency_CSharp_{dependency_name}_URL") or "").strip()
-                username = (os.environ.get(f"Dependency_CSharp_{dependency_name}_Username") or "").strip()
-                password = (os.environ.get(f"Dependency_CSharp_{dependency_name}_Passwort") or "").strip()
-                if not name or not url:
-                    continue
-                sources.append((name, url, username, password))
-
-            self._protected_sc.run_program_argsasarray("dotnet", ["nuget", "add", "source", "https://api.nuget.org/v3/index.json", "--name", "nuget.org"], print_live_output=True)
-            for name, url, username, password in sources:
-                #TODO add only the sources which are needed by the project
-                self._protected_sc.log.log(f"Add NuGet-source '{name}' with url '{url}'",LogLevel.Debug)
-                args = ["nuget", "add", "source", url, "--name", name]
-                if username:
-                    args += ["--username", username]
-                if password:
-                    args += ["--password", password, "--store-password-in-clear-text"]
-                args_for_log = list(args)
-                if password:
-                    args_for_log[args_for_log.index(password)] = "***"
-                self._protected_sc.run_program_argsasarray("dotnet", args, arguments_for_log=args_for_log, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.get_verbosity()==LogLevel.Debug)
-
-
-            if self._protected_sc.log.loglevel==LogLevel.Debug:
-                self._protected_sc.run_program_argsasarray("dotnet", ["nuget","list","source","--format","detailed"], print_live_output=True)
-            else:
-                self._protected_sc.run_program_argsasarray("dotnet", ["nuget","list","source"], print_live_output=True)
 
     @GeneralUtilities.check_arguments
     def generate_openapi_file(self, runtime: str) -> None:

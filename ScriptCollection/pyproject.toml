@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.3.57"
+version = "4.3.58"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
@@ -135,6 +135,7 @@ scshowprojectversion = "ScriptCollection.Executables:ShowProjectVersion"
 scpreparebuildpipelineforgitlab = "ScriptCollection.Executables:PrepareBuildPipelineForGitlab"
 scpreparebuildpipelineforgithub = "ScriptCollection.Executables:PrepareBuildPipelineForGithub"
 scsearchforsecrets = "ScriptCollection.Executables:SearchForSecrets"
+scsearchforsecretsinimage = "ScriptCollection.Executables:SearchForSecretsInImage"
 scgeneratetaskfilefromworkspacefile = "ScriptCollection.Executables:GenerateTaskfileFromWorkspacefile"
 scruncommandinfolder = "ScriptCollection.Executables:RunCommandInFolder"
 

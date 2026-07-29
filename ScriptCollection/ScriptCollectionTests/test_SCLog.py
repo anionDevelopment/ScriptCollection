@@ -28,12 +28,19 @@ class SCLogTests(unittest.TestCase):
 
             # assert
             lines=GeneralUtilities.read_lines_from_file(log_file)
+            content="\n".join(lines)
             assert "Exception: test-message; Exception-details: test-exception; Traceback: Traceback (most recent call last):" == lines[0]
-            assert "ScriptCollectionTests"+os.sep+"test_SCLog.py\", line 23, in test_log_exception" in lines[1]
-            assert "self.__test_function()" in lines[2]
-            assert "test_SCLog.py\", line 14, in __test_function" in lines[6] 
-            assert "raise ValueError(\"test-exception\")" in lines[7] 
-            assert "ValueError: test-exception" == lines[8] 
+            #the frame-headers (file, line-number, function-name) are asserted because they are taken directly from the code-object of each frame and are therefore always deterministic.
+            #the corresponding source-code-snippets (for example "self.__test_function()") are intentionally not asserted: printing them is a best-effort feature of the traceback-module
+            #which re-reads the source-file from disk via linecache when the traceback is formatted, and that re-read is not guaranteed to succeed in every environment (for example when
+            #the sourcecode-file is accessed through a mounted filesystem inside a build-container), which made this test flaky.
+            outer_frame_marker="ScriptCollectionTests"+os.sep+"test_SCLog.py\", line 23, in test_log_exception"
+            inner_frame_marker="test_SCLog.py\", line 14, in __test_function"
+            assert outer_frame_marker in content
+            assert inner_frame_marker in content
+            assert content.index(outer_frame_marker) < content.index(inner_frame_marker)
+            non_empty_lines=[line for line in lines if GeneralUtilities.string_has_content(line)]
+            assert "ValueError: test-exception" == non_empty_lines[-1]
 
             #cleanup
         finally:

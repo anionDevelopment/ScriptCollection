@@ -45,6 +45,9 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         self.tfcps_Tools_General.assert_is_codeunit_folder(self.__codeunit_folder)
         self.__repository_folder=GeneralUtilities.resolve_relative_path("..",self.__codeunit_folder)
         self._protected_sc.assert_is_git_repository(self.__repository_folder)
+        #ensure the environment-variables which the product declares as required are also available when this codeunit-script is started
+        #directly (for example "<codeunit>/Other/Build/Build.py" or "task bb") and not by "scbuildcodeunits".
+        self.tfcps_Tools_General.ensure_required_environment_variables_are_set(self.__repository_folder)
 
     def __search_codeunit_folder(self)->str:
         current_path:str=os.path.dirname(self.__current_file)
