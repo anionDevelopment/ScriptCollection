@@ -6,6 +6,9 @@ on:
         description: "Target environment-type for the build (e.g. QualityCheck, Productive)."
         required: false
         default: QualityCheck
+env:
+  IS_RUNNING_IN_SERVER_PIPELINE: "true"
+  IS_RUNNING_IN_GITHUB_PIPELINE: "true"
 jobs:
   build-pipeline:
     runs-on: [self-hosted, scriptcollection]
