@@ -1,72 +1,72 @@
 {
-	"folders": [
-		{
-			"path": ".",
-			"name": "Entire repository"
-		}
-	],
-	"tasks": {
-		"version": "2.0.0",
-		"tasks": [
-			{
-				"label": "Base: Build all codeunits",
-				"command": "scbuildcodeunits",
-				"type": "shell",
-				"options": {
-					"cwd": "${workspaceFolder}"
-				},
-				"aliases": [
-					"bb"
-				],
-				"allowcustomarguments": true
-			},
-			{
-				"label": "Base: Build all codeunits containerized",
-				"command": "scbuildcodeunitsc",
-				"type": "shell",
-				"options": {
-					"cwd": "${workspaceFolder}"
-				},
-				"aliases": [
-					"bd"
-				],
-				"allowcustomarguments": true
-			},
-			{
-				"label": "Base: Update dependencies",
-				"command": "scupdatedependencies",
-				"type": "shell",
-				"options": {
-					"cwd": "${workspaceFolder}"
-				},
-				"aliases": [
-					"bud"
-				],
-				"allowcustomarguments": true
-			}
-		]
-	},
-	"launch": {
-		"version": "0.2.0",
-		"configurations": [
-			{
-				"name": "Debug current file",
-				"type": "debugpy",
-				"request": "launch",
-				"program": "${file}",
-				"console": "integratedTerminal"
-			}
-		]
-	},
-	"settings": {
-		"terminal.integrated.cwd": "${workspaceFolder}",
-		"window.title": "${dirty} ${rootName}",
-		"spellright.documentTypes": [
-			"markdown",
-			"plaintext"
-		],
-		"spellright.language": [
-			"en"
-		]
-	}
+  "folders": [
+    {
+      "path": ".",
+      "name": "Entire repository"
+    }
+  ],
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Base: Build all codeunits",
+        "command": "scbuildcodeunits",
+        "type": "shell",
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "aliases": [
+          "bb"
+        ],
+        "allowcustomarguments": true
+      },
+      {
+        "label": "Base: Build all codeunits containerized",
+        "command": "scbuildcodeunitsc",
+        "type": "shell",
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "aliases": [
+          "bd"
+        ],
+        "allowcustomarguments": true
+      },
+      {
+        "label": "Base: Update dependencies",
+        "command": "scupdatedependencies",
+        "type": "shell",
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "aliases": [
+          "bud"
+        ],
+        "allowcustomarguments": true
+      }
+    ]
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Debug current file",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${file}",
+        "console": "integratedTerminal"
+      }
+    ]
+  },
+  "settings": {
+    "terminal.integrated.cwd": "${workspaceFolder}",
+    "window.title": "${dirty} ${rootName}",
+    "spellright.documentTypes": [
+      "markdown",
+      "plaintext"
+    ],
+    "spellright.language": [
+      "en"
+    ]
+  }
 }
