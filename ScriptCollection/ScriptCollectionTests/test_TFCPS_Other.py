@@ -49,6 +49,15 @@ def write_environment_variables_configuration_file(configuration_folder: str, li
     return file
 
 
+def write_additional_required_environment_variables_file(configuration_folder: str, lines: list[str]) -> str:
+    """Writes the file which declares the environment-variables which are additionally required for every codeunit-build on the
+    machine into the given configuration-folder (which a test uses instead of the configuration-folder of the current user)."""
+    file = os.path.join(configuration_folder, "TFCPS", "AdditionalRequiredEnvironmentVariables.txt")
+    GeneralUtilities.ensure_directory_exists(os.path.dirname(file))
+    GeneralUtilities.write_lines_to_file(file, lines)
+    return file
+
+
 class TasksForCommonProjectStructureTests(unittest.TestCase):
 
     def test_sort_codenits_1(self) -> None:
@@ -200,26 +209,34 @@ items:
     def test_get_required_environment_variable_names_returns_empty_list_when_nothing_is_declared(self) -> None:
         # arrange
         t = TFCPS_Tools_General(ScriptCollectionCore())
-        with tempfile.TemporaryDirectory() as repository:
+        #the configuration-folder is isolated from the real one of the machine which runs this test: otherwise a machine-local
+        #"AdditionalRequiredEnvironmentVariables.txt" (see get_additional_required_environment_variable_names_for_this_machine) would leak
+        #into the result and make this test non-deterministic depending on the machine it runs on.
+        with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, [])
+            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
 
-            # act
-            actual_result = t.get_required_environment_variable_names(repository)
+                # act
+                actual_result = t.get_required_environment_variable_names(repository)
 
-            # assert
-            assert not actual_result
+                # assert
+                assert not actual_result
 
     def test_get_required_environment_variable_names_returns_declared_names(self) -> None:
         # arrange
         t = TFCPS_Tools_General(ScriptCollectionCore())
-        with tempfile.TemporaryDirectory() as repository:
+        #the configuration-folder is isolated from the real one of the machine which runs this test: otherwise a machine-local
+        #"AdditionalRequiredEnvironmentVariables.txt" (see get_additional_required_environment_variable_names_for_this_machine) would leak
+        #into the result and make this test non-deterministic depending on the machine it runs on.
+        with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, ["MyFirstVariable", "MySecondVariable"])
+            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
 
-            # act
-            actual_result = t.get_required_environment_variable_names(repository)
+                # act
+                actual_result = t.get_required_environment_variable_names(repository)
 
-            # assert
-            assert actual_result == ["MyFirstVariable", "MySecondVariable"]
+                # assert
+                assert actual_result == ["MyFirstVariable", "MySecondVariable"]
 
     def test_get_required_environment_variable_names_throws_exception_when_the_declaration_is_missing(self) -> None:
         # arrange
@@ -232,29 +249,68 @@ items:
             with self.assertRaises(ValueError):
                 t.get_required_environment_variable_names(repository)
 
+    def test_get_required_environment_variable_names_includes_the_machine_local_additional_names(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
+            write_product_information_file(repository, ["MyFirstVariable"])
+            #comments and blank lines must be ignored, and a name which is already declared by the repository must not be duplicated.
+            write_additional_required_environment_variables_file(configuration_folder, ["# a comment", "", "MyMachineLocalVariable", "MyFirstVariable"])
+            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+
+                # act
+                actual_result = t.get_required_environment_variable_names(repository)
+
+                # assert
+                #the names declared for the machine are required in addition to (not instead of) the ones declared by the repository, because they
+                #are needed by machine-local tooling instead of by the repository itself.
+                assert actual_result == ["MyFirstVariable", "MyMachineLocalVariable"]
+
+    def test_get_required_environment_variable_names_does_not_require_a_machine_local_additional_names_file(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
+            write_product_information_file(repository, ["MyFirstVariable"])
+            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+
+                # act
+                #the file which declares the machine-local additional names is optional: a machine which does not have any does not have to create an empty one.
+                actual_result = t.get_required_environment_variable_names(repository)
+
+                # assert
+                assert actual_result == ["MyFirstVariable"]
+
     def test_get_required_environment_variables_returns_empty_dict_when_nothing_is_declared(self) -> None:
         # arrange
         t = TFCPS_Tools_General(ScriptCollectionCore())
-        with tempfile.TemporaryDirectory() as repository:
+        #the configuration-folder is isolated from the real one of the machine which runs this test: otherwise a machine-local
+        #"AdditionalRequiredEnvironmentVariables.txt" (see get_additional_required_environment_variable_names_for_this_machine) would leak
+        #into the result and make this test non-deterministic depending on the machine it runs on.
+        with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, [])
+            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
 
-            # act
-            actual_result = t.get_required_environment_variables(repository)
+                # act
+                actual_result = t.get_required_environment_variables(repository)
 
-            # assert
-            assert not actual_result
+                # assert
+                assert not actual_result
 
     def test_ensure_required_environment_variables_are_set_does_nothing_when_nothing_is_declared(self) -> None:
         # arrange
         t = TFCPS_Tools_General(ScriptCollectionCore())
-        with tempfile.TemporaryDirectory() as repository:
+        #the configuration-folder is isolated from the real one of the machine which runs this test: otherwise a machine-local
+        #"AdditionalRequiredEnvironmentVariables.txt" (see get_additional_required_environment_variable_names_for_this_machine) would leak
+        #into the result and make this test non-deterministic depending on the machine it runs on.
+        with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, [])
+            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
 
-            # act
-            t.ensure_required_environment_variables_are_set(repository)
+                # act
+                t.ensure_required_environment_variables_are_set(repository)
 
-            # assert
-            assert "MyVariable" not in os.environ
+                # assert
+                assert "MyVariable" not in os.environ
 
     def test_get_required_environment_variables_resolves_the_configured_kinds(self) -> None:
         # arrange

@@ -470,7 +470,10 @@ class TFCPS_Tools_General:
         get_environment_variables_configuration_file().
         The 'requiredenvironmentvariables'-element itself is required and must be declared even when the product does not need any
         environment-variable (it stays empty then), so that it is always visible which environment-variables a product depends on
-        instead of that information being absent by accident."""
+        instead of that information being absent by accident.
+        The names declared for this machine (see get_additional_required_environment_variable_names_for_this_machine) are always
+        appended, because they are required by machine-local tooling instead of by the repository itself and must therefore not be
+        declared by (and are not specific to) any particular repository."""
         product_information_file = os.path.join(repository, ".ScriptCollection", "ProductInformation.xml")
         GeneralUtilities.assert_file_exists(product_information_file)
         root: etree._ElementTree = etree.parse(product_information_file)
@@ -485,6 +488,31 @@ class TFCPS_Tools_General:
             GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(name), f"'{product_information_file}' contains a 'requiredenvironmentvariable'-element without a name. Every declared environment-variable must have a name.")
             GeneralUtilities.assert_condition(name not in result, f"'{product_information_file}' declares the environment-variable '{name}' more than once.")
             result.append(name)
+        for name in self.get_additional_required_environment_variable_names_for_this_machine():
+            if name not in result:
+                result.append(name)
+        return result
+
+    @GeneralUtilities.check_arguments
+    def get_additional_required_environment_variable_names_for_this_machine(self) -> list[str]:
+        """Returns the names of environment-variables which are additionally required for every codeunit-build which runs on this
+        machine, regardless of what a repository declares in its ProductInformation.xml. They are declared (name-only, one per line,
+        lines starting with '#' are treated as comments) in '<configuration-folder>/TFCPS/AdditionalRequiredEnvironmentVariables.txt'.
+        This file is deliberately kept outside of any repository: it exists so that tooling which is specific to one developer's machine
+        (for example a custom pre-codeunit-build-script, see run_custom_script_if_available) can declare the environment-variables it
+        needs without forcing every repository which happens to be built on that machine to declare them too - a repository must not
+        have to know about a specific developer's machine-local tooling.
+        The file is optional; if it does not exist nothing is additionally required."""
+        file = os.path.join(GeneralUtilities.get_scriptcollection_configuration_folder(), "TFCPS", "AdditionalRequiredEnvironmentVariables.txt")
+        result: list[str] = []
+        if not os.path.isfile(file):
+            return result
+        for line in GeneralUtilities.read_lines_from_file(file):
+            name = line.strip()
+            if not GeneralUtilities.string_has_content(name) or name.startswith("#"):
+                continue
+            if name not in result:
+                result.append(name)
         return result
 
     @GeneralUtilities.check_arguments
@@ -615,6 +643,20 @@ class TFCPS_Tools_General:
         """Returns the path of an optional user-specific script in '~/.ScriptCollection/TFCPS'. These scripts are located outside of any
         repository on purpose: they contain machine-specific preparation-steps which must not be part of a product's sourcecode."""
         return os.path.join(GeneralUtilities.get_scriptcollection_configuration_folder(), "TFCPS", filename)
+
+    @GeneralUtilities.check_arguments
+    def get_custom_scripts_folder_for_container(self) -> str:
+        """Returns the folder (on the host) whose content is mounted as a whole into a locally started build-container by
+        build_codeunits_in_container, so it is the counterpart of get_folder_of_custom_scripts_in_container on the host-side. The mount is
+        writable (not read-only) because the scripts in that folder may also use it as their own download-cache-folder. It is a dedicated
+        subfolder of the configuration-folder - not the configuration-folder itself and not the same folder as get_custom_script_file uses
+        - so that mounting it into a container never exposes anything else from the configuration-folder (in particular not
+        EnvironmentVariables.csv or Secrets, which contain credentials).
+        Mounting the whole folder (instead of only the pre-codeunit-build-hook itself, "CustomPreCodeUnitBuildScriptInContainer.py") means
+        that hook can start a sibling script placed next to it in this same folder (see run_custom_script_if_available), which is what
+        lets the hook itself stay independent of a package it only installs, while the actual preparation-logic (which needs that package)
+        lives in the sibling script."""
+        return os.path.join(GeneralUtilities.get_scriptcollection_configuration_folder(), "TFCPS", "CustomScriptsForContainer")
 
     @GeneralUtilities.check_arguments
     def get_folder_of_custom_scripts_in_container(self) -> str:

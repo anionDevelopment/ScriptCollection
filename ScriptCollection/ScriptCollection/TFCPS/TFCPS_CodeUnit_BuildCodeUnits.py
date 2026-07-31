@@ -263,15 +263,16 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         '~/.ScriptCollection/TFCPS', so it is outside of any repository and is not part of a product's sourcecode.
         Which script is used depends on where the build runs, because both cases need different preparation-steps:
         - build directly on the host ('scbuildcodeunits'): 'CustomPreCodeUnitBuildScript.py'
-        - build inside the container ('scbuildcodeunitsc' or a build-pipeline): 'CustomPreCodeUnitBuildScriptInContainer.py'. It is
-          searched in the folder into which 'scbuildcodeunitsc' mounts that single script and - if it is not there - in the
-          configuration-folder, because a build-runner usually gets the whole configuration-folder mounted instead (see the article
-          'Build-runner-configuration'). The script which the host itself runs before it starts the container is
-          'CustomPreCodeUnitBuildScriptForContainer.py' and is therefore run there and not here."""
+        - build inside the container ('scbuildcodeunitsc' or a build-pipeline): 'CustomPreCodeUnitBuildScriptInContainer.py', located in
+          the folder returned by TFCPS_Tools_General.get_custom_scripts_folder_for_container(). It is searched in the folder into which
+          'scbuildcodeunitsc' mounts that whole folder and - if it is not there - directly in the configuration-folder, because a
+          build-runner usually gets the whole configuration-folder mounted instead (see the article 'Build-runner-configuration'). The
+          script which the host itself runs before it starts the container is 'CustomPreCodeUnitBuildScriptForContainer.py' and is
+          therefore run there and not here."""
         if self.sc.is_runnning_in_container():
             script_file: str = os.path.join(self.tfcps_tools_general.get_folder_of_custom_scripts_in_container(), "CustomPreCodeUnitBuildScriptInContainer.py")
             if not os.path.isfile(script_file):
-                script_file = self.tfcps_tools_general.get_custom_script_file("CustomPreCodeUnitBuildScriptInContainer.py")
+                script_file = os.path.join(self.tfcps_tools_general.get_custom_scripts_folder_for_container(), "CustomPreCodeUnitBuildScriptInContainer.py")
         else:
             script_file: str = self.tfcps_tools_general.get_custom_script_file("CustomPreCodeUnitBuildScript.py")
         self.tfcps_tools_general.run_custom_script_if_available(script_file, self.__get_build_arguments(self.repository))
@@ -322,12 +323,16 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         #it runs before the environment-variables are resolved, so it can also create the files their values are read from.
         self.tfcps_tools_general.run_custom_script_if_available(self.tfcps_tools_general.get_custom_script_file("CustomPreCodeUnitBuildScriptForContainer.py"), self.__get_build_arguments(self.repository))
 
-        #mount the optional user-specific script which prepares the container itself. it is mounted read-only because the container is not supposed to change the host-configuration.
-        #the build inside the container runs it (see __run_custom_pre_codeunit_build_script); if the file does not exist on the host nothing is mounted and nothing is run.
+        #mount the optional user-specific scripts which prepare the container itself. the whole folder (not only the pre-codeunit-build-hook
+        #itself) is mounted, so the hook can start a sibling script placed next to it (for example to keep the hook independent of a
+        #package it only installs, while the actual preparation-logic which needs that package lives in the sibling script; see
+        #get_custom_scripts_folder_for_container). The mount is writable (not read-only) because the scripts in that folder also use it as
+        #their own download-cache-folder. The build inside the container runs the hook (see __run_custom_pre_codeunit_build_script); if the
+        #folder does not exist on the host nothing is mounted and nothing is run.
         mount_arguments: list[str] = []
-        custom_script_for_inside_the_container: str = self.tfcps_tools_general.get_custom_script_file("CustomPreCodeUnitBuildScriptInContainer.py")
-        if os.path.isfile(custom_script_for_inside_the_container):
-            mount_arguments += ["-v", f"{custom_script_for_inside_the_container}:{self.tfcps_tools_general.get_folder_of_custom_scripts_in_container()}/CustomPreCodeUnitBuildScriptInContainer.py:ro"]
+        custom_scripts_folder_for_inside_the_container: str = self.tfcps_tools_general.get_custom_scripts_folder_for_container()
+        if os.path.isdir(custom_scripts_folder_for_inside_the_container):
+            mount_arguments += ["-v", f"{custom_scripts_folder_for_inside_the_container}:{self.tfcps_tools_general.get_folder_of_custom_scripts_in_container()}"]
 
         #pass the environment-variables which are declared as required in <repository>/.ScriptCollection/ProductInformation.xml into the container
         #so they do not have to be specified explicitly on every scbuildcodeunits-call. Their values are resolved from the user-specific
