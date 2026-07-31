@@ -3080,7 +3080,18 @@ TXDX
                 trim_texts(child)
         trim_texts(element)
         ET.indent(element)
-        content = ET.tostring(element, xml_declaration=add_xml_declaration, encoding="unicode")
+        default_namespace = None
+        if element.tag.startswith("{"):
+            #keep the namespace of the root-element as default-namespace. without this the whole document would be rewritten with a
+            #generated prefix (for example "<ns0:package xmlns:ns0=...>" instead of "<package xmlns=...>"), which is semantically
+            #equivalent but unusual and therefore an unnecessary risk for tools which process the formatted file.
+            default_namespace = element.tag[1:element.tag.index("}")]
+        try:
+            content = ET.tostring(element, xml_declaration=add_xml_declaration, encoding="unicode", default_namespace=default_namespace)
+        except ValueError:
+            #documents which contain elements without a namespace besides the namespace of the root-element can not be serialized
+            #with a default-namespace at all. in that case the generated prefixes are the only possible representation.
+            content = ET.tostring(element, xml_declaration=add_xml_declaration, encoding="unicode")
         GeneralUtilities.write_text_to_file(file, content.rstrip("\n") + "\n", encoding)
         self.normalize_line_endings(file)
 

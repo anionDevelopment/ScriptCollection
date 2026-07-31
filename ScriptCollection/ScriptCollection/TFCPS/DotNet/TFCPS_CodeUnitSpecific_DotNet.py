@@ -322,8 +322,10 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
     def linting(self) -> None:
         codeunit_name = self.get_codeunit_name()
         codeunit_folder = self.get_codeunit_folder()
-        # Normalize the line-endings of all non-git-ignored *.cs-files in the codeunit- and the test-project to LF.
         self._protected_sc.normalize_line_endings_of_files_in_folder(codeunit_folder, ["cs"])
+        nuspec_file = os.path.join(codeunit_folder, "Other", "Build", f"{codeunit_name}.nuspec")
+        if os.path.isfile(nuspec_file):
+            self._protected_sc.format_xml_file(nuspec_file)
         self._protected_sc.format_xml_file(os.path.join(codeunit_folder, codeunit_name, codeunit_name + ".csproj"), add_xml_declaration=False)
         self._protected_sc.format_xml_file(os.path.join(codeunit_folder, codeunit_name + "Tests", codeunit_name + "Tests.csproj"), add_xml_declaration=False)
         self.standardized_task_verify_standard_format_csproj_files()
