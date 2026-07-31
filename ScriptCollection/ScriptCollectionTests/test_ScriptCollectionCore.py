@@ -637,6 +637,81 @@ class ScriptCollectionCoreTests(unittest.TestCase):
         finally:
             GeneralUtilities.ensure_file_does_not_exist(file)
 
+    def test_format_xml_file_keeps_namespace_of_root_element_as_default_namespace(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        file = os.path.join(tempfile.gettempdir(), str(uuid.uuid4())+".nuspec")
+        GeneralUtilities.write_text_to_file(file, '<package xmlns="http://schemas.microsoft.com/packaging/2011/10/nuspec.xsd"><metadata minClientVersion="2.12"><version>1.0.0</version></metadata></package>', self.encoding)
+
+        try:
+            # act
+            sc.format_xml_file(file)
+
+            # assert
+            assert GeneralUtilities.read_text_from_file(file, self.encoding) == "<?xml version='1.0' encoding='utf-8'?>\n<package xmlns=\"http://schemas.microsoft.com/packaging/2011/10/nuspec.xsd\">\n  <metadata minClientVersion=\"2.12\">\n    <version>1.0.0</version>\n  </metadata>\n</package>\n"
+        finally:
+            GeneralUtilities.ensure_file_does_not_exist(file)
+
+    def test_format_xml_file_replaces_generated_namespace_prefix_by_default_namespace(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        file = os.path.join(tempfile.gettempdir(), str(uuid.uuid4())+".nuspec")
+        GeneralUtilities.write_text_to_file(file, '<ns0:package xmlns:ns0="http://schemas.microsoft.com/packaging/2011/10/nuspec.xsd"><ns0:metadata minClientVersion="2.12"><ns0:version>1.0.0</ns0:version></ns0:metadata></ns0:package>', self.encoding)
+
+        try:
+            # act
+            sc.format_xml_file(file)
+
+            # assert
+            assert GeneralUtilities.read_text_from_file(file, self.encoding) == "<?xml version='1.0' encoding='utf-8'?>\n<package xmlns=\"http://schemas.microsoft.com/packaging/2011/10/nuspec.xsd\">\n  <metadata minClientVersion=\"2.12\">\n    <version>1.0.0</version>\n  </metadata>\n</package>\n"
+        finally:
+            GeneralUtilities.ensure_file_does_not_exist(file)
+
+    def test_format_xml_file_keeps_file_without_namespace_unchanged(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        file = os.path.join(tempfile.gettempdir(), str(uuid.uuid4())+".csproj")
+        GeneralUtilities.write_text_to_file(file, '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><Version>1.0.0</Version></PropertyGroup></Project>', self.encoding)
+
+        try:
+            # act
+            sc.format_xml_file(file, add_xml_declaration=False)
+
+            # assert
+            assert GeneralUtilities.read_text_from_file(file, self.encoding) == "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <Version>1.0.0</Version>\n  </PropertyGroup>\n</Project>\n"
+        finally:
+            GeneralUtilities.ensure_file_does_not_exist(file)
+
+    def test_replace_version_in_nuspec_file_replaces_version_in_prefixed_document(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        file = os.path.join(tempfile.gettempdir(), str(uuid.uuid4())+".nuspec")
+        GeneralUtilities.write_text_to_file(file, '<ns0:package xmlns:ns0="http://schemas.microsoft.com/packaging/2011/10/nuspec.xsd"><ns0:metadata><ns0:version>1.0.0</ns0:version></ns0:metadata></ns0:package>', self.encoding)
+
+        try:
+            # act
+            sc.replace_version_in_nuspec_file(file, "2.3.4")
+
+            # assert
+            assert "<ns0:version>2.3.4</ns0:version>" in GeneralUtilities.read_text_from_file(file, self.encoding)
+        finally:
+            GeneralUtilities.ensure_file_does_not_exist(file)
+
+    def test_update_year_in_copyright_tags_updates_year_in_prefixed_document(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        file = os.path.join(tempfile.gettempdir(), str(uuid.uuid4())+".nuspec")
+        GeneralUtilities.write_text_to_file(file, '<ns0:package xmlns:ns0="http://schemas.microsoft.com/packaging/2011/10/nuspec.xsd"><ns0:metadata>\n<ns0:copyright>Copyright © 1999 by Someone</ns0:copyright>\n</ns0:metadata></ns0:package>', self.encoding)
+
+        try:
+            # act
+            sc.update_year_in_copyright_tags(file)
+
+            # assert
+            assert f"<ns0:copyright>Copyright © {GeneralUtilities.get_now().year} by Someone</ns0:copyright>" in GeneralUtilities.read_text_from_file(file, self.encoding)
+        finally:
+            GeneralUtilities.ensure_file_does_not_exist(file)
+
     def test_add_tooltips_to_chart_diagram_adds_title_for_datapoints(self) -> None:
         # arrange
         sc = ScriptCollectionCore()

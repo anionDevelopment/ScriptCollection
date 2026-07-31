@@ -458,7 +458,9 @@ class ScriptCollectionCore:
         versiononlyregex = f"^{versionregex}$"
         pattern = re.compile(versiononlyregex)
         if pattern.match(new_version):
-            GeneralUtilities.write_text_to_file(nuspec_file, re.sub(f"<version>{versionregex}<\\/version>", f"<version>{new_version}</version>", GeneralUtilities.read_text_from_file(nuspec_file)))
+            #the tag can be prefixed (for example "<ns0:version>") because the nuspec-namespace can be declared with a prefix instead of being declared as default-namespace.
+            version_tag_regex = f"(<(?:[\\w.-]+:)?version>){versionregex}(<\\/(?:[\\w.-]+:)?version>)"
+            GeneralUtilities.write_text_to_file(nuspec_file, re.sub(version_tag_regex, lambda match: match.group(1)+new_version+match.group(2), GeneralUtilities.read_text_from_file(nuspec_file)))
         else:
             raise ValueError(f"Version '{new_version}' does not match version-regex '{versiononlyregex}'")
 
@@ -2835,7 +2837,8 @@ chmod {permission} {link_file}
         lines = GeneralUtilities.read_lines_from_file(file)
         lines_result = []
         for line in lines:
-            if match := re.search("(.*<[Cc]opyright>.*)\\d\\d\\d\\d(.*<\\/[Cc]opyright>.*)", line):
+            #the tag can be prefixed (for example "<ns0:copyright>") because in xml-files like nuspec-files the namespace can be declared with a prefix instead of being declared as default-namespace.
+            if match := re.search("(.*<(?:[\\w.-]+:)?[Cc]opyright>.*)\\d\\d\\d\\d(.*<\\/(?:[\\w.-]+:)?[Cc]opyright>.*)", line):
                 part1 = match.group(1)
                 part2 = match.group(2)
                 adapted = part1+current_year+part2
@@ -3080,20 +3083,32 @@ TXDX
                 trim_texts(child)
         trim_texts(element)
         ET.indent(element)
-        default_namespace = None
-        if element.tag.startswith("{"):
-            #keep the namespace of the root-element as default-namespace. without this the whole document would be rewritten with a
-            #generated prefix (for example "<ns0:package xmlns:ns0=...>" instead of "<package xmlns=...>"), which is semantically
-            #equivalent but unusual and therefore an unnecessary risk for tools which process the formatted file.
-            default_namespace = element.tag[1:element.tag.index("}")]
-        try:
-            content = ET.tostring(element, xml_declaration=add_xml_declaration, encoding="unicode", default_namespace=default_namespace)
-        except ValueError:
-            #documents which contain elements without a namespace besides the namespace of the root-element can not be serialized
-            #with a default-namespace at all. in that case the generated prefixes are the only possible representation.
-            content = ET.tostring(element, xml_declaration=add_xml_declaration, encoding="unicode")
+        content = self.__serialize_xml_element(element, add_xml_declaration)
         GeneralUtilities.write_text_to_file(file, content.rstrip("\n") + "\n", encoding)
         self.normalize_line_endings(file)
+
+    @GeneralUtilities.check_arguments
+    def __serialize_xml_element(self, element: ET.Element, add_xml_declaration: bool) -> str:
+        if not element.tag.startswith("{"):
+            return ET.tostring(element, xml_declaration=add_xml_declaration, encoding="unicode")
+        #keep the namespace of the root-element as default-namespace. without this the whole document would be rewritten with a
+        #generated prefix (for example "<ns0:package xmlns:ns0=...>" instead of "<package xmlns=...>"), which is semantically
+        #equivalent but unusual and therefore an unnecessary risk for tools which process the formatted file.
+        #the "default_namespace"-argument of "tostring" can not be used for this because it rejects documents which contain
+        #attributes without a namespace (which is the usual case, for example in nuspec-files), so the namespace is registered
+        #as default-namespace instead. that registration is global, therefore the previous state gets restored afterwards.
+        namespace = element.tag[1:element.tag.index("}")]
+        namespace_map: dict = getattr(ET, "_namespace_map", None)
+        previous_prefix = namespace_map.get(namespace) if namespace_map is not None else None
+        ET.register_namespace(GeneralUtilities.empty_string, namespace)
+        try:
+            return ET.tostring(element, xml_declaration=add_xml_declaration, encoding="unicode")
+        finally:
+            if namespace_map is not None:
+                if previous_prefix is None:
+                    namespace_map.pop(namespace, None)
+                else:
+                    namespace_map[namespace] = previous_prefix
 
     @GeneralUtilities.check_arguments
     def format_html_file(self, file: str, add_html_declaration: bool = False) -> None:
