@@ -232,7 +232,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     @GeneralUtilities.check_arguments
     def __normalize_line_endings_of_common_files(self) -> None:
         #TODO add option to define exceptions (means: files which should not be normalized).
-        self.sc.normalize_line_endings_of_files_in_folder(self.repository, ["txt", "md", "json", "xml", "csv", "yml", "yaml", "gitignore"])
+        self.sc.format_xml_file(os.path.join(self.repository, ".ScriptCollection", "ProductInformation.xml"))
+        for codeunit in self.tfcps_tools_general.get_codeunits(self.repository):
+            self.sc.format_xml_file(os.path.join(self.repository, codeunit, f"{codeunit}.codeunit.xml"))
+        workspace_file = os.path.join(self.repository, f"{self.tfcps_tools_general.get_product_name(self.repository)}.code-workspace")
+        if os.path.isfile(workspace_file):
+            self.sc.format_json_file(workspace_file)
+        self.sc.normalize_line_endings_of_files_in_folder(self.repository, ["txt", "md", "json", "xml", "csv", "yml", "yaml", "toml","gitignore", "gitattributes", "code-workspace"])
 
     @GeneralUtilities.check_arguments
     def is_working_branch(self)->bool:
@@ -456,25 +462,28 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         "x": {
             "field": "Timestamp",
             "type": "temporal",
-            "title": "Date"
+            "title": "Date",
+            "scale": {
+                "type": "utc"#render the ticks in utc so the diagram looks the same independent of the timezone of the machine which builds it
+            },
+            "axis": {
+                "format": "%Y-%m-%d %H:%M:%S (UTC)",#everything which is not a format-specifier starting with a percent-sign is taken literally
+                "labelAngle": -45,#the timestamps are too long to be displayed horizontally next to each other
+                "labelLimit": 250,#without this the labels would be truncated with an ellipsis because they are longer than the default-limit of 180 pixels
+                "tickCount": 8
+            }
         },
         "y": {
             "field": "LinesOfCode",
             "type": "quantitative",
             "title": "Lines of Code"
         },
+        #the timestamp and the lines of code are not listed here although they are part of the tooltip: the fields which are encoded
+        #as x respectively as y are always part of the generated tooltip anyway, so listing them again would show them twice.
         "tooltip": [
             {
                 "field": "Version",
                 "type": "ordinal"
-            },
-            {
-                "field": "LinesOfCode",
-                "type": "quantitative"
-            },
-            {
-                "field": "Timestamp",
-                "type": "temporal"
             }
         ]
     }
@@ -492,6 +501,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         GeneralUtilities.ensure_file_exists(diagram_svg_file)
         GeneralUtilities.assert_condition(not self.sc.file_is_git_ignored(f"Other/Reference/Technical/Diagrams/{filenamebase}.svg",self.repository),f"Other/Reference/Technical/Diagrams/{filenamebase}.svg must not be git-ignored")#because it should be referencable in markdown-files and viewable without building the codeunits.
         self.sc.generate_chart_diagram(diagram_definition_file,os.path.basename(diagram_svg_file))
+        self.sc.add_tooltips_to_chart_diagram(diagram_svg_file)#so the exact values of a data-point are visible when the svg-file is opened directly in a browser
         self.sc.format_xml_file(diagram_svg_file)
 
     @GeneralUtilities.check_arguments

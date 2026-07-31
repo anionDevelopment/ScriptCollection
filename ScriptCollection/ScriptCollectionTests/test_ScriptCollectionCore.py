@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 import tempfile
 import uuid
+import xml.etree.ElementTree as ET
 from ..ScriptCollection.GeneralUtilities import GeneralUtilities
 from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
 
@@ -12,6 +13,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
 
     encoding = "utf-8"
     testfileprefix = "testfile_"
+    svg_namespace = "http://www.w3.org/2000/svg"
 
     def test_export_filemetadata(self) -> None:
         # arrange
@@ -574,6 +576,102 @@ class ScriptCollectionCoreTests(unittest.TestCase):
 
         # assert
         assert result == expected
+
+    def test_format_json_file_indents_content(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        file = os.path.join(tempfile.gettempdir(), str(uuid.uuid4())+".json")
+        GeneralUtilities.write_text_to_file(file, '{"a":1,"b":[1,2]}', self.encoding)
+
+        try:
+            # act
+            sc.format_json_file(file)
+
+            # assert
+            assert GeneralUtilities.read_text_from_file(file, self.encoding) == '{\n  "a": 1,\n  "b": [\n    1,\n    2\n  ]\n}\n'
+        finally:
+            GeneralUtilities.ensure_file_does_not_exist(file)
+
+    def test_format_json_file_keeps_property_order(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        file = os.path.join(tempfile.gettempdir(), str(uuid.uuid4())+".json")
+        GeneralUtilities.write_text_to_file(file, '{"b":1,"a":2}', self.encoding)
+
+        try:
+            # act
+            sc.format_json_file(file)
+
+            # assert
+            assert GeneralUtilities.read_text_from_file(file, self.encoding) == '{\n  "b": 1,\n  "a": 2\n}\n'
+        finally:
+            GeneralUtilities.ensure_file_does_not_exist(file)
+
+    def test_format_json_file_uses_given_indentation(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        file = os.path.join(tempfile.gettempdir(), str(uuid.uuid4())+".json")
+        GeneralUtilities.write_text_to_file(file, '{"a":{"b":1}}', self.encoding)
+
+        try:
+            # act
+            sc.format_json_file(file, 4)
+
+            # assert
+            assert GeneralUtilities.read_text_from_file(file, self.encoding) == '{\n    "a": {\n        "b": 1\n    }\n}\n'
+        finally:
+            GeneralUtilities.ensure_file_does_not_exist(file)
+
+    def test_format_json_file_keeps_non_ascii_characters_and_normalizes_line_endings(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        file = os.path.join(tempfile.gettempdir(), str(uuid.uuid4())+".json")
+        GeneralUtilities.write_text_to_file(file, '{\r\n"a":"ä"\r\n}', self.encoding)
+
+        try:
+            # act
+            sc.format_json_file(file)
+
+            # assert
+            assert GeneralUtilities.read_binary_from_file(file) == '{\n  "a": "ä"\n}\n'.encode(self.encoding)
+        finally:
+            GeneralUtilities.ensure_file_does_not_exist(file)
+
+    def test_add_tooltips_to_chart_diagram_adds_title_for_datapoints(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        file = os.path.join(tempfile.gettempdir(), str(uuid.uuid4())+".svg")
+        content = '<svg xmlns="http://www.w3.org/2000/svg"><path aria-label="Date: 2026-01-01 00:00:00Z; Lines of Code: 42" aria-roledescription="point" d="M0,0"/></svg>'
+        GeneralUtilities.write_text_to_file(file, content, self.encoding)
+
+        try:
+            # act
+            amount_of_tooltips = sc.add_tooltips_to_chart_diagram(file)
+
+            # assert
+            assert amount_of_tooltips == 1
+            titles = ET.XML(GeneralUtilities.read_text_from_file(file, self.encoding)).findall(f".//{{{self.svg_namespace}}}title")
+            assert len(titles) == 1
+            assert titles[0].text == "Date: 2026-01-01 00:00:00Z; Lines of Code: 42"
+        finally:
+            GeneralUtilities.ensure_file_does_not_exist(file)
+
+    def test_add_tooltips_to_chart_diagram_ignores_elements_which_are_no_datapoints(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        file = os.path.join(tempfile.gettempdir(), str(uuid.uuid4())+".svg")
+        content = '<svg xmlns="http://www.w3.org/2000/svg"><path aria-label="X-axis titled Date" aria-roledescription="axis" d="M0,0"/><path aria-roledescription="point" d="M0,0"/></svg>'
+        GeneralUtilities.write_text_to_file(file, content, self.encoding)
+
+        try:
+            # act
+            amount_of_tooltips = sc.add_tooltips_to_chart_diagram(file)
+
+            # assert
+            assert amount_of_tooltips == 0
+            assert len(ET.XML(GeneralUtilities.read_text_from_file(file, self.encoding)).findall(f".//{{{self.svg_namespace}}}title")) == 0
+        finally:
+            GeneralUtilities.ensure_file_does_not_exist(file)
 
 
 # TODO all testcases should be independent of epew
