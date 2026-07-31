@@ -257,13 +257,18 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         repository_folder: str =self.get_repository_folder()
         build_folder = os.path.join(repository_folder, codeunitname, "Other", "Build")
         outputfolder = GeneralUtilities.resolve_relative_path("./Other/Artifacts/BuildResult_NuGet",self.get_codeunit_folder())
-        root: etree._ElementTree = etree.parse(os.path.join(build_folder, f"{codeunitname}.nuspec"))
-        current_version = root.xpath("//*[name() = 'package']/*[name() = 'metadata']/*[name() = 'version']/text()")[0]
+        nuspec_file = os.path.join(build_folder, f"{codeunitname}.nuspec")
+        root: etree._ElementTree = etree.parse(nuspec_file)
+        # the elements are matched by their local name because the nuspec-namespace can be declared as default-namespace
+        # (<package xmlns="...">) as well as with a prefix (<ns0:package xmlns:ns0="...">) and both variants are valid.
+        versions = root.xpath("//*[local-name() = 'package']/*[local-name() = 'metadata']/*[local-name() = 'version']/text()")
+        if len(versions) == 0:
+            raise ValueError(f"Can not determine the version because there is no version-element in \"{nuspec_file}\".")
+        current_version = versions[0]
         nupkg_filename = f"{codeunitname}.{current_version}.nupkg"
         nupkg_file = f"{build_folder}/{nupkg_filename}"
         GeneralUtilities.ensure_file_does_not_exist(nupkg_file)
         commit_id = self._protected_sc.git_get_commit_id(repository_folder)
-        nuspec_file = os.path.join(build_folder, f"{codeunitname}.nuspec")
         # Pack the hand-written nuspec using "dotnet pack" (the classic "nuget pack" is not available in the dotnet-only build-container).
         # With NuspecFile the package-content is taken entirely from the nuspec's <files>-list, so no rebuild happens here (the library was already built before).
         self._protected_sc.run_program_argsasarray("dotnet", [
@@ -620,7 +625,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         test_working_directory = os.path.join(temp_folder, "WorkingDirectory")
         GeneralUtilities.ensure_directory_exists(test_working_directory)
         try:
-            program_output=self._protected_sc.run_program_argsasarray("dotnet", args, test_working_directory, print_live_output=self.get_verbosity()==LogLevel.Debug, timeoutInSeconds=60*20, env_vars={"MSBUILDDISABLENODEREUSE": "1"})
+            program_output=self._protected_sc.run_program_argsasarray("dotnet", args, test_working_directory, print_live_output=self.get_verbosity()==LogLevel.Debug, timeoutInSeconds=60*45, env_vars={"MSBUILDDISABLENODEREUSE": "1"})
             test_output:str=program_output[1]
             output_lines=program_output[1].split("\n")
             output_lines=[line for line in output_lines if GeneralUtilities.string_has_content(line)]
