@@ -17,16 +17,7 @@
     "x": {
       "field": "Timestamp",
       "type": "temporal",
-      "title": "Date",
-      "scale": {
-        "type": "utc"
-      },
-      "axis": {
-        "format": "%Y-%m-%d %H:%M:%S (UTC)",
-        "labelAngle": -45,
-        "labelLimit": 250,
-        "tickCount": 8
-      }
+      "title": "Date"
     },
     "y": {
       "field": "LinesOfCode",
@@ -37,6 +28,14 @@
       {
         "field": "Version",
         "type": "ordinal"
+      },
+      {
+        "field": "LinesOfCode",
+        "type": "quantitative"
+      },
+      {
+        "field": "Timestamp",
+        "type": "temporal"
       }
     ]
   }
