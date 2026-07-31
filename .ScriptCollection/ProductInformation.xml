@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
-<ns0:productinformation xmlns:ns0="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure">
-  <ns0:producttitle>ScriptCollection</ns0:producttitle>
-  <ns0:remoteaddress>https://github.com/anionDevelopment/ScriptCollection</ns0:remoteaddress>
-  <ns0:requiredenvironmentvariables />
-</ns0:productinformation>
+<productinformation xmlns="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure">
+  <producttitle>ScriptCollection</producttitle>
+  <remoteaddress>https://github.com/anionDevelopment/ScriptCollection</remoteaddress>
+  <requiredenvironmentvariables />
+</productinformation>
