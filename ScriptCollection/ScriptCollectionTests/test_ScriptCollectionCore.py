@@ -748,5 +748,33 @@ class ScriptCollectionCoreTests(unittest.TestCase):
         finally:
             GeneralUtilities.ensure_file_does_not_exist(file)
 
+    def test_split_image_address_and_tag_with_tag(self) -> None:
+        # act
+        result = ScriptCollectionCore.split_image_address_and_tag("myregistry.example.com/debian:12")
+
+        # assert
+        assert result == ("myregistry.example.com/debian", "12")
+
+    def test_split_image_address_and_tag_without_tag(self) -> None:
+        # act
+        result = ScriptCollectionCore.split_image_address_and_tag("myregistry.example.com/debian")
+
+        # assert
+        assert result == ("myregistry.example.com/debian", "latest")
+
+    def test_split_image_address_and_tag_with_port_and_tag(self) -> None:
+        # act
+        result = ScriptCollectionCore.split_image_address_and_tag("myregistry.example.com:5000/debian:12")
+
+        # assert
+        assert result == ("myregistry.example.com:5000/debian", "12")
+
+    def test_split_image_address_and_tag_with_port_and_without_tag(self) -> None:
+        # act
+        result = ScriptCollectionCore.split_image_address_and_tag("myregistry.example.com:5000/debian")
+
+        # assert
+        assert result == ("myregistry.example.com:5000/debian", "latest")
+
 
 # TODO all testcases should be independent of epew

@@ -308,7 +308,7 @@ class ScriptCollectionCore:
         registry_username, registry_password = self.__load_credentials_if_required_and_available(remote_hub, registry_username, registry_password)
         source_address = f"{remote_hub}/{imagename_on_remote_hub}:{tag}"
         target_address = f"{own_registry_address}/{imagename_on_own_registry}:{tag}"
-        self.run_program("docker", f"buildx imagetools create --tag {target_address} {source_address}")#this does pull and push for each platform
+        self.run_program("docker", f"buildx imagetools create --tag {target_address} {source_address}", print_errors_as_information=True)#this does pull and push for each platform. docker writes the progress-output of the pull to std-err, so it must not be treated as error.
 
 
     def get_tags_of_images_from_registry(self,registry_base_url:str,image:str,registry_username:str,registry_password:str)->list[str]:
@@ -348,7 +348,60 @@ class ScriptCollectionCore:
                 arg=f"login {registry} -u {username} -p {password}"
                 arg_for_log=f"login {registry} -u {username} -p ***"
                 self.run_program("docker",arg,arguments_for_log=arg_for_log,print_live_output=self.log.loglevel==LogLevel.Debug)
-        
+
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def split_image_address_and_tag(image_with_tag: str) -> tuple[str, str]:
+        """Splits an image-address which contains a tag into the address and the tag.
+        Example: "myregistry.example.com:5000/debian:12" is splitted into ("myregistry.example.com:5000/debian", "12").
+        If the given address does not contain a tag then "latest" is returned as tag, which is the tag docker assumes in this case too."""
+        last_colon_index = image_with_tag.rfind(":")
+        last_slash_index = image_with_tag.rfind("/")
+        if last_colon_index == -1 or last_colon_index < last_slash_index:
+            # There is no tag at all. (A colon which occurs before the last slash belongs to the port of the registry-address and is not a tag-separator.)
+            return (image_with_tag, "latest")
+        return (image_with_tag[:last_colon_index], image_with_tag[last_colon_index+1:])
+
+    @GeneralUtilities.check_arguments
+    def local_docker_image_exists(self, image: str, tag: str) -> bool:
+        """Returns True if and only if the image is already available with this tag in the local image-store of the docker-daemon."""
+        program_result = self.run_program("docker", f"image inspect {image}:{tag}", throw_exception_if_exitcode_is_not_zero=False)
+        return program_result[0] == 0
+
+    @GeneralUtilities.check_arguments
+    def docker_pull(self, image: str, tag: str, force: bool = False) -> None:
+        """Ensures that the image is available with this tag in the local image-store of the docker-daemon.
+        'image' must be the image-address without tag, for example "myregistry.example.com/debian".
+        Commands like "docker run" or "docker compose up" download a missing image implicitly, but docker writes the
+        progress-output of such a download to std-err, which would then be logged as error although nothing failed.
+        Therefore the download is done explicitly by this function, which treats the output of the pull as information,
+        so the surrounding commands can be executed with the usual error-handling.
+        By default the image is only pulled if it is not already available locally with this tag. This is exactly the
+        behavior of the implicit download (docker only downloads a missing image), so an unavailable registry does not
+        break a process which can also be executed with the already available image.
+        If 'force' is True then the image is pulled in any case, which is required to update a locally available image
+        whose tag was moved in the registry (for example "latest") and which therefore lets the pull fail if the
+        registry is not available."""
+        image_with_tag = f"{image}:{tag}"
+        if not force and self.local_docker_image_exists(image, tag):
+            self.log.log(f"Image \"{image_with_tag}\" is already available locally and therefore does not have to be pulled.", LogLevel.Debug)
+            return
+        self.log.log(f"Pull image \"{image_with_tag}\"...")
+        self.run_program_with_retry("docker", f"pull {image_with_tag}", print_errors_as_information=True, print_live_output=self.log.loglevel == LogLevel.Debug)
+
+    @GeneralUtilities.check_arguments
+    def docker_compose_pull(self, folder: str, compose_arguments: str, ignore_pull_failures: bool) -> None:
+        """Pulls the images which are used by a docker-compose-file explicitly, so that the commands which use them
+        (for example "compose up") do not have to download them implicitly. See docker_pull for the reason.
+        'compose_arguments' must contain all arguments which have to be passed before the "pull"-verb,
+        for example "compose -f docker-compose.yml -p myproject --env-file Parameters.env".
+        'ignore_pull_failures' must be True if the compose-file also contains images which are built locally
+        (and therefore do not exist in a registry), because pulling such an image always fails."""
+        argument = f"{compose_arguments} pull --quiet"
+        if ignore_pull_failures:
+            argument = argument+" --ignore-pull-failures"
+        self.run_program_with_retry("docker", argument, folder, print_errors_as_information=True, print_live_output=self.log.loglevel == LogLevel.Debug)
+
 
     @GeneralUtilities.check_arguments
     def get_issues_of_github_repository(self, owner: str, repository: str, github_token: str = None) -> list[ProjectServerIssueSummary]:
@@ -1952,6 +2005,8 @@ class ScriptCollectionCore:
     @GeneralUtilities.check_arguments
     def get_latest_apt_package_version_in_debian(self, image: str,package:str) -> str:
         #docker run --rm -it debian bash -c "apt update && apt list -a tor"
+        image_address, image_tag = ScriptCollectionCore.split_image_address_and_tag(image)
+        self.docker_pull(image_address, image_tag)
         output=self.run_with_epew("docker", f"run --rm -it {image} bash -c \"apt --color=false update && apt --color=false list -a tor\"",os.getcwd(),encode_argument_in_base64=True)
         stdout=output[1]
         version_lines=[line.strip() for line in GeneralUtilities.string_to_lines(stdout) if GeneralUtilities.string_has_nonwhitespace_content(line) and line.startswith(package+"/")]
@@ -3489,7 +3544,11 @@ OCR-content:
         argument = argument+f" -p {title.lower()}"
         if os.path.isfile(os.path.join(example_folder,"Parameters.env")):
             argument=argument+" --env-file Parameters.env"
+        compose_arguments_without_verb=argument
         argument=argument+" up --detach"
+        # The images used by the compose-file are pulled explicitly here so that the following commands do not have to download them implicitly (see docker_compose_pull).
+        # Pull-failures are ignored because a compose-file of an example typically also contains the image of the codeunit itself, which is built locally and does not exist in a registry.
+        self.docker_compose_pull(example_folder, compose_arguments_without_verb, True)
         if in_build_container:
             # In a DooD-setup the test-service-containers are siblings on the docker-daemon and resolve their bind-mount-sources against the DAEMON's
             # filesystem, not against this build-container's filesystem. Clearing the source-folders from within this build-container (as the *Start.py-
