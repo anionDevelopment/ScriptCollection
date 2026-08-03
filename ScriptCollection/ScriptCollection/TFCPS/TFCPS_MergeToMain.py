@@ -18,9 +18,10 @@ class MergeToMainConfiguration:
     tFCPS_Generic_Functions:TFCPS_Generic_Functions = None
     common_remote_name:str = None
     build_repo:str = None
-    sc:ScriptCollectionCore=ScriptCollectionCore()
+    sc:ScriptCollectionCore=None
 
     def __init__(self, current_file: str,repository:str, product_name: str,merge_source_branch:str,log_level:LogLevel,additional_arguments_file:str,main_branch:str,common_remote_name:str,build_repo:str):
+        self.sc = ScriptCollectionCore()
         self.sc.log.loglevel=log_level
         self.repository_folder = repository
         self.product_name = product_name
