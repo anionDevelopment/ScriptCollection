@@ -64,7 +64,10 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
         # rather than into this job's BOM folder. stdout flows back through the docker client,
         # so it works regardless of where the daemon runs. format_xml_file re-parses and
         # rewrites the document, so the resulting file is byte-stable.
-        syft_result = self._protected_sc.run_program_argsasarray("docker", ["run","--rm","-v","/var/run/docker.sock:/var/run/docker.sock",self.tfcps_Tools_General.oci_image_manager.get_registry_address_for_image_with_default_tag(self.get_repository_folder(),"Syft"),f"{codeunitname_lower}:{codeunitversion}","-o","cyclonedx-xml"], artifacts_folder, print_errors_as_information=True)
+        syft_image = self.tfcps_Tools_General.oci_image_manager.get_registry_address_for_image(self.get_repository_folder(), "Syft")
+        syft_image_tag = self.tfcps_Tools_General.oci_image_manager.get_tag_for_image(self.get_repository_folder(), "Syft")
+        self._protected_sc.docker_pull(syft_image, syft_image_tag)
+        syft_result = self._protected_sc.run_program_argsasarray("docker", ["run","--rm","-v","/var/run/docker.sock:/var/run/docker.sock",f"{syft_image}:{syft_image_tag}",f"{codeunitname_lower}:{codeunitversion}","-o","cyclonedx-xml"], artifacts_folder)
         GeneralUtilities.write_text_to_file(sbom_file, syft_result[1])
         self._protected_sc.format_xml_file(sbom_file)
  
@@ -230,7 +233,10 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
             # so it does not depend on the image under test providing curl. It is resolved via
             # the image-manager (like Syft), so it is pulled from the configured registry and
             # does not hit registry-rate-limits.
-            curl_image=self.tfcps_Tools_General.oci_image_manager.get_registry_address_for_image_with_default_tag(self.get_repository_folder(),"Curl")
+            curl_image_address=self.tfcps_Tools_General.oci_image_manager.get_registry_address_for_image(self.get_repository_folder(),"Curl")
+            curl_image_tag=self.tfcps_Tools_General.oci_image_manager.get_tag_for_image(self.get_repository_folder(),"Curl")
+            self._protected_sc.docker_pull(curl_image_address,curl_image_tag)
+            curl_image=f"{curl_image_address}:{curl_image_tag}"
         try:
             last_exception:Exception=None
             self._protected_sc.run_program("docker",argument)

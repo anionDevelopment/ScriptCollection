@@ -1839,7 +1839,7 @@ class TFCPS_Tools_General:
             self.__sc.run_program_argsasarray("docker",[ "push", arch_tag])
         # Create multi-arch manifest
         final_tag = f"{image_address}:{tag}"
-        self.__sc.run_program_argsasarray("docker", [ "buildx", "imagetools", "create", "--tag", final_tag] + arch_tags)
+        self.__sc.run_program_argsasarray("docker", [ "buildx", "imagetools", "create", "--tag", final_tag] + arch_tags, print_errors_as_information=True)#imagetools create pulls and pushes the manifests; docker writes the progress-output of the pull to std-err, so it must not be treated as error.
 
     @GeneralUtilities.check_arguments
     def platform_from_filename(self,filename: str) -> Platform:
@@ -1917,7 +1917,11 @@ class TFCPS_Tools_General:
         argument = f"compose --project-name {docker_project_name}"
         if env_file is not None:
             argument = f"{argument} --env-file {env_file}"
+        compose_arguments_without_verb = argument
         argument = f"{argument} up --detach"
+        # The images used by the compose-file are pulled explicitly here so that "compose up" does not have to download them implicitly (see docker_compose_pull).
+        # Pull-failures are ignored because the compose-file also contains the image of the codeunit itself, which was loaded from the build-artifact above and does not exist in a registry.
+        self.__sc.docker_compose_pull(folder_of_current_file, compose_arguments_without_verb, True)
         self.__sc.run_program("docker", argument, folder_of_current_file)
 
     @GeneralUtilities.check_arguments
@@ -2053,9 +2057,9 @@ class TFCPS_Tools_General:
             for k,v in env_variables.items():
                 lines=lines+[f"{k}={v}"]
             GeneralUtilities.write_lines_to_file(env_variables_file,lines)
-            arguments=arguments + " --env-file Parameters.env pull --quiet"
-            arguments_for_log=arguments
-            self.__sc.run_program_with_retry("docker",arguments,test_service_folder,arguments_for_log=arguments_for_log,print_live_output=self.__sc.log.loglevel==LogLevel.Debug)
+            arguments=arguments + " --env-file Parameters.env"
+            # Pull-failures are not ignored here because a test-service only uses images which are available in a registry.
+            self.__sc.docker_compose_pull(test_service_folder,arguments,False)
 
     @GeneralUtilities.check_arguments
     def load_deb_control_file_content(self, file: str, codeunitname: str, codeunitversion: str, installedsize: int, maintainername: str, maintaineremail: str, description: str) -> str:

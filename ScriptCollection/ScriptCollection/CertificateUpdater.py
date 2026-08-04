@@ -93,6 +93,8 @@ class CertificateUpdater:
     @GeneralUtilities.check_arguments
     def __update_certificates(self) -> None:
         self.__sc.git_commit(self.__repository_folder, "Saved current changes")
+        certbot_image_address, certbot_image_tag = ScriptCollectionCore.split_image_address_and_tag(self.__certbot_image_address_with_tag)
+        self.__sc.docker_pull(certbot_image_address, certbot_image_tag)
         error_occurred = False
         for domain in self.__domains:
             certbot_container_name = "certificate_updater"
