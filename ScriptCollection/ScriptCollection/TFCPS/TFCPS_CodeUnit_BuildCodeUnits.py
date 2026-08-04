@@ -61,8 +61,9 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     __is_pre_merge:bool = None
     __assert_no_new_changes:bool = None
     __add_ready_to_merge_flag:bool = None
+    __fast_lane:bool = None
 
-    def __init__(self,repository:str,loglevel:LogLevel,target_environment_type:str,additionalargumentsfile:str,use_cache:bool,is_pre_merge:bool,assertnonewchanges:bool,add_ready_to_merge_flag:bool=False):
+    def __init__(self,repository:str,loglevel:LogLevel,target_environment_type:str,additionalargumentsfile:str,use_cache:bool,is_pre_merge:bool,assertnonewchanges:bool,add_ready_to_merge_flag:bool=False,fast_lane:bool=False):
         self.sc=ScriptCollectionCore()
         self.sc.log.loglevel=loglevel
         self.__use_cache=use_cache
@@ -76,6 +77,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.__is_pre_merge=is_pre_merge
         self.__assert_no_new_changes=assertnonewchanges
         self.__add_ready_to_merge_flag=add_ready_to_merge_flag
+        self.__fast_lane=fast_lane
 
     @GeneralUtilities.check_arguments
     def build_codeunits(self, hook: TFCPS_BuildCodeUnitsHook = None) -> None:
@@ -88,10 +90,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         ready_to_merge_file=os.path.join(self.repository,".ScriptCollection",".IsReadyToMerge")
         error_occurred=False
         try:
+            if self.__fast_lane:
+                current_branch_name = self.sc.git_get_current_branch_name(self.repository)
+                GeneralUtilities.assert_condition(self.sc.is_fix_branch(current_branch_name), f"Fastlane-builds are only allowed on branches whose name starts with 'fix/', but the current branch is '{current_branch_name}'.")
+
             #assert that the product-information-file exists
             product_information_file = os.path.join(self.repository, ".ScriptCollection", "ProductInformation.xml")
             GeneralUtilities.assert_file_exists(product_information_file, f"The file '{product_information_file}' does not exist.")
-            
 
             #when the build runs inside a container, ensure the used SCBuilder-image is at least the version required by this repository (defined in .ScriptCollection/OCIImages/ImageDefinition.csv)
             if self.sc.is_runnning_in_container():
@@ -154,7 +159,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             for codeunit_name in codeunits:
                 self.sc.log.log(f"  - {codeunit_name}")
             for codeunit_name in codeunits:
-                tFCPS_CodeUnit_BuildCodeUnit:TFCPS_CodeUnit_BuildCodeUnit = TFCPS_CodeUnit_BuildCodeUnit(os.path.join(self.repository,codeunit_name),self.sc.log.loglevel,self.target_environment_type,self.additionalargumentsfile,self.use_cache(),self.is_pre_merge())
+                tFCPS_CodeUnit_BuildCodeUnit:TFCPS_CodeUnit_BuildCodeUnit = TFCPS_CodeUnit_BuildCodeUnit(os.path.join(self.repository,codeunit_name),self.sc.log.loglevel,self.target_environment_type,self.additionalargumentsfile,self.use_cache(),self.is_pre_merge(),self.__fast_lane)
                 self.sc.log.log(GeneralUtilities.get_line())
                 tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()
                 hook.run_after_codeunit_was_built(tFCPS_CodeUnit_BuildCodeUnit)
@@ -312,18 +317,16 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             scbuildcodeunits_arguments.append("-u")
         if self.__add_ready_to_merge_flag:
             scbuildcodeunits_arguments.append("-m")
+        if self.__fast_lane:
+            scbuildcodeunits_arguments.append("-f")
         if GeneralUtilities.string_has_content(self.additionalargumentsfile):
             scbuildcodeunits_arguments += ["-a", self.__translate_path_into_container(self.additionalargumentsfile, container_repository_folder)]
 
-        #if the repository is a git-submodule then "<repository>/.git" is a pointer-file referencing its gitdir via a path relative to the repository
-        #(for example "gitdir: ../../.git/modules/Submodules/<product>"), and the gitdir's own "core.worktree" points back at the repository via a
-        #path relative to the gitdir. Both references are relative, so they resolve correctly inside the container as long as the mounted folder-structure
-        #preserves that relative path - which is what base_mount_folder is for: the caller has to mount a folder that also contains the repository's real
-        #gitdir (typically the parent-repository the submodule belongs to). No file-rewriting is required; a base_mount_folder that does not cover the
-        #real gitdir results in failing git-commands inside the container.
-        test=True#TODO remove this
-        if test:
-            scbuildcodeunits_arguments=["bash","-c", "pip3 install scriptcollection --upgrade && scshowversion && "+" ".join(scbuildcodeunits_arguments)]
+        update_scriptcollection=True
+        update_argument:str=""
+        if update_scriptcollection:
+            update_argument="pip3 install scriptcollection --upgrade && "
+        scbuildcodeunits_arguments=["bash","-c", f"{update_argument}scshowversion && "+" ".join(scbuildcodeunits_arguments)]
 
         #run the optional user-specific script which prepares this host for a container-build (for example to log in to the registry the image is pulled from).
         #it runs before the environment-variables are resolved, so it can also create the files their values are read from.

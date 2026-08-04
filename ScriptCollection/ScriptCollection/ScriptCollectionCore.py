@@ -2493,6 +2493,22 @@ class ScriptCollectionCore:
         return f"{major}.{minor}.{patch}"
 
     @GeneralUtilities.check_arguments
+    def is_major_branch(self, branch_name: str) -> bool:
+        return branch_name.startswith("major/")
+
+    @GeneralUtilities.check_arguments
+    def is_minor_branch(self, branch_name: str) -> bool:
+        return branch_name.startswith("feature/")
+
+    @GeneralUtilities.check_arguments
+    def is_fix_branch(self, branch_name: str) -> bool:
+        return branch_name.startswith("fix/")
+
+    @GeneralUtilities.check_arguments
+    def is_other_branch(self, branch_name: str) -> bool:
+        return branch_name.startswith("other/")
+
+    @GeneralUtilities.check_arguments
     def get_semver_version(self, repository_folder: str) -> str:
         """
         Calculates the semantic version of the current state of the given repository.
@@ -2521,11 +2537,16 @@ class ScriptCollectionCore:
                     GeneralUtilities.assert_condition(current_commit_is_on_tag, f"Repository '{repository_folder}' does not have a tag. This is not allowed.")
                 else:
                     if not current_commit_is_on_tag or repo_has_uncommitted_changes:
-                        if current_branch_name.startswith("major/"):
+                        GeneralUtilities.assert_condition(self.is_major_branch(current_branch_name) 
+                            or self.is_minor_branch(current_branch_name) 
+                            or self.is_fix_branch(current_branch_name) 
+                            or self.is_other_branch(current_branch_name),
+                            f"Repository '{repository_folder}' is on branch '{current_branch_name}' which is not a major-, minor-, fix- or other-branch. This is not allowed.")
+                        if self.is_major_branch(current_branch_name):
                             incremented = self.increment_version(current_version, True, False, False)
                             major = incremented.split(".")[0]
                             result = f"{major}.0.0"
-                        elif current_branch_name.startswith("feature/"):
+                        elif self.is_minor_branch(current_branch_name):
                             incremented = self.increment_version(current_version, False, True, False)
                             splitted = incremented.split(".")
                             result = f"{splitted[0]}.{splitted[1]}.0"

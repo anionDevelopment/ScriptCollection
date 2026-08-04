@@ -260,12 +260,13 @@ def BuildCodeUnits() -> int:
     parser.add_argument('-m','--addreadytomergeflag', required=False, default=False, action='store_true')
     parser.add_argument('-c','--runincontainer', required=False, default=False, action='store_true')
     parser.add_argument('-b','--basemountfolder', required=False, default=None, help="Only used if -c is set.")
+    parser.add_argument('-f','--fastlane', required=False, default=False, action='store_true', help="Skips running RunTestcases.py")
     args = parser.parse_args()
 
     verbosity=LogLevel(int(args.verbosity))
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
 
-    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges,args.addreadytomergeflag)
+    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges,args.addreadytomergeflag,args.fastlane)
     if args.runincontainer:
         base_mount_folder:str=args.basemountfolder
         if base_mount_folder is None:
@@ -290,6 +291,7 @@ def BuildCodeUnitsC() -> int:
     parser.add_argument('-u','--assertnonewchanges', required=False, default=False, action='store_true')
     parser.add_argument('-m','--addreadytomergeflag', required=False, default=False, action='store_true')
     parser.add_argument('-b','--basemountfolder', required=False, default=None)
+    parser.add_argument('-f','--fastlane', required=False, default=False, action='store_true', help="Skips running RunTestcases.py")
     args = parser.parse_args()
 
     GeneralUtilities.reconfigure_standard_input_and_outputs()
@@ -299,7 +301,7 @@ def BuildCodeUnitsC() -> int:
     if base_mount_folder is None:
         base_mount_folder=repo
     base_mount_folder:str=GeneralUtilities.resolve_relative_path(base_mount_folder,os.getcwd())
-    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges,args.addreadytomergeflag)
+    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges,args.addreadytomergeflag,args.fastlane)
     success, _ = t.build_codeunits_in_container(base_mount_folder)
     return 0 if success else 1
 

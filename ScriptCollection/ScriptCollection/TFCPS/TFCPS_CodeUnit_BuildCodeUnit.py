@@ -17,8 +17,9 @@ class TFCPS_CodeUnit_BuildCodeUnit:
     additionalargumentsfile: str = None
     use_cache: bool = None
     is_pre_merge: bool = None
+    fast_lane: bool = None
 
-    def __init__(self, codeunit_folder: str, verbosity: LogLevel, target_environment_type: str, additionalargumentsfile: str, use_cache: bool,is_pre_merge:bool):
+    def __init__(self, codeunit_folder: str, verbosity: LogLevel, target_environment_type: str, additionalargumentsfile: str, use_cache: bool,is_pre_merge:bool,fast_lane:bool=False):
         self.sc = ScriptCollectionCore()
         self.sc.log.loglevel = verbosity
         self.tFCPS_Tools = TFCPS_Tools_General(self.sc)
@@ -31,6 +32,7 @@ class TFCPS_CodeUnit_BuildCodeUnit:
         self.additionalargumentsfile = additionalargumentsfile
         self.use_cache = use_cache
         self.is_pre_merge=is_pre_merge
+        self.fast_lane=fast_lane
 
     @GeneralUtilities.check_arguments
     def build_codeunit(self) -> None:
@@ -62,7 +64,7 @@ class TFCPS_CodeUnit_BuildCodeUnit:
         artifacts = {"BuildResult_.+": True, "BOM": False, "SourceCode":  self.tFCPS_Tools.codeunit_has_testable_sourcecode(codeunit_file)}
         self.verify_artifact_exists(self.codeunit_folder, dict[str, bool](artifacts))
 
-        if self.tFCPS_Tools.codeunit_has_testable_sourcecode(codeunit_file):
+        if self.tFCPS_Tools.codeunit_has_testable_sourcecode(codeunit_file) and not self.fast_lane:
             self.sc.log.log("Run testcases...")
             self.sc.run_program(GeneralUtilities.get_python_executable(), f"RunTestcases.py {arguments}", os.path.join(self.codeunit_folder, "Other", "QualityCheck"), print_live_output=self.sc.log.loglevel==LogLevel.Debug)
             self.verify_artifact_exists(self.codeunit_folder, dict[str, bool]({"TestCoverage": True, "TestCoverageReport": False}))
