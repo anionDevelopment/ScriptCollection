@@ -1,24 +1,24 @@
 <?xml version='1.0' encoding='utf-8'?>
-<ns0:codeunit xmlns:ns0="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" codeunitspecificationversion="2.9.4" xsi:schemaLocation="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v2.9.4/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd" enabled="true">
-  <ns0:name>ScriptCollection</ns0:name>
-  <ns0:version>4.3.62</ns0:version>
-  <ns0:codeunitownername>Marius Göcke</ns0:codeunitownername>
-  <ns0:codeunitowneremailaddress>marius.goecke@gmail.com</ns0:codeunitowneremailaddress>
-  <ns0:properties codeunithastestablesourcecode="true" codeunithasupdatabledependencies="true" throwexceptionifcodeunitfilecannotbevalidated="true" developmentstate="Active development" description="ScriptCollection is the place for reusable scripts.">
-    <ns0:testsettings minimalcodecoverageinpercent="20" />
-    <ns0:pipelinedemands />
-    <ns0:updatesettings>
-      <ns0:ignoreddependencies>
-        <ns0:ignoreddependency>cyclonedx-bom</ns0:ignoreddependency>
-        <ns0:ignoreddependency>lxml</ns0:ignoreddependency>
-      </ns0:ignoreddependencies>
-    </ns0:updatesettings>
-  </ns0:properties>
-  <ns0:dependentcodeunits />
-  <ns0:developerteam>
-    <ns0:developer>
-      <ns0:developername>Marius Göcke</ns0:developername>
-      <ns0:developeremailaddress>marius.goecke@gmail.com</ns0:developeremailaddress>
-    </ns0:developer>
-  </ns0:developerteam>
-</ns0:codeunit>
+<codeunit xmlns="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" codeunitspecificationversion="2.9.4" xsi:schemaLocation="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v2.9.4/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd" enabled="true">
+  <name>ScriptCollection</name>
+  <version>4.3.62</version>
+  <codeunitownername>Marius Göcke</codeunitownername>
+  <codeunitowneremailaddress>marius.goecke@gmail.com</codeunitowneremailaddress>
+  <properties codeunithastestablesourcecode="true" codeunithasupdatabledependencies="true" throwexceptionifcodeunitfilecannotbevalidated="true" developmentstate="Active development" description="ScriptCollection is the place for reusable scripts.">
+    <testsettings minimalcodecoverageinpercent="20" />
+    <pipelinedemands />
+    <updatesettings>
+      <ignoreddependencies>
+        <ignoreddependency>cyclonedx-bom</ignoreddependency>
+        <ignoreddependency>lxml</ignoreddependency>
+      </ignoreddependencies>
+    </updatesettings>
+  </properties>
+  <dependentcodeunits />
+  <developerteam>
+    <developer>
+      <developername>Marius Göcke</developername>
+      <developeremailaddress>marius.goecke@gmail.com</developeremailaddress>
+    </developer>
+  </developerteam>
+</codeunit>
