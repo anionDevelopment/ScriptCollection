@@ -592,7 +592,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             self._protected_sc.update_year_in_copyright_tags(nuspec_file)
  
     @GeneralUtilities.check_arguments
-    def run_testcases(self) -> None:
+    def run_testcases(self, timeoutInSeconds:int=60*10) -> None:        
         self._protected_sc.log.log("Run testcases...")
         dotnet_build_configuration: str = self.get_target_environment_type()
         codeunit_name: str = self.get_codeunit_name()
@@ -625,7 +625,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         test_working_directory = os.path.join(temp_folder, "WorkingDirectory")
         GeneralUtilities.ensure_directory_exists(test_working_directory)
         try:
-            program_output=self._protected_sc.run_program_argsasarray("dotnet", args, test_working_directory, print_live_output=self.get_verbosity()==LogLevel.Debug, timeoutInSeconds=60*45, env_vars={"MSBUILDDISABLENODEREUSE": "1"})
+            program_output=self._protected_sc.run_program_argsasarray("dotnet", args, test_working_directory, print_live_output=self.get_verbosity()==LogLevel.Debug, timeoutInSeconds=timeoutInSeconds, env_vars={"MSBUILDDISABLENODEREUSE": "1"})
             test_output:str=program_output[1]
             output_lines=program_output[1].split("\n")
             output_lines=[line for line in output_lines if GeneralUtilities.string_has_content(line)]

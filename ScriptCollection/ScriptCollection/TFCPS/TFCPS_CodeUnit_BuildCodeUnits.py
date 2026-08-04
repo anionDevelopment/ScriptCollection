@@ -163,17 +163,19 @@ class TFCPS_CodeUnit_BuildCodeUnits:
                 self.sc.log.log(GeneralUtilities.get_line())
                 tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()
                 hook.run_after_codeunit_was_built(tFCPS_CodeUnit_BuildCodeUnit)
-
             self.sc.log.log(GeneralUtilities.get_line())
 
             self.search_for_secrets()
-            self.__normalize_line_endings_of_common_files()
             self.tfcps_tools_general.generate_svg_files_from_plantuml_files_for_repository(self.repository, self.use_cache())
+            self.__normalize_line_endings_of_common_files()
+
+            self.sc.log.log(GeneralUtilities.get_line())
 
             if self.is_pre_merge():
                 self.__translate()
                 self.__collect_metrics()
                 self.__generate_loc_diagram()
+                self.sc.log.log(GeneralUtilities.get_line())
 
         except Exception:
             error_occurred=True
@@ -236,14 +238,17 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
     @GeneralUtilities.check_arguments
     def __normalize_line_endings_of_common_files(self) -> None:
-        #TODO add option to define exceptions (means: files which should not be normalized).
         self.sc.format_xml_file(os.path.join(self.repository, ".ScriptCollection", "ProductInformation.xml"))
+        
         for codeunit in self.tfcps_tools_general.get_codeunits(self.repository):
             self.sc.format_xml_file(os.path.join(self.repository, codeunit, f"{codeunit}.codeunit.xml"))
+
         workspace_file = os.path.join(self.repository, f"{self.tfcps_tools_general.get_product_name(self.repository)}.code-workspace")
         if os.path.isfile(workspace_file):
             self.sc.format_json_file(workspace_file)
-        self.sc.normalize_line_endings_of_files_in_folder(self.repository, ["txt", "md", "json", "xml", "csv", "yml", "yaml", "toml","gitignore", "gitattributes", "code-workspace"])
+
+        #TODO add option to define exceptions (means: files which should not be normalized).
+        self.sc.normalize_line_endings_of_files_in_folder(self.repository, ["txt", "md", "py", "json", "xml", "svg", "csv", "yml", "yaml", "toml","gitignore", "gitattributes", "code-workspace"])
 
     @GeneralUtilities.check_arguments
     def is_working_branch(self)->bool:
@@ -363,6 +368,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             image,
         ] + scbuildcodeunits_arguments
         self.sc.log.log(f"Build codeunits in container using image \"{image}\"...")
+        image_address, image_tag = ScriptCollectionCore.split_image_address_and_tag(image)
+        self.sc.docker_pull(image_address, image_tag)
         # the exitcode is evaluated by the caller (returned as part of the result-tuple), so the program-runner must not raise on a non-zero exitcode here.
         result=self.sc.run_program_argsasarray("docker", docker_arguments, throw_exception_if_exitcode_is_not_zero=False, print_live_output=True, env_vars=required_environment_variables)
         exit_code:int=result[0]
@@ -585,7 +592,9 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if daemon_check[0] != 0:
             raise ValueError(f"The secret-scan can not be performed because the docker-daemon is not reachable (exit-code {daemon_check[0]}: {daemon_check[2].strip()}). The scan runs betterleaks via 'docker run', which requires a running docker-daemon (inside a build-container its socket must be forwarded to the host-daemon). This is an infrastructure-problem, not a secret-finding in the repository.")
         args = ["run", "--rm"] + mount_arguments + [image] + scan_args
-        result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==LogLevel.Debug,print_errors_as_information=True)
+        image_address, image_tag = ScriptCollectionCore.split_image_address_and_tag(image)
+        self.sc.docker_pull(image_address, image_tag)
+        result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==LogLevel.Debug)
         if result[0] != 0:
             for line in GeneralUtilities.string_to_lines(result[1]):
                 self.sc.log.log(line, LogLevel.Information)

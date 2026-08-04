@@ -10,7 +10,7 @@ class TFCPS_CodeUnit_BuildCodeUnit:
 
     codeunit_folder: str = None
     repository_folder: str = None
-    sc: ScriptCollectionCore = ScriptCollectionCore()
+    sc: ScriptCollectionCore = None
     codeunit_name: str = None
     tFCPS_Tools: TFCPS_Tools_General = None
     target_environment_type: str = None
