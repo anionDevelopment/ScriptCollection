@@ -550,10 +550,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
     @GeneralUtilities.check_arguments
     def __search_for_secrets_in_repository(self) -> None:
-        try:
-            image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "Betterleaks")
-        except Exception:
-            image="ghcr.io/betterleaks/betterleaks:latest"
+        image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "Betterleaks")
+
         config_file = os.path.join(self.repository, ".betterleaks.toml")
         #the filesystem-marker is checked in addition to the convention-based environment-variable (which the rest of this class uses as well),
         #because a wrong result here does not only change a message but makes the scan analyse the wrong folder.
@@ -594,7 +592,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         args = ["run", "--rm"] + mount_arguments + [image] + scan_args
         image_address, image_tag = ScriptCollectionCore.split_image_address_and_tag(image)
         self.sc.docker_pull(image_address, image_tag)
-        result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==LogLevel.Debug)
+        result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==False, print_errors_as_information=True)
         if result[0] != 0:
             for line in GeneralUtilities.string_to_lines(result[1]):
                 self.sc.log.log(line, LogLevel.Information)
