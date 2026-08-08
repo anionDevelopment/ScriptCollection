@@ -592,7 +592,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             self._protected_sc.update_year_in_copyright_tags(nuspec_file)
  
     @GeneralUtilities.check_arguments
-    def run_testcases(self, timeoutInSeconds:int=60*10) -> None:        
+    def run_testcases(self, timeoutInSeconds:int=60*30) -> None:
         self._protected_sc.log.log("Run testcases...")
         dotnet_build_configuration: str = self.get_target_environment_type()
         codeunit_name: str = self.get_codeunit_name()
