@@ -61,8 +61,9 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     __is_pre_merge:bool = None
     __assert_no_new_changes:bool = None
     __add_ready_to_merge_flag:bool = None
+    __fast_lane:bool = None
 
-    def __init__(self,repository:str,loglevel:LogLevel,target_environment_type:str,additionalargumentsfile:str,use_cache:bool,is_pre_merge:bool,assertnonewchanges:bool,add_ready_to_merge_flag:bool=False):
+    def __init__(self,repository:str,loglevel:LogLevel,target_environment_type:str,additionalargumentsfile:str,use_cache:bool,is_pre_merge:bool,assertnonewchanges:bool,add_ready_to_merge_flag:bool=False,fast_lane:bool=False):
         self.sc=ScriptCollectionCore()
         self.sc.log.loglevel=loglevel
         self.__use_cache=use_cache
@@ -76,6 +77,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.__is_pre_merge=is_pre_merge
         self.__assert_no_new_changes=assertnonewchanges
         self.__add_ready_to_merge_flag=add_ready_to_merge_flag
+        self.__fast_lane=fast_lane
 
     @GeneralUtilities.check_arguments
     def build_codeunits(self, hook: TFCPS_BuildCodeUnitsHook = None) -> None:
@@ -88,10 +90,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         ready_to_merge_file=os.path.join(self.repository,".ScriptCollection",".IsReadyToMerge")
         error_occurred=False
         try:
+            if self.__fast_lane:
+                current_branch_name = self.sc.git_get_current_branch_name(self.repository)
+                GeneralUtilities.assert_condition(self.sc.is_fix_branch(current_branch_name), f"Fastlane-builds are only allowed on branches whose name starts with 'fix/', but the current branch is '{current_branch_name}'.")
+
             #assert that the product-information-file exists
             product_information_file = os.path.join(self.repository, ".ScriptCollection", "ProductInformation.xml")
             GeneralUtilities.assert_file_exists(product_information_file, f"The file '{product_information_file}' does not exist.")
-            
 
             #when the build runs inside a container, ensure the used SCBuilder-image is at least the version required by this repository (defined in .ScriptCollection/OCIImages/ImageDefinition.csv)
             if self.sc.is_runnning_in_container():
@@ -105,6 +110,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             
             if self.is_pre_merge():
                 GeneralUtilities.assert_condition(not self.__assert_no_new_changes,f"A pre-merge build can not be done with the assert-no-new-changes-option.")
+
+            self.__update_openspec()
 
             self.sc.git_set_local_configuration_value(self.repository, "core.autocrlf", "false")
 
@@ -120,13 +127,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
             self.__run_custom_pre_codeunit_build_script()
 
-            if self.__assert_no_new_changes:
-                self.sc.assert_no_uncommitted_changes(self.repository,"Can not build codeunit: There are uncommitted changes in the repository.")
-
             try:
                 xmlschema.validate(product_information_file, "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/main/Conventions/RepositoryStructure/CommonProjectStructure/productinformation.xsd")
             except Exception as exception:
                 self.sc.log.log_exception(f"'{product_information_file}' could not be validated against the XSD:", exception, LogLevel.Warning)
+
+            if self.__assert_no_new_changes:
+                self.sc.assert_no_uncommitted_changes(self.repository,"Can not build codeunit: There are uncommitted changes in the repository.")
 
             #run prepare-script
             self.run_prepare_script()
@@ -154,7 +161,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             for codeunit_name in codeunits:
                 self.sc.log.log(f"  - {codeunit_name}")
             for codeunit_name in codeunits:
-                tFCPS_CodeUnit_BuildCodeUnit:TFCPS_CodeUnit_BuildCodeUnit = TFCPS_CodeUnit_BuildCodeUnit(os.path.join(self.repository,codeunit_name),self.sc.log.loglevel,self.target_environment_type,self.additionalargumentsfile,self.use_cache(),self.is_pre_merge())
+                tFCPS_CodeUnit_BuildCodeUnit:TFCPS_CodeUnit_BuildCodeUnit = TFCPS_CodeUnit_BuildCodeUnit(os.path.join(self.repository,codeunit_name),self.sc.log.loglevel,self.target_environment_type,self.additionalargumentsfile,self.use_cache(),self.is_pre_merge(),self.__fast_lane)
                 self.sc.log.log(GeneralUtilities.get_line())
                 tFCPS_CodeUnit_BuildCodeUnit.build_codeunit()
                 hook.run_after_codeunit_was_built(tFCPS_CodeUnit_BuildCodeUnit)
@@ -296,6 +303,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["PrepareBuildCodeunits.py"]+args, os.path.join(self.repository,"Other","Scripts"),print_live_output=True)
 
     @GeneralUtilities.check_arguments
+    def __update_openspec(self) -> None:
+        openspec_configuration_file: str = os.path.join(self.repository, "openspec", "config.yaml")
+        if os.path.isfile(openspec_configuration_file):
+            self.sc.log.log("Update openspec-instruction-files...")
+            self.sc.run_program_argsasarray("openspec", ["update", "--force"], self.repository)
+
+    @GeneralUtilities.check_arguments
     def build_codeunits_in_container(self,base_mount_folder:str) -> tuple[bool, str]:
         #base_mount_folder is assumed to be an absolute path set correctly by the caller (see BuildCodeUnitsC in Executables.py, which defaults it to the repository itself).
         #it may be the repository itself or any parent-folder of it, which allows the caller to mount not only the repository but the whole surrounding folder-structure into the container.
@@ -317,18 +331,16 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             scbuildcodeunits_arguments.append("-u")
         if self.__add_ready_to_merge_flag:
             scbuildcodeunits_arguments.append("-m")
+        if self.__fast_lane:
+            scbuildcodeunits_arguments.append("-f")
         if GeneralUtilities.string_has_content(self.additionalargumentsfile):
             scbuildcodeunits_arguments += ["-a", self.__translate_path_into_container(self.additionalargumentsfile, container_repository_folder)]
 
-        #if the repository is a git-submodule then "<repository>/.git" is a pointer-file referencing its gitdir via a path relative to the repository
-        #(for example "gitdir: ../../.git/modules/Submodules/<product>"), and the gitdir's own "core.worktree" points back at the repository via a
-        #path relative to the gitdir. Both references are relative, so they resolve correctly inside the container as long as the mounted folder-structure
-        #preserves that relative path - which is what base_mount_folder is for: the caller has to mount a folder that also contains the repository's real
-        #gitdir (typically the parent-repository the submodule belongs to). No file-rewriting is required; a base_mount_folder that does not cover the
-        #real gitdir results in failing git-commands inside the container.
-        test=True#TODO remove this
-        if test:
-            scbuildcodeunits_arguments=["bash","-c", "pip3 install scriptcollection --upgrade && scshowversion && "+" ".join(scbuildcodeunits_arguments)]
+        update_scriptcollection=True
+        update_argument:str=""
+        if update_scriptcollection:
+            update_argument="pip3 install scriptcollection --upgrade && "
+        scbuildcodeunits_arguments=["bash","-c", f"{update_argument}scshowversion && "+" ".join(scbuildcodeunits_arguments)]
 
         #run the optional user-specific script which prepares this host for a container-build (for example to log in to the registry the image is pulled from).
         #it runs before the environment-variables are resolved, so it can also create the files their values are read from.
@@ -547,10 +559,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
     @GeneralUtilities.check_arguments
     def __search_for_secrets_in_repository(self) -> None:
-        try:
-            image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "Betterleaks")
-        except Exception:
-            image="ghcr.io/betterleaks/betterleaks:latest"
+        image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "Betterleaks")
+
         config_file = os.path.join(self.repository, ".betterleaks.toml")
         #the filesystem-marker is checked in addition to the convention-based environment-variable (which the rest of this class uses as well),
         #because a wrong result here does not only change a message but makes the scan analyse the wrong folder.
@@ -591,7 +601,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         args = ["run", "--rm"] + mount_arguments + [image] + scan_args
         image_address, image_tag = ScriptCollectionCore.split_image_address_and_tag(image)
         self.sc.docker_pull(image_address, image_tag)
-        result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==LogLevel.Debug)
+        result = self.sc.run_program_argsasarray("docker", args, throw_exception_if_exitcode_is_not_zero=False, print_live_output=self.sc.log.loglevel==False, print_errors_as_information=True)
         if result[0] != 0:
             for line in GeneralUtilities.string_to_lines(result[1]):
                 self.sc.log.log(line, LogLevel.Information)
