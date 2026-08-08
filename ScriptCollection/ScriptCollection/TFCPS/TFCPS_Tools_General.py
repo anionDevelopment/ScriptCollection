@@ -13,9 +13,9 @@ import platform
 import json
 import uuid
 import urllib.request
+import xml.etree.ElementTree as ET
 from packaging import version
 import requests
-import xml.etree.ElementTree as ET
 from lxml import etree
 from ..GeneralUtilities import GeneralUtilities,Platform
 from ..ScriptCollectionCore import ScriptCollectionCore,VSCodeWorkspaceShellTask

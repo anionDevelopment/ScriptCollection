@@ -4,7 +4,9 @@ import unittest
 from unittest.mock import patch
 from ..ScriptCollection.GeneralUtilities import GeneralUtilities
 from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
+from ..ScriptCollection.SCLog import LogLevel
 from ..ScriptCollection.TFCPS.TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base
+from ..ScriptCollection.TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
 from ..ScriptCollection.TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
 
 
@@ -38,6 +40,29 @@ def write_product_information_file(repository: str, required_environment_variabl
 </cps:productinformation>
 """)
     return product_information_file
+
+
+def create_build_codeunits_for_folder(repository: str) -> TFCPS_CodeUnit_BuildCodeUnits:
+    """Returns a TFCPS_CodeUnit_BuildCodeUnits for the given folder. The folder is turned into something the constructor accepts as a
+    git-repository by creating its '.git'-folder, which is sufficient here because the tests which use this only exercise a single
+    build-step and therefore never run a git-command."""
+    GeneralUtilities.ensure_directory_exists(os.path.join(repository, ".git"))
+    return TFCPS_CodeUnit_BuildCodeUnits(repository, LogLevel.Information, "Development", None, True, False, False)
+
+
+def update_openspec(build_codeunits: TFCPS_CodeUnit_BuildCodeUnits) -> None:
+    """Runs the openspec-update-step of the given build."""
+    # pylint:disable=protected-access
+    build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__update_openspec()
+
+
+def write_openspec_configuration_file(repository: str) -> str:
+    """Writes the file whose existence declares that the repository uses openspec."""
+    openspec_folder = os.path.join(repository, "openspec")
+    GeneralUtilities.ensure_directory_exists(openspec_folder)
+    configuration_file = os.path.join(openspec_folder, "config.yaml")
+    GeneralUtilities.write_text_to_file(configuration_file, "schema: spec-driven\n")
+    return configuration_file
 
 
 def write_environment_variables_configuration_file(configuration_folder: str, lines: list[str]) -> str:
@@ -457,6 +482,34 @@ items:
             result_lines = GeneralUtilities.read_lines_from_file(os.path.join(folder, "Result.txt"))
             assert os.path.realpath(result_lines[0]) == os.path.realpath(folder)
             assert result_lines[1] == "--repository MyRepository"
+
+    def test_update_openspec_does_nothing_when_the_repository_does_not_use_openspec(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as repository:
+            build_codeunits = create_build_codeunits_for_folder(repository)
+            with patch.object(build_codeunits.sc, "run_program_argsasarray") as run_program:
+
+                # act
+                update_openspec(build_codeunits)
+
+                # assert
+                #a repository without "openspec/config.yaml" does not use openspec, so nothing may be run for it.
+                run_program.assert_not_called()
+
+    def test_update_openspec_updates_the_openspec_files_in_the_repository(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as repository:
+            write_openspec_configuration_file(repository)
+            build_codeunits = create_build_codeunits_for_folder(repository)
+            with patch.object(build_codeunits.sc, "run_program_argsasarray") as run_program:
+
+                # act
+                update_openspec(build_codeunits)
+
+                # assert
+                #"--force" is required because openspec skips the update when it considers the generated files up-to-date, and the update
+                #must run in the repository because that is the folder whose openspec-files are meant.
+                run_program.assert_called_once_with("openspec", ["update", "--force"], repository)
 
     def test_generate_toc_md_file_content_with_toc_without_items_property(self) -> None:
         # arrange

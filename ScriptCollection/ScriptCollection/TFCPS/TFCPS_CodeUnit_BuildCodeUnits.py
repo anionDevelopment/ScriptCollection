@@ -111,6 +111,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             if self.is_pre_merge():
                 GeneralUtilities.assert_condition(not self.__assert_no_new_changes,f"A pre-merge build can not be done with the assert-no-new-changes-option.")
 
+            self.__update_openspec()
+
             self.sc.git_set_local_configuration_value(self.repository, "core.autocrlf", "false")
 
             #ensure the artifacts-folder of the repository is git-ignored so build-results never show up as uncommitted changes
@@ -125,13 +127,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
             self.__run_custom_pre_codeunit_build_script()
 
-            if self.__assert_no_new_changes:
-                self.sc.assert_no_uncommitted_changes(self.repository,"Can not build codeunit: There are uncommitted changes in the repository.")
-
             try:
                 xmlschema.validate(product_information_file, "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/main/Conventions/RepositoryStructure/CommonProjectStructure/productinformation.xsd")
             except Exception as exception:
                 self.sc.log.log_exception(f"'{product_information_file}' could not be validated against the XSD:", exception, LogLevel.Warning)
+
+            if self.__assert_no_new_changes:
+                self.sc.assert_no_uncommitted_changes(self.repository,"Can not build codeunit: There are uncommitted changes in the repository.")
 
             #run prepare-script
             self.run_prepare_script()
@@ -299,6 +301,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if  os.path.isfile( os.path.join(self.repository,"Other","Scripts","PrepareBuildCodeunits.py")):
             self.sc.log.log("Prepare build codeunits...")
             self.sc.run_program_argsasarray(GeneralUtilities.get_python_executable(),["PrepareBuildCodeunits.py"]+args, os.path.join(self.repository,"Other","Scripts"),print_live_output=True)
+
+    @GeneralUtilities.check_arguments
+    def __update_openspec(self) -> None:
+        openspec_configuration_file: str = os.path.join(self.repository, "openspec", "config.yaml")
+        if os.path.isfile(openspec_configuration_file):
+            self.sc.log.log("Update openspec-instruction-files...")
+            self.sc.run_program_argsasarray("openspec", ["update", "--force"], self.repository)
 
     @GeneralUtilities.check_arguments
     def build_codeunits_in_container(self,base_mount_folder:str) -> tuple[bool, str]:
