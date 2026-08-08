@@ -15,6 +15,7 @@ import uuid
 import urllib.request
 from packaging import version
 import requests
+import xml.etree.ElementTree as ET
 from lxml import etree
 from ..GeneralUtilities import GeneralUtilities,Platform
 from ..ScriptCollectionCore import ScriptCollectionCore,VSCodeWorkspaceShellTask
@@ -374,13 +375,38 @@ class TFCPS_Tools_General:
 
     @GeneralUtilities.check_arguments
     def write_version_to_codeunit_file(self, codeunit_file: str, current_version: str) -> None:
+        """Sets the version of the given codeunit-file to the given version.
+
+        The element is looked up and set in the parsed document instead of being replaced textually. A textual
+        replacement has to know how the tag is written, and the previous implementation only matched the prefixed form
+        ("<cps:version>"): after the codeunit-files were converted to declare the namespace as default-namespace
+        ("<version>") it silently replaced nothing, so the version in the codeunit-files stayed at the value it had at
+        that time while every other place (the csproj- and the nuspec-files) was updated on every build. The lookup
+        below addresses the element by its namespace-uri and is therefore independent of the prefix it is written with.
+
+        The element is addressed as a direct child of the codeunit-element (which is where the schema declares it), so a
+        version-element which belongs to something else in the file can not be hit by accident."""
         versionregex = "\\d+\\.\\d+\\.\\d+"
         versiononlyregex = f"^{versionregex}$"
-        pattern = re.compile(versiononlyregex)
-        if pattern.match(current_version):
-            GeneralUtilities.write_text_to_file(codeunit_file, re.sub(f"<cps:version>{versionregex}<\\/cps:version>", f"<cps:version>{current_version}</cps:version>", GeneralUtilities.read_text_from_file(codeunit_file)))
-        else:
+        if re.match(versiononlyregex, current_version) is None:
             raise ValueError(f"Version '{current_version}' does not match version-regex '{versiononlyregex}'.")
+        namespace = 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'
+        #the namespace is registered as default-namespace, otherwise every tag of the file would be written with an invented prefix ("ns0:version") instead of the form the file uses.
+        ET.register_namespace("", namespace)
+        tree: ET.ElementTree = ET.parse(codeunit_file)
+        version_elements = tree.getroot().findall(f"{{{namespace}}}version")
+        GeneralUtilities.assert_condition(len(version_elements) == 1, f'The codeunit-file "{codeunit_file}" must contain exactly one version-element as direct child of its codeunit-element but contains {len(version_elements)}.')
+        version_element = version_elements[0]
+        if version_element.text == current_version:
+            #the file is not written when the version did not change, so a build does not touch the file (and its modification-date) without a reason.
+            return
+        version_element.text = current_version
+        file_ended_with_newline: bool = GeneralUtilities.read_binary_from_file(codeunit_file).endswith(b"\n")
+        tree.write(codeunit_file, xml_declaration=True, encoding="utf-8")
+        if file_ended_with_newline:
+            #the serializer does not terminate the last line, so without this the trailing newline of the file would get lost on every write.
+            with open(codeunit_file, "ab") as file_object:
+                file_object.write(b"\n")
 
     @GeneralUtilities.check_arguments
     def set_default_constants(self, codeunit_folder: str) -> None:
