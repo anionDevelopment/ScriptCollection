@@ -315,7 +315,14 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         # forcing fresh worker-nodes (which inherit that working-directory) any such relative "tmp/<guid>"-folder is created
         # below temp_output_folder and removed together with it in the finally-block.
         try:
-            run_result = self._protected_sc.run_program("dotnet", f"build \"{sln_file}\" -nologo -v minimal -o \"{temp_output_folder}\"", temp_output_folder, throw_exception_if_exitcode_is_not_zero=False, env_vars={"DOTNET_CLI_UI_LANGUAGE": "en-US", "MSBUILDDISABLENODEREUSE": "1"})
+            # The arguments are passed as an array and without quoting them by hand: run_program splits its
+            # argument-string with GeneralUtilities.arguments_to_array, which splits at spaces without interpreting
+            # quotes, so hand-written quotes end up as part of the argument-value. The value of "-o" would therefore
+            # become '"<temp_output_folder>"' (with the quotes), which MSBuild treats as a relative path (it does not
+            # begin with a drive-letter anymore) and resolves against the working-directory, so it writes to a path
+            # which contains a quote in the middle. On Linux that only creates a strangely named folder, on Windows a
+            # quote is not allowed in a path and the msbuild-task GenerateDepsFile fails with an IOException.
+            run_result = self._protected_sc.run_program_argsasarray("dotnet", ["build", sln_file, "-nologo", "-v", "minimal", "-o", temp_output_folder], temp_output_folder, throw_exception_if_exitcode_is_not_zero=False, env_vars={"DOTNET_CLI_UI_LANGUAGE": "en-US", "MSBUILDDISABLENODEREUSE": "1"})
         finally:
             GeneralUtilities.ensure_directory_does_not_exist(temp_output_folder)
         diagnostics: list[tuple[LogLevel, str, str | None, int | None]] = []
