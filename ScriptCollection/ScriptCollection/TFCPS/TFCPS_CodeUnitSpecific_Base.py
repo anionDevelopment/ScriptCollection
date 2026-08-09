@@ -30,6 +30,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
     _protected_sc:ScriptCollectionCore = None
     __is_pre_merge:bool=False
     __validate_developers_of_repository:bool=True#TODO must be setable to false
+    codeunit_namespace:str="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure"
 
     def __init__(self,current_file:str,verbosity:LogLevel,target_envionment_type:str,use_cache:bool,is_pre_merge:bool):
         self.__verbosity=verbosity
@@ -108,6 +109,13 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
     def get_version_of_project(self)->str:
         return self.tfcps_Tools_General.get_version_of_project(self.get_repository_folder())
 
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def get_expected_schemalocation(codeunitspecificationversion:str)->str:
+        """Returns the value which the xsi:schemaLocation-attribute of a codeunit-file must have when the codeunit-file uses the given codeunit-specification-version."""
+        xsd_address = f"https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v{codeunitspecificationversion}/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd"
+        return f"{TFCPS_CodeUnitSpecific_Base.codeunit_namespace} {xsd_address}"
+
     @GeneralUtilities.check_arguments
     def do_common_tasks_base(self,current_codeunit_version:str):
         repository_folder: str =self.get_repository_folder()
@@ -128,12 +136,12 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         GeneralUtilities.assert_condition(len(codeunit_files_in_folder) == 1, f'The codeunit-folder "{codeunit_folder}" must contain exactly one codeunit-file (matching "*{codeunit_filename_suffix}") but contains {len(codeunit_files_in_folder)}.')
         codeunit_name_in_codeunit_filename = codeunit_files_in_folder[0][:-len(codeunit_filename_suffix)]
         GeneralUtilities.assert_condition(codeunit_name_in_codeunit_filename == codeunit_name, f'The codeunit-file "{codeunit_files_in_folder[0]}" must be named "{codeunit_name}{codeunit_filename_suffix}" to match its folder-name ("{codeunit_name}").')
-        supported_codeunitspecificationversion = "2.9.4"  # should always be the latest version of the ProjectTemplates-repository
+        supported_codeunitspecificationversion = "3.0.0"  # should always be the latest version of the ProjectTemplates-repository
         codeunit_file = os.path.join(codeunit_folder, f"{codeunit_name}{codeunit_filename_suffix}")
         if not os.path.isfile(codeunit_file):
             raise ValueError(f'Codeunitfile "{codeunit_file}" does not exist.')
         # TODO implement usage of self.reference_latest_version_of_xsd_when_generating_xml
-        namespaces = {'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure',  'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
+        namespaces = {'cps': TFCPS_CodeUnitSpecific_Base.codeunit_namespace,  'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
         root: etree._ElementTree = etree.parse(codeunit_file)
 
         # check codeunit-spcecification-version
@@ -142,6 +150,11 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
             if codeunit_file_version != supported_codeunitspecificationversion:
                 raise ValueError(f"ScriptCollection only supports processing codeunits with codeunit-specification-version={supported_codeunitspecificationversion}.")
             schemaLocation = root.xpath('//cps:codeunit/@xsi:schemaLocation', namespaces=namespaces)[0]
+            expected_schemalocation = TFCPS_CodeUnitSpecific_Base.get_expected_schemalocation(supported_codeunitspecificationversion)
+            # The schema-location can be wrapped over multiple lines in the codeunit-file, so the whitespaces must be normalized before comparing.
+            actual_schemalocation = " ".join(str(schemaLocation).split())
+            if actual_schemalocation != expected_schemalocation:
+                raise ValueError(f'The schema-location must be "{expected_schemalocation}" to match the codeunit-specification-version {supported_codeunitspecificationversion} but was "{actual_schemalocation}".')
             xmlschema.validate(codeunit_file, schemaLocation)
             # TODO check if the properties codeunithastestablesourcecode, codeunithasupdatabledependencies, throwexceptionifcodeunitfilecannotbevalidated, developmentState and description exist and the values are valid
         except Exception as exception:

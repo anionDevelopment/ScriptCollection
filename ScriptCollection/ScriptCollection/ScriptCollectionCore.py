@@ -39,7 +39,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.0"
+version = "4.4.1"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -4335,7 +4335,7 @@ OCR-content:
         GeneralUtilities.assert_condition(self.is_running_in_build_container(), "This function should only be run in the build container.")
         
         expected_image = self.__get_scbuilder_image_from_image_definition_file(repository_folder)
-        minimal_required_scbuilder_version = Version("1.2.5")#the preparation-steps below require at least this SCBuilder-version
+        minimal_required_scbuilder_version = Version("1.2.8")#the preparation-steps below require at least this SCBuilder-version
         defined_scbuilder_version = self.__get_version_of_scbuilder_image(expected_image)#TODO remove this check after 2026-12-31
         GeneralUtilities.assert_condition(defined_scbuilder_version >= minimal_required_scbuilder_version, f"The SCBuilder-version {defined_scbuilder_version} defined in the image-definition-file of the repository is older than the minimal required version {minimal_required_scbuilder_version}. Please update the SCBuilder-image.")
 
