@@ -487,7 +487,7 @@ items:
         # arrange
         with tempfile.TemporaryDirectory() as repository:
             build_codeunits = create_build_codeunits_for_folder(repository)
-            with patch.object(build_codeunits.sc, "run_program_argsasarray") as run_program:
+            with patch.object(build_codeunits.sc, "run_with_epew") as run_program:
 
                 # act
                 update_openspec(build_codeunits)
@@ -501,15 +501,16 @@ items:
         with tempfile.TemporaryDirectory() as repository:
             write_openspec_configuration_file(repository)
             build_codeunits = create_build_codeunits_for_folder(repository)
-            with patch.object(build_codeunits.sc, "run_program_argsasarray") as run_program:
+            with patch.object(build_codeunits.sc, "run_with_epew") as run_program:
 
                 # act
                 update_openspec(build_codeunits)
 
                 # assert
                 #"--force" is required because openspec skips the update when it considers the generated files up-to-date, and the update
-                #must run in the repository because that is the folder whose openspec-files are meant.
-                run_program.assert_called_once_with("openspec", ["update", "--force"], repository)
+                #must run in the repository because that is the folder whose openspec-files are meant. The openspec-cli is started using epew
+                #because on windows it is a ".cmd"-file, which the direct process-start can not resolve.
+                run_program.assert_called_once_with("openspec", "update --force", repository)
 
     def test_get_expected_schemalocation_references_the_xsd_of_the_given_version(self) -> None:
         # act
@@ -521,6 +522,17 @@ items:
         expected_result = "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure "\
             "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v3.0.0/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd"
         self.assertEqual(expected_result, actual_result)
+
+    def test_get_expected_xsd_address_is_the_second_part_of_the_expected_schemalocation(self) -> None:
+        # act
+        actual_result = TFCPS_CodeUnitSpecific_Base.get_expected_xsd_address("3.0.0")
+
+        # assert
+        #the xsd-address must be usable as schema-source on its own, means it must not contain the namespace which the schema-location
+        #additionally contains, because a validator which gets the whole schema-location would try to parse the namespace-uri as xsd-file.
+        expected_result = "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v3.0.0/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd"
+        self.assertEqual(expected_result, actual_result)
+        self.assertEqual(f"{TFCPS_CodeUnitSpecific_Base.codeunit_namespace} {actual_result}", TFCPS_CodeUnitSpecific_Base.get_expected_schemalocation("3.0.0"))
 
     def test_get_expected_schemalocation_of_another_version_references_another_xsd(self) -> None:
         # act

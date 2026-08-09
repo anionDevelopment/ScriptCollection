@@ -307,7 +307,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         openspec_configuration_file: str = os.path.join(self.repository, "openspec", "config.yaml")
         if os.path.isfile(openspec_configuration_file):
             self.sc.log.log("Update openspec-instruction-files...")
-            self.sc.run_program_argsasarray("openspec", ["update", "--force"], self.repository)
+            self.sc.run_with_epew("openspec", "update --force", self.repository)
 
     @GeneralUtilities.check_arguments
     def build_codeunits_in_container(self,base_mount_folder:str) -> tuple[bool, str]:
