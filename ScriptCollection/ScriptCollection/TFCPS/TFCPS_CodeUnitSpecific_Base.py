@@ -111,10 +111,15 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
 
     @staticmethod
     @GeneralUtilities.check_arguments
+    def get_expected_xsd_address(codeunitspecificationversion:str)->str:
+        """Returns the address of the xsd-file against which a codeunit-file which uses the given codeunit-specification-version must be validated."""
+        return f"https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v{codeunitspecificationversion}/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd"
+
+    @staticmethod
+    @GeneralUtilities.check_arguments
     def get_expected_schemalocation(codeunitspecificationversion:str)->str:
         """Returns the value which the xsi:schemaLocation-attribute of a codeunit-file must have when the codeunit-file uses the given codeunit-specification-version."""
-        xsd_address = f"https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v{codeunitspecificationversion}/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd"
-        return f"{TFCPS_CodeUnitSpecific_Base.codeunit_namespace} {xsd_address}"
+        return f"{TFCPS_CodeUnitSpecific_Base.codeunit_namespace} {TFCPS_CodeUnitSpecific_Base.get_expected_xsd_address(codeunitspecificationversion)}"
 
     @GeneralUtilities.check_arguments
     def do_common_tasks_base(self,current_codeunit_version:str):
@@ -155,7 +160,9 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
             actual_schemalocation = " ".join(str(schemaLocation).split())
             if actual_schemalocation != expected_schemalocation:
                 raise ValueError(f'The schema-location must be "{expected_schemalocation}" to match the codeunit-specification-version {supported_codeunitspecificationversion} but was "{actual_schemalocation}".')
-            xmlschema.validate(codeunit_file, schemaLocation)
+            # The schema-location consists of the namespace and the address of the xsd-file, but xmlschema expects only the address of the xsd-file
+            # as schema-source. Passing the whole schema-location made xmlschema download the namespace-uri (which is a html-page) and fail to parse it.
+            xmlschema.validate(codeunit_file, TFCPS_CodeUnitSpecific_Base.get_expected_xsd_address(supported_codeunitspecificationversion))
             # TODO check if the properties codeunithastestablesourcecode, codeunithasupdatabledependencies, throwexceptionifcodeunitfilecannotbevalidated, developmentState and description exist and the values are valid
         except Exception as exception:
             self._protected_sc.log.log_exception(f'Codeunitfile "{codeunit_file}" can not be validated due to the following exception:', exception,LogLevel.Warning)
