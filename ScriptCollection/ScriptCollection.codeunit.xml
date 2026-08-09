@@ -1,10 +1,16 @@
 <?xml version='1.0' encoding='utf-8'?>
-<codeunit xmlns="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" codeunitspecificationversion="2.9.4" xsi:schemaLocation="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v2.9.4/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd" enabled="true">
+<codeunit
+  xmlns="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" codeunitspecificationversion="3.0.0"
+  xsi:schemaLocation="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v3.0.0/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd"
+  enabled="true">
   <name>ScriptCollection</name>
   <version>4.3.62</version>
   <codeunitownername>Marius Göcke</codeunitownername>
   <codeunitowneremailaddress>marius.goecke@gmail.com</codeunitowneremailaddress>
-  <properties codeunithastestablesourcecode="true" codeunithasupdatabledependencies="true" throwexceptionifcodeunitfilecannotbevalidated="true" developmentstate="Active development" description="ScriptCollection is the place for reusable scripts.">
+  <properties codeunithastestablesourcecode="true" codeunithasupdatabledependencies="true"
+    throwexceptionifcodeunitfilecannotbevalidated="true" developmentstate="Active development"
+    description="ScriptCollection is the place for reusable scripts.">
     <testsettings minimalcodecoverageinpercent="20" />
     <pipelinedemands />
     <updatesettings>

@@ -511,6 +511,25 @@ items:
                 #must run in the repository because that is the folder whose openspec-files are meant.
                 run_program.assert_called_once_with("openspec", ["update", "--force"], repository)
 
+    def test_get_expected_schemalocation_references_the_xsd_of_the_given_version(self) -> None:
+        # act
+        actual_result = TFCPS_CodeUnitSpecific_Base.get_expected_schemalocation("3.0.0")
+
+        # assert
+        #the schema-location consists of the namespace of the codeunit-file and the address of the xsd-file of exactly the
+        #codeunit-specification-version which the codeunit-file declares.
+        expected_result = "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure "\
+            "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v3.0.0/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd"
+        self.assertEqual(expected_result, actual_result)
+
+    def test_get_expected_schemalocation_of_another_version_references_another_xsd(self) -> None:
+        # act
+        actual_result = TFCPS_CodeUnitSpecific_Base.get_expected_schemalocation("4.1.2")
+
+        # assert
+        self.assertIn("/-/raw/v4.1.2/", actual_result)
+        self.assertNotIn("/-/raw/v3.0.0/", actual_result)
+
     def test_generate_toc_md_file_content_with_toc_without_items_property(self) -> None:
         # arrange
         function_input = """- uid: Example.Core
