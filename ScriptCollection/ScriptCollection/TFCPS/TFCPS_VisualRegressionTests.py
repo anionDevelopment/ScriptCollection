@@ -30,6 +30,14 @@ class TFCPS_VisualRegressionTests:
     # The folder the codeunit is mounted to if the tests are started directly on the host.
     __codeunit_folder_in_container: str = "/codeunit"
 
+    # The folder playwright writes the screenshots of failed testcases to. Playwright empties this folder at the
+    # beginning of every run.
+    __test_results_folder_relative_path: str = "Other/Artifacts/VisualRegressionTestResults"
+
+    # The folder the screenshots of failed testcases are preserved in. Both folders are located in
+    # "Other/Artifacts", which is ignored by git.
+    __failed_testcases_folder_relative_path: str = "Other/Artifacts/VisualRegressionTestFailures"
+
     __tfcps_codeunit: TFCPS_CodeUnitSpecific_Base = None
     __sc: ScriptCollectionCore = None
 
@@ -50,7 +58,9 @@ class TFCPS_VisualRegressionTests:
         image_address, image_tag = ScriptCollectionCore.split_image_address_and_tag(image)
         self.__sc.docker_pull(image_address, image_tag)
         working_folder: str = self.__get_codeunit_folder_in_container(codeunit_folder)
-        command: str = "npx playwright test"
+        # The output-folder is set here and not only in the playwright-configuration of the codeunit, because the
+        # screenshots of failed testcases have to be picked up from that folder afterwards.
+        command: str = f"npx playwright test --output={self.__test_results_folder_relative_path}"
         if update_baselines:
             command = f"{command} --update-snapshots"
         # The dependencies are installed inside the container because the "node_modules"-folder of the codeunit can
@@ -65,7 +75,41 @@ class TFCPS_VisualRegressionTests:
         arguments = arguments+["-w", working_folder, image, "/bin/sh", "-c", command]
         result = self.__sc.run_program_argsasarray("docker", arguments, throw_exception_if_exitcode_is_not_zero=False, print_live_output=True, print_errors_as_information=True)
         if result[0] != 0:
-            raise ValueError(f"The visual-regression-tests of the codeunit \"{self.__tfcps_codeunit.get_codeunit_name()}\" failed (exit-code {result[0]}). The differences which were found are documented in \"Other/Artifacts/VisualRegressionTestReport\".")
+            message: str = f"The visual-regression-tests of the codeunit \"{self.__tfcps_codeunit.get_codeunit_name()}\" failed (exit-code {result[0]})."
+            folder_with_screenshots: str = self.__preserve_screenshots_of_failed_testcases(codeunit_folder)
+            if folder_with_screenshots is None:
+                message = f"{message} No screenshots of failed testcases were generated, so probably no testcase was executed at all."
+            else:
+                message = f"{message} The expected, the actual and the differing screenshot of every failed testcase were stored in \"{folder_with_screenshots}\"."
+            message = f"{message} The differences which were found are additionally documented in \"Other/Artifacts/VisualRegressionTestReport\"."
+            raise ValueError(message)
+
+    @GeneralUtilities.check_arguments
+    def __preserve_screenshots_of_failed_testcases(self, codeunit_folder: str) -> str:
+        """Copies the screenshots of the failed testcases into an own folder and returns that folder,
+        or returns None if there are no such screenshots.
+        This is required because playwright empties its output-folder at the beginning of every run, so the
+        screenshots of a testcase which fails only sporadically would be lost with the next run."""
+        source_folder: str = self.__get_folder_in_codeunit(codeunit_folder, self.__test_results_folder_relative_path)
+        if not os.path.isdir(source_folder):
+            return None
+        # Playwright creates one subfolder per failed testcase. The files which are directly in the output-folder
+        # (for example ".last-run.json") do not belong to a specific testcase and are therefore not preserved.
+        folders_of_failed_testcases: list[str] = GeneralUtilities.get_direct_folders_of_folder(source_folder)
+        if len(folders_of_failed_testcases) == 0:
+            return None
+        timestamp: str = GeneralUtilities.datetime_to_string_for_logfile_name(GeneralUtilities.get_now(), False)
+        target_folder: str = os.path.join(self.__get_folder_in_codeunit(codeunit_folder, self.__failed_testcases_folder_relative_path), timestamp)
+        GeneralUtilities.ensure_directory_exists(target_folder)
+        for folder_of_failed_testcase in folders_of_failed_testcases:
+            GeneralUtilities.copy_content_of_folder(folder_of_failed_testcase, os.path.join(target_folder, os.path.basename(folder_of_failed_testcase)))
+        return target_folder
+
+    @GeneralUtilities.check_arguments
+    def __get_folder_in_codeunit(self, codeunit_folder: str, relative_path: str) -> str:
+        # The relative paths are defined with a slash because they are also passed to the container, so they have to
+        # be converted to a path of the operating-system this process runs on.
+        return os.path.join(codeunit_folder, *relative_path.split("/"))
 
     @GeneralUtilities.check_arguments
     def __get_mount_arguments(self, codeunit_folder: str, working_folder: str) -> list[str]:
