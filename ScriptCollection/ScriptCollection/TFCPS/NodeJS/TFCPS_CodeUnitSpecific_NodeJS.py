@@ -18,6 +18,12 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def build(self) -> None:
+        # The sourcecode-artifact of a previous run is removed before the build, because it is a copy of the
+        # codeunit inside the codeunit and the build-tools do not know that it is only an artifact. An
+        # angular-library for example is built by ng-packagr, which searches the whole project-folder for
+        # "ng-package.json"-files to find the entry-points of the package, finds the copied one and aborts. The
+        # copy is written again at the end of this method, so nothing is lost.
+        GeneralUtilities.ensure_directory_does_not_exist(os.path.join(self.get_codeunit_folder(), "Other", "Artifacts", "SourceCode"))
         self._protected_sc.run_with_epew("npm", "run build", self.get_codeunit_folder(),print_live_output=self.get_verbosity()==LogLevel.Debug,encode_argument_in_base64=True)
         self.standardized_tasks_build_bom_for_node_project()
         self.copy_source_files_to_output_directory()
@@ -25,13 +31,13 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
     @GeneralUtilities.check_arguments
     def linting(self) -> None:
         codeunit_folder = self.get_codeunit_folder()
-        self._protected_sc.normalize_line_endings_of_files_in_folder(codeunit_folder, ["ts", "js", "css", "scss", "sass"])
+        self._protected_sc.normalize_invisible_characters_of_files_in_folder(codeunit_folder, ["ts", "js", "css", "scss", "sass"])
         # The OpenAPI-generator writes its '.openapi-generator/FILES' metadata-file with the host's native
         # line-endings (CRLF on Windows, LF on Linux). Normalize it to LF like the other generated text-files
         # so the committed file does not drift between build-hosts.
         for openapi_generator_files_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder):
             if os.path.basename(openapi_generator_files_file) == "FILES" and os.path.basename(os.path.dirname(openapi_generator_files_file)) == ".openapi-generator":
-                self._protected_sc.normalize_line_endings(openapi_generator_files_file)
+                self._protected_sc.normalize_invisible_characters(openapi_generator_files_file)
         for html_file in self._protected_sc.get_not_git_ignored_files_of_folder(codeunit_folder, ".html"):
             self._protected_sc.format_html_file(html_file, os.path.basename(html_file) == "index.html")
         self._protected_sc.run_with_epew("npm", "run lint", codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug,encode_argument_in_base64=True)

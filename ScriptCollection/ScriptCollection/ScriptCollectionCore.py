@@ -201,6 +201,8 @@ class ScriptCollectionCore:
     log: SCLog = None
     # Magic string which can be used inside the arguments of run_command_in_folder. Every occurrence of it will be replaced by the (resolved) actual_folder.
     run_command_in_folder_actual_folder_placeholder: str = "{actual_folder}"
+    # The bytes with which a file starts when it was written with a utf8-byte-order-mark. See normalize_invisible_characters.
+    __utf8_byte_order_mark: bytes = b"\xef\xbb\xbf"
     # Base-url of the GitHub-REST-API. This is an internal constant on purpose and deliberately not exposed as a parameter of the GitHub-functions.
     __github_api_base_url: str = "https://api.github.com"
 
@@ -1633,6 +1635,101 @@ class ScriptCollectionCore:
         finally:
             for thumbnail_to_delete in preview_files:
                 os.remove(thumbnail_to_delete)
+
+    @GeneralUtilities.check_arguments
+    def start_rtsp_test_stream(self, target_address: str, additional_text: str = None, width: int = 640, height: int = 480, frames_per_second: int = 10, font_file: str = None, working_directory: str = None) -> int:
+        """Starts a video-stream which shows a number that is counted up once per second and publishes it to the
+given rtsp-address. Returns the process-id of the running ffmpeg, which can be passed to
+GeneralUtilities.kill_process to stop the stream again.
+
+The purpose of this stream is to be a reproducible replacement for a real camera in testcases: the picture
+depends only on how long the stream is running, so a screenshot which is taken after 1.5 seconds always shows
+the same number as a screenshot which is taken after 1.5 seconds in another run.
+
+The address has to point to a running rtsp-server (mediamtx, for example) which accepts the publishing of a
+stream; ffmpeg does not open a port by itself.
+
+:param target_address: The rtsp-address to publish to, for example "rtsp://localhost:8554/teststream".
+:param additional_text: An optional text which is shown below the number. Useful to tell two streams apart.
+                        Only letters, digits and spaces are allowed: everything else would have to be escaped
+                        for the filter-syntax of ffmpeg, and a stream which only exists for testcases does not
+                        need a text which requires that.
+:param font_file: The font which is used. When it is not given then a font of the operating-system is used.
+"""
+        GeneralUtilities.assert_condition(target_address.startswith("rtsp://"), f"'{target_address}' is not a rtsp-address.")
+        argument: list[str] = self.__get_arguments_for_test_stream(additional_text, width, height, frames_per_second, font_file) + [
+            "-f", "rtsp",
+            # Tcp instead of udp, because udp loses pictures under load, which would make a screenshot show
+            # something else than the number which belongs to the moment it was taken.
+            "-rtsp_transport", "tcp",
+            target_address]
+        return self.run_program_argsasarray_async("ffmpeg", argument, working_directory, title=f"RTSP-test-stream ({target_address})")
+
+    @GeneralUtilities.check_arguments
+    def create_test_stream_video(self, target_file: str, duration_in_seconds: int, additional_text: str = None, width: int = 640, height: int = 480, frames_per_second: int = 10, font_file: str = None, working_directory: str = None) -> None:
+        """Writes a video-file which shows the same picture as start_rtsp_test_stream, but into a file instead of
+to a rtsp-address and as fast as possible instead of in realtime.
+
+This exists to be able to create the expected pictures of a testcase without recording a stream: the pictures
+are the same, so a picture of this file can be used as the baseline for a picture of a recorded stream.
+
+:param target_file: The video-file which is written.
+:param duration_in_seconds: How long the video is. The number is counted up once per second, so a video of ten
+                            seconds contains the numbers 0 to 9.
+"""
+        argument: list[str] = self.__get_arguments_for_test_stream(additional_text, width, height, frames_per_second, font_file, realtime=False) + [
+            "-t", str(duration_in_seconds),
+            "-y", target_file]
+        self.run_program_argsasarray("ffmpeg", argument, working_directory, throw_exception_if_exitcode_is_not_zero=True)
+
+    @GeneralUtilities.check_arguments
+    def __get_arguments_for_test_stream(self, additional_text: str, width: int, height: int, frames_per_second: int, font_file: str, realtime: bool = True) -> list[str]:
+        """Returns the ffmpeg-arguments which produce the picture of a test-stream. The picture is defined here
+only once, so that the video which is used as the expected result really shows the same as the stream."""
+        if additional_text is not None:
+            GeneralUtilities.assert_condition(re.fullmatch("[a-zA-Z0-9 ]+", additional_text) is not None, f"The additional text must consist of letters, digits and spaces only, but it is '{additional_text}'.")
+        if font_file is None:
+            font_file = self.__get_font_file_for_drawing_text()
+        # "%{eif:t:d}" is the amount of seconds the stream is running, rounded down to an integer, so the number
+        # changes exactly once per second. The colons of it have to be escaped, because the filter-syntax of
+        # ffmpeg uses the colon as the separator between two options.
+        escaped_font_file = font_file.replace("\\", "/").replace(":", "\\:")
+        text_filters: list[str] = [f"drawtext=fontfile='{escaped_font_file}':text='%{{eif\\:t\\:d}}':fontsize={int(height/4)}:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2"]
+        if additional_text is not None:
+            text_filters.append(f"drawtext=fontfile='{escaped_font_file}':text='{additional_text}':fontsize={int(height/12)}:fontcolor=white:x=(w-text_w)/2:y=h*3/4")
+        result: list[str] = []
+        if realtime:
+            # "-re" makes ffmpeg send the pictures in realtime instead of as fast as it can, which is what a
+            # camera does and what makes the number correspond to the elapsed time.
+            result.append("-re")
+        result = result + [
+            "-f", "lavfi",
+            "-i", f"color=c=black:s={width}x{height}:r={frames_per_second}",
+            "-vf", ",".join(text_filters),
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-tune", "zerolatency",
+            # Without this the stream is not playable by every client, because they expect a chroma-subsampling
+            # which the default of libx264 does not use for this input.
+            "-pix_fmt", "yuv420p",
+            # One keyframe per second, so a client which connects in between shows a picture immediately.
+            "-g", str(frames_per_second)]
+        return result
+
+    @GeneralUtilities.check_arguments
+    def __get_font_file_for_drawing_text(self) -> str:
+        """Returns a font-file of the operating-system. A font-file is used instead of a font-name because
+resolving a name requires fontconfig, which does not exist on every system ffmpeg runs on."""
+        candidates: list[str] = [
+            "C:/Windows/Fonts/arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans.ttf",
+            "/System/Library/Fonts/Supplemental/Arial.ttf"]
+        for candidate in candidates:
+            if os.path.isfile(candidate):
+                return candidate
+        raise ValueError(f"No font-file was found. Pass one explicitly. Checked: {', '.join(candidates)}")
 
     @GeneralUtilities.check_arguments
     def extract_pdf_pages(self, file: str, from_page: int, to_page: int, outputfile: str) -> None:
@@ -3145,7 +3242,7 @@ TXDX
         content = json.loads(GeneralUtilities.read_text_from_file(file, encoding))
         formatted_content = json.dumps(content, indent=indentation, sort_keys=False, ensure_ascii=False)
         GeneralUtilities.write_text_to_file(file, formatted_content.rstrip("\n") + "\n", encoding)
-        self.normalize_line_endings(file)
+        self.normalize_invisible_characters(file)
 
     @GeneralUtilities.check_arguments
     def format_xml_file(self, file: str,add_xml_declaration:bool=True) -> None:
@@ -3162,7 +3259,7 @@ TXDX
         ET.indent(element)
         content = self.__serialize_xml_element(element, add_xml_declaration)
         GeneralUtilities.write_text_to_file(file, content.rstrip("\n") + "\n", encoding)
-        self.normalize_line_endings(file)
+        self.normalize_invisible_characters(file)
 
     @GeneralUtilities.check_arguments
     def __serialize_xml_element(self, element: ET.Element, add_xml_declaration: bool) -> str:
@@ -3193,25 +3290,33 @@ TXDX
         content = GeneralUtilities.read_text_from_file(file, encoding)
         content=self.format_html_content(content, add_html_declaration)
         GeneralUtilities.write_text_to_file(file, content, encoding)
-        self.normalize_line_endings(file)
+        self.normalize_invisible_characters(file)
 
     @GeneralUtilities.check_arguments
-    def normalize_line_endings(self, file: str) -> None:
-        # Normalizes all physical line-endings of the given file to LF (replaces CRLF and lone CR by LF).
-        # Operates on the raw bytes so no character-encoding is assumed and only the line-ending-bytes are
-        # touched; the file is only rewritten when its content actually changes.
+    def normalize_invisible_characters(self, file: str) -> None:
+        # Normalizes all physical line-endings of the given file to LF (replaces CRLF and lone CR by LF) and removes
+        # a utf8-byte-order-mark at the begin of the file.
+        # Operates on the raw bytes so no character-encoding is assumed and only the line-ending-bytes and the
+        # byte-order-mark are touched; the file is only rewritten when its content actually changes.
         content = GeneralUtilities.read_binary_from_file(file)
-        normalized_content = content.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        normalized_content = content
+        # Utf8 has no byte-order which could be marked, so the mark carries no information. But it is part of the
+        # content of the file for everything which does not know it, which is why it breaks tools which expect the
+        # file to start with its actual content (a shebang-line, an xml-declaration or the name of a column of a
+        # csv-file, for example).
+        if normalized_content.startswith(ScriptCollectionCore.__utf8_byte_order_mark):
+            normalized_content = normalized_content[len(ScriptCollectionCore.__utf8_byte_order_mark):]
+        normalized_content = normalized_content.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
         if normalized_content != content:
             GeneralUtilities.write_binary_to_file(file, normalized_content)
 
     @GeneralUtilities.check_arguments
-    def normalize_line_endings_of_files_in_folder(self, folder: str, file_extensions: list[str]) -> None:
+    def normalize_invisible_characters_of_files_in_folder(self, folder: str, file_extensions: list[str]) -> None:
         """Normalizes the line-endings of all not-git-ignored files inside 'folder' which have one of the given
         file-extensions. The file-extensions must be given without a leading dot (example: ["ts", "js"])."""
         for file_extension in file_extensions:
             for file in self.get_not_git_ignored_files_of_folder(folder, f".{file_extension}"):
-                self.normalize_line_endings(file)
+                self.normalize_invisible_characters(file)
 
     @GeneralUtilities.check_arguments
     def remove_trailing_linebreak(self, file: str) -> None:
