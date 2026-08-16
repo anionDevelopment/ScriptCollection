@@ -43,6 +43,18 @@
           "bud"
         ],
         "allowcustomarguments": true
+      },
+      {
+        "label": "deploy locally",
+        "command": "pip3 uninstall scriptcollection -y && pip3 install ScriptCollection/Other/Artifacts/BuildResult_Wheel/*.whl",
+        "type": "shell",
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "aliases": [
+          "dl"
+        ],
+        "allowcustomarguments": false
       }
     ]
   },

@@ -575,7 +575,7 @@ def NormalizeLineEndings() -> int:
     if not os.path.isfile(args.path):
         GeneralUtilities.write_message_to_stderr(f"File '{args.path}' does not exist.")
         return 1
-    ScriptCollectionCore().normalize_line_endings(args.path)
+    ScriptCollectionCore().normalize_invisible_characters(args.path)
     return 0
 
 

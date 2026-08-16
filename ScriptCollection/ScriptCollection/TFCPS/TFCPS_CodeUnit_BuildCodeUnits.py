@@ -250,7 +250,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.sc.format_json_file(workspace_file)
 
         #TODO add option to define exceptions (means: files which should not be normalized).
-        self.sc.normalize_line_endings_of_files_in_folder(self.repository, ["txt", "md", "py", "json", "xml", "svg", "csv", "yml", "yaml", "toml","gitignore", "gitattributes", "code-workspace"])
+        self.sc.normalize_invisible_characters_of_files_in_folder(self.repository, ["txt", "md", "py", "json", "xml", "svg", "csv", "yml", "yaml", "toml","gitignore", "gitattributes", "code-workspace"])
 
     @GeneralUtilities.check_arguments
     def is_working_branch(self)->bool:
@@ -461,7 +461,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
                 loc=splitted[2]
                 csv_lines.append(f"{v},{t},{loc}")
         GeneralUtilities.write_lines_to_file(loc_data_file,csv_lines)
-        self.sc.normalize_line_endings(loc_data_file)  # ensure the generated LoC-diagram-csv always uses LF line-endings
+        self.sc.normalize_invisible_characters(loc_data_file)  # ensure the generated LoC-diagram-csv always uses LF line-endings
         diagram_json = {
     "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
     "description": "Lines of Code over time",

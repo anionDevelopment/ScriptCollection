@@ -347,7 +347,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
     def linting(self) -> None:
         codeunit_name = self.get_codeunit_name()
         codeunit_folder = self.get_codeunit_folder()
-        self._protected_sc.normalize_line_endings_of_files_in_folder(codeunit_folder, ["cs"])
+        self._protected_sc.normalize_invisible_characters_of_files_in_folder(codeunit_folder, ["cs"])
         nuspec_file = os.path.join(codeunit_folder, "Other", "Build", f"{codeunit_name}.nuspec")
         if os.path.isfile(nuspec_file):
             self._protected_sc.format_xml_file(nuspec_file)

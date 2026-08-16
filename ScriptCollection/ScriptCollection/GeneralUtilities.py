@@ -72,12 +72,24 @@ class GeneralUtilities:
     @staticmethod
     def check_arguments(function):
         def __check_function(*args, **named_args):
-            parameters: list = inspect.getfullargspec(function)[0].copy()
+            # "signature" is used instead of "getfullargspec", because it follows the "__wrapped__"-chain which
+            # "functools.wraps" sets. Without that this decorator would only see the wrapper when it is applied
+            # above another decorator (for example above "deprecated"), and a wrapper has no named parameters,
+            # so no argument could be checked at all.
+            try:
+                parameters: list = list(inspect.signature(function).parameters)
+            except (ValueError, TypeError):
+                parameters: list = inspect.getfullargspec(function)[0].copy()
             arguments: list = list(tuple(args)).copy()
             if "self" in parameters:
                 parameters.remove("self")
                 arguments.pop(0)
             for index, argument in enumerate(arguments):
+                if len(parameters) <= index:
+                    # More arguments were passed than the function has parameters. That is a wrong call, but it
+                    # is not this check which has to report it: the call of the function below raises the
+                    # regular TypeError of python, whose message names the expected and the given amount.
+                    break
                 if argument is not None:  # Check type of None is not possible. None is always a valid argument-value
                     if parameters[index] in function.__annotations__:  # Check if a type-hint for parameter exist. If not, no parameter-type available for argument-type-check
                         # Check type of arguments if the type is a generic type seems to be impossible.

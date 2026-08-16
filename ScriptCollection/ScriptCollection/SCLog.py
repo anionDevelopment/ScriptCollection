@@ -17,7 +17,7 @@ class LogLevel(Enum):
 
 
 class SCLog:
-    loglevel: LogLevel = None  #minimum loglevel
+    loglevel: LogLevel = None #minimum loglevel
     log_file: str = None
     add_overhead_to_console: bool = None
     add_overhead_to_logfile: bool = None

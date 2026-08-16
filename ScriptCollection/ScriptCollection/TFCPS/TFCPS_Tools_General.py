@@ -1078,6 +1078,20 @@ class TFCPS_Tools_General:
                 return title+".svg"
         return Path(plantuml_file).stem+".svg"
 
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def __get_plantuml_alias_for_codeunit(codeunitname: str) -> str:
+        """Returns the identifier by which the codeunit is referenced inside the generated plantuml-diagram.
+
+        A codeunit-name is allowed to contain characters which plantuml does not accept in an identifier (for
+        example the hyphens of a name written in kebab-case, which is usual for an npm-package). Such a name is
+        therefore only used as the displayed label while the references use the returned alias. Names which are
+        valid identifiers are returned unchanged, so the generated diagram of a codeunit which does not need an
+        alias stays exactly as it was."""
+        if re.fullmatch("[A-Za-z0-9_]+", codeunitname) is not None:
+            return codeunitname
+        return "codeunit_"+re.sub("[^A-Za-z0-9_]", "_", codeunitname)
+
     @GeneralUtilities.check_arguments
     def generate_codeunits_overview_diagram(self, repository_folder: str) -> None:
         self.__sc.log.log("Generate Codeunits-overview-diagram...")
@@ -1098,19 +1112,23 @@ class TFCPS_Tools_General:
 
             description = self.get_codeunit_description(codeunit_file)
 
+            alias = TFCPS_Tools_General.__get_plantuml_alias_for_codeunit(codeunitname)
             lines.append(GeneralUtilities.empty_string)
-            lines.append(f"[{codeunitname}]")
-            lines.append(f"note as {codeunitname}Note")
+            if alias == codeunitname:
+                lines.append(f"[{codeunitname}]")
+            else:
+                lines.append(f"[{codeunitname}] as {alias}")
+            lines.append(f"note as {alias}Note")
             lines.append(f"  {description}")
             lines.append(f"end note")
-            lines.append(f"{codeunitname} .. {codeunitname}Note")
+            lines.append(f"{alias} .. {alias}Note")
 
         lines.append(GeneralUtilities.empty_string)
         for codeunitname in codeunits:
             codeunit_file: str = os.path.join(repository_folder, codeunitname, f"{codeunitname}.codeunit.xml")
             dependent_codeunits = self.get_dependent_code_units(codeunit_file)
             for dependent_codeunit in dependent_codeunits:
-                lines.append(f"{codeunitname} --> {dependent_codeunit}")
+                lines.append(f"{TFCPS_Tools_General.__get_plantuml_alias_for_codeunit(codeunitname)} --> {TFCPS_Tools_General.__get_plantuml_alias_for_codeunit(dependent_codeunit)}")
 
         lines.append(GeneralUtilities.empty_string)
         lines.append("@enduml")
@@ -1505,8 +1523,105 @@ class TFCPS_Tools_General:
 
 
     @GeneralUtilities.check_arguments
+    def convert_jacoco_report_to_cobertura_report(self, jacoco_file: str, cobertura_file: str, package_name: str, codeunit_folder: str, source_folders_relative_to_codeunit: list[str]) -> None:
+        """Converts a coverage-report in the jacoco-format into a coverage-report in the cobertura-format.
+        This is required because the tools of the jvm-ecosystem write jacoco-reports while the further processing of a
+        coverage-report (the check of the coverage-threshold, the html-report and the badges) expects the cobertura-format.
+        The resulting report contains exactly one package (named package_name) and the filename of each class is relative
+        to the codeunit-folder, which is what the further processing expects. source_folders_relative_to_codeunit contains
+        the source-folders in which the source-files of the report are searched (for example the main- and the test-source-folder);
+        the first folder which actually contains the file wins, and a file which does not exist in any of them is skipped."""
+        GeneralUtilities.assert_file_exists(jacoco_file)
+        jacoco_root = etree.parse(jacoco_file).getroot()
+        coverage_element = etree.Element("coverage")
+        sources_element = etree.SubElement(coverage_element, "sources")
+        etree.SubElement(sources_element, "source").text = codeunit_folder.replace("\\", "/")
+        packages_element = etree.SubElement(coverage_element, "packages")
+        package_element = etree.SubElement(packages_element, "package", name=package_name)
+        classes_element = etree.SubElement(package_element, "classes")
+        for jacoco_package in jacoco_root.findall("./package"):
+            package_path = jacoco_package.get("name")  # jacoco writes the package as path, for example "com/example"
+            for jacoco_sourcefile in jacoco_package.findall("./sourcefile"):
+                sourcefile_name = jacoco_sourcefile.get("name")
+                relative_file: str = None
+                for source_folder in source_folders_relative_to_codeunit:
+                    candidate = f"{source_folder}/{package_path}/{sourcefile_name}"
+                    if os.path.isfile(os.path.join(codeunit_folder, candidate)):
+                        relative_file = candidate
+                        break
+                if relative_file is None:
+                    # A sourcefile which does not exist in any of the given source-folders is generated code or belongs to
+                    # another codeunit. Keeping it would let the further processing fail when it verifies that every file
+                    # of the report exists, so it is left out here where the reason for it is known.
+                    self.__sc.log.log(f"Sourcefile \"{package_path}/{sourcefile_name}\" of the jacoco-report was not found in the codeunit and is therefore not part of the cobertura-report.", LogLevel.Debug)
+                    continue
+                class_element = etree.SubElement(classes_element, "class", name=sourcefile_name, filename=relative_file)
+                etree.SubElement(class_element, "methods")
+                lines_element = etree.SubElement(class_element, "lines")
+                for jacoco_line in jacoco_sourcefile.findall("./line"):
+                    covered_instructions = int(jacoco_line.get("ci", "0"))
+                    covered_branches = int(jacoco_line.get("cb", "0"))
+                    missed_branches = int(jacoco_line.get("mb", "0"))
+                    amount_of_branches = covered_branches+missed_branches
+                    line_element = etree.SubElement(lines_element, "line", number=jacoco_line.get("nr"), hits=str(covered_instructions))
+                    if 0 < amount_of_branches:
+                        line_element.set("branch", "true")
+                        line_element.set("condition-coverage", f"{round(covered_branches/amount_of_branches*100)}% ({covered_branches}/{amount_of_branches})")
+                    else:
+                        line_element.set("branch", "false")
+        GeneralUtilities.ensure_directory_exists(os.path.dirname(cobertura_file))
+        etree.ElementTree(coverage_element).write(cobertura_file, pretty_print=True, xml_declaration=True, encoding="UTF-8")
+        self.calculate_entire_line_rate(cobertura_file)
+
+    @GeneralUtilities.check_arguments
+    def convert_go_coverprofile_to_cobertura_report(self, coverprofile_file: str, cobertura_file: str, package_name: str, codeunit_folder: str, go_module_name: str, source_folder_relative_to_codeunit: str) -> None:
+        """Converts a coverage-report in the coverprofile-format which "go test -coverprofile" writes into a
+        coverage-report in the cobertura-format.
+        The conversion is done here instead of by a third-party-tool because such a tool would have to be installed
+        during the build (which makes the build depend on the state of a foreign repository at that moment) and because
+        the tools for it read their input from stdin, which is not available on every platform in the same way.
+        A line of a coverprofile-file looks like "<go-module>/<file>:<startline>.<startcolumn>,<endline>.<endcolumn> <amount-of-statements> <amount-of-executions>"
+        and describes a block of statements, so every line of such a block gets the amount of executions of its block.
+        If a line is covered by several blocks then the highest amount of executions wins, because the line was executed
+        as soon as one of the blocks containing it was executed."""
+        GeneralUtilities.assert_file_exists(coverprofile_file)
+        hits_per_file: dict[str, dict[int, int]] = {}
+        for line in GeneralUtilities.read_lines_from_file(coverprofile_file):
+            stripped_line = line.strip()
+            if not GeneralUtilities.string_has_content(stripped_line) or stripped_line.startswith("mode:"):
+                continue
+            match = re.match(r"^(.+):(\d+)\.\d+,(\d+)\.\d+ \d+ (\d+)$", stripped_line)
+            GeneralUtilities.assert_condition(match is not None, f'Unparsable line in the coverprofile-file: "{stripped_line}"')
+            file_in_module = match.group(1)
+            if file_in_module.startswith(f"{go_module_name}/"):
+                file_in_module = file_in_module[len(go_module_name)+1:]
+            relative_file = f"{source_folder_relative_to_codeunit}/{file_in_module}"
+            if not os.path.isfile(os.path.join(codeunit_folder, relative_file)):
+                self.__sc.log.log(f'File "{relative_file}" of the coverprofile-file was not found in the codeunit and is therefore not part of the cobertura-report.', LogLevel.Debug)
+                continue
+            hits_of_file = hits_per_file.setdefault(relative_file, {})
+            amount_of_executions = int(match.group(4))
+            for line_number in range(int(match.group(2)), int(match.group(3))+1):
+                hits_of_file[line_number] = max(hits_of_file.get(line_number, 0), amount_of_executions)
+        coverage_element = etree.Element("coverage")
+        sources_element = etree.SubElement(coverage_element, "sources")
+        etree.SubElement(sources_element, "source").text = codeunit_folder.replace("\\", "/")
+        packages_element = etree.SubElement(coverage_element, "packages")
+        package_element = etree.SubElement(packages_element, "package", name=package_name)
+        classes_element = etree.SubElement(package_element, "classes")
+        for relative_file, hits_of_file in sorted(hits_per_file.items()):
+            class_element = etree.SubElement(classes_element, "class", name=os.path.basename(relative_file), filename=relative_file)
+            etree.SubElement(class_element, "methods")
+            lines_element = etree.SubElement(class_element, "lines")
+            for line_number, hits in sorted(hits_of_file.items()):
+                etree.SubElement(lines_element, "line", number=str(line_number), hits=str(hits), branch="false")
+        GeneralUtilities.ensure_directory_exists(os.path.dirname(cobertura_file))
+        etree.ElementTree(coverage_element).write(cobertura_file, pretty_print=True, xml_declaration=True, encoding="UTF-8")
+        self.calculate_entire_line_rate(cobertura_file)
+
+    @GeneralUtilities.check_arguments
     def merge_packages(self,coverage_file:str,package_name:str) -> None:
-        tree = etree.parse(coverage_file) 
+        tree = etree.parse(coverage_file)
         root = tree.getroot()
         packages = root.findall("./packages/package")
         all_classes = []
@@ -2035,10 +2150,12 @@ class TFCPS_Tools_General:
                     normalized_line_splitted = ' '.join(line.split()).split(" ")
                     package = normalized_line_splitted[0]
                     latest_version = normalized_line_splitted[3]
-                    if package in package_json_content["dependencies"]:
-                        package_json_content["dependencies"][package] = latest_version
-                    if package in package_json_content["devDependencies"]:
-                        package_json_content["devDependencies"][package] = latest_version
+                    # A package.json does not have to declare both sections (a project which only delivers
+                    # runtime-dependencies has no "devDependencies" at all), so the sections are looked up
+                    # instead of being accessed directly.
+                    for dependency_section in ["dependencies", "devDependencies"]:
+                        if dependency_section in package_json_content and package in package_json_content[dependency_section]:
+                            package_json_content[dependency_section][package] = latest_version
             with open(package_json_file, "w", encoding="utf-8") as package_json_file_object:
                 json.dump(package_json_content, package_json_file_object, indent=4)
             GeneralUtilities.write_text_to_file(package_json_file, GeneralUtilities.read_text_from_file(package_json_file).replace("\r", ""))
