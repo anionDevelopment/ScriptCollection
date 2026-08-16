@@ -20,9 +20,80 @@ class TFCPS_CodeUnitSpecific_Python_Functions(TFCPS_CodeUnitSpecific_Base):
         GeneralUtilities.ensure_directory_does_not_exist(os.path.join(self.get_codeunit_folder(),"build"))
         GeneralUtilities.ensure_directory_does_not_exist(os.path.join(self.get_codeunit_folder(),f"{self.get_codeunit_name()}.egg-info"))
         GeneralUtilities.ensure_directory_exists(target_directory)
+        self.__check_compilable()
         self._protected_sc.run_program(GeneralUtilities.get_python_executable(), f"-m build --wheel --outdir {target_directory}", codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
         self.generate_bom_for_python_project()
         self.copy_source_files_to_output_directory()
+
+    @GeneralUtilities.check_arguments
+    def __check_compilable(self) -> None:
+        self.__ensure_sourcecode_is_compilable_using_python_compile()
+        self.__ensure_sourcecode_has_no_errors_using_pylint()
+
+    @GeneralUtilities.check_arguments
+    def __ensure_sourcecode_has_no_errors_using_pylint(self) -> None:
+        """Checks the sourcecode which goes into the wheel with pylint and raises when pylint reports a message
+        of the category error or fatal.
+
+        This finds the defects which the compile-check can not find, because they are not syntax-errors: a call
+        which does not pass an argument for a parameter which has no default-value (E1120), a name which is not
+        defined (E0602) and an attribute which the accessed object does not have (E1101), for example.
+
+        Only these two categories are checked: a convention-, refactor- or warning-message is a matter of style
+        and belongs to the linting-task, while an error- or a fatal-message means the sourcecode is broken,
+        which must not result in a wheel at all."""
+        codeunit_name = self.get_codeunit_name()
+        # The check runs in an isolated folder which only contains this codeunit, for the same reason as in
+        # "linting": otherwise a sibling-codeunit-source-folder of the repository would shadow the installed
+        # dependency-package of the same name while pylint resolves the imports, which would result in a
+        # false-positive import-error.
+        ignored_subfolders = ["Other", "__pycache__", "*.egg-info", "build", "dist", "venv", ".venv", ".pytest_cache", ".git"]
+        with tempfile.TemporaryDirectory(dir=GeneralUtilities.get_temp_folder()) as isolation_folder:
+            GeneralUtilities.copy_content_of_folder(self.get_codeunit_folder(), os.path.join(isolation_folder, codeunit_name), ignored_glob_patterms=ignored_subfolders)
+            pylint_configuration_file = os.path.join(self.get_repository_folder(), ".pylintrc")
+            if os.path.isfile(pylint_configuration_file):
+                GeneralUtilities.safe_copy(pylint_configuration_file, os.path.join(isolation_folder, ".pylintrc"))
+            # "--errors-only" suppresses every message whose category is not error or fatal, so the exitcode of
+            # pylint is only unequal to zero when such a message was found.
+            (exit_code, stdout, stderr, _) = self._protected_sc.run_program("pylint", f"--errors-only {codeunit_name}/{codeunit_name}", isolation_folder, throw_exception_if_exitcode_is_not_zero=False)
+        pylint_exitcode_for_a_usage_error: int = 32
+        if exit_code == pylint_exitcode_for_a_usage_error:
+            raise ValueError(f"Pylint could not be executed properly, so the sourcecode of the codeunit {codeunit_name} was not checked:\n{stdout}{stderr}")
+        if exit_code != 0:
+            raise ValueError(f"Pylint reported a message of the category error or fatal in the sourcecode of the codeunit {codeunit_name}, so no wheel was built:\n{stdout}{stderr}")
+
+    @GeneralUtilities.check_arguments
+    def __ensure_sourcecode_is_compilable_using_python_compile(self) -> None:
+        """Checks every python-file which goes into the wheel and raises when one of them can not be compiled.
+
+        This check exists so that a codeunit whose sourcecode is broken does not result in a wheel at all. It is
+        done with the builtin "compile"-function instead of with a linter: "compile" parses the file and reports
+        a syntax-error without executing anything of it, so the check needs no further tool and can not have
+        side-effects. Importing the modules instead would find more, but it would run the code of every module.
+        Everything which is a matter of style belongs to the linting-task and is deliberately not checked here."""
+        codeunit_name = self.get_codeunit_name()
+        repository_folder = self.get_repository_folder()
+        source_folder = os.path.join(self.get_codeunit_folder(), codeunit_name)
+        errors: list[str] = []
+        for file in GeneralUtilities.get_all_files_of_folder(source_folder):
+            if not file.endswith(".py"):
+                continue
+            if self._protected_sc.file_is_git_ignored(os.path.relpath(file, repository_folder), repository_folder):
+                continue
+            try:
+                # The file is read as "utf-8-sig" so that a byte-order-mark is removed instead of being handed to
+                # "compile" as the first character, which would report a syntax-error although python itself
+                # accepts a sourcecode-file which starts with a byte-order-mark.
+                # The filename is passed so that it appears in the message of a syntax-error.
+                compile(GeneralUtilities.read_text_from_file(file, "utf-8-sig"), file, "exec")
+            except SyntaxError as exception:
+                errors.append(f'"{file}" (line {exception.lineno}): {exception.msg}')
+            except ValueError as exception:
+                # "compile" raises a ValueError instead of a SyntaxError when the sourcecode contains a
+                # null-byte, which is not a syntax-error but makes the file just as unusable.
+                errors.append(f'"{file}": {exception}')
+        if 0 < len(errors):
+            raise ValueError(f"The sourcecode of the codeunit {codeunit_name} can not be compiled, so no wheel was built:\n" + "\n".join(errors))
 
     @GeneralUtilities.check_arguments
     def generate_bom_for_python_project(self) -> None:
