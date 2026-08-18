@@ -270,6 +270,19 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
                     shutil.copyfile(source_version_file, target_version_file)
 
 
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def __docfx_configuration_declares_metadata(docfx_configuration_file: str) -> bool:
+        # States whether the given docfx-configuration declares something to generate metadata from. The metadata-step is
+        # only executed in that case, because docfx aborts with a NullReferenceException when the "metadata"-section is
+        # missing, while the default-command tolerates its absence. A codeunit which is not implemented in a language docfx
+        # can read (a python- or a docker-codeunit for example) has no such section.
+        # The trailing commas are removed before the content is parsed: docfx accepts them, but they are not valid json, so
+        # without removing them a configuration which docfx itself reads without complaining would be rejected here.
+        content: str = GeneralUtilities.read_text_from_file(docfx_configuration_file)
+        content_without_trailing_commas: str = re.sub(r",(\s*[}\]])", r"\1", content)
+        return 0 < len(json.loads(content_without_trailing_commas).get("metadata", []))
+
     @GeneralUtilities.check_arguments
     def generate_reference_using_docfx(self, generate_class_reference:bool=False):
         reference_folder =os.path.join( self.get_codeunit_folder(),"Other","Reference")
@@ -283,7 +296,17 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         GeneralUtilities.ensure_directory_exists(generated_reference_folder)
         obj_folder = os.path.join(reference_folder, "obj")
         GeneralUtilities.ensure_folder_exists_and_is_empty(obj_folder)
-        self._protected_sc.run_program("docfx", "-t default,templates/darkfx docfx.json", reference_folder)
+        # The metadata-step and the build-step are executed separately instead of using the default-command which runs both
+        # of them at once, because only the metadata-command accepts "--property". That property is required because docfx
+        # restores the project before it reads it (which is what its option "--noRestore" switches off): that restore does
+        # not know the name of the lock-file which belongs to the runtime the build restored for, so it would write one
+        # under the default-name besides them (see
+        # TFCPS_CodeUnitSpecific_DotNet.__get_arguments_which_prevent_writing_a_lock_file). The restore itself is kept
+        # (instead of passing "--noRestore"), because the reference of a codeunit can also be generated on its own, without
+        # a build before it.
+        if self.__docfx_configuration_declares_metadata(os.path.join(reference_folder, "docfx.json")):
+            self._protected_sc.run_program("docfx", "metadata docfx.json --property RestorePackagesWithLockFile=false", reference_folder)
+        self._protected_sc.run_program("docfx", "build -t default,templates/darkfx docfx.json", reference_folder)
         GeneralUtilities.ensure_directory_does_not_exist(obj_folder)
 
         if generate_class_reference:# this codeunit has a class-reference, so a human-readable table-of-content can be generated for it
