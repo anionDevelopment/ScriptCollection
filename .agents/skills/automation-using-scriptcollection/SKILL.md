@@ -217,6 +217,7 @@ Besides the pipeline, ScriptCollection contains a lot of general-purpose-command
 ## Miscellaneous
 
 There are further commands for file- and folder-operations (`sccopy`, `screname`, `scremovefile`, `scnormalizelineendings`, ...), for media (`scmergepdfs`, `scextractpdfpages`, `scgeneratethumbnail`, `scocranalysisof...`) and for other purposes. Every command supports `--help`, so if a command looks relevant, check its help-output instead of guessing its arguments. The complete list of commands is defined in the `[project.scripts]`-section of the `pyproject.toml` of the ScriptCollection-codeunit.
+Running `scbuildcodeunits` in parallel on multiple repositories might result in errors depending on the used automations.
 
 # Find out what a function really does
 
