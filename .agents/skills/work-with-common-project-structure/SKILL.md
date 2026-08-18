@@ -3,7 +3,7 @@ name: "work-with-common-project-structure"
 description: "Contains information about the \"common project structure\" and how to work with it."
 purpose: "Information about repository-conventions."
 tags: information, conventions
-version: 1.5.42
+version: 1.5.43
 ---
 
 # General

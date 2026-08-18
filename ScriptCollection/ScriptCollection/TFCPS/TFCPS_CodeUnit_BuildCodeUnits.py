@@ -36,6 +36,16 @@ class TFCPS_UpdateDependenciesHook(TFCPS_BuildCodeUnitsHook):
         if os.path.isfile(os.path.join(update_dependencies_script_folder, "UpdateDependencies.py")):
             self.__sc.log.log("Update dependencies of the repository...")
             self.__sc.run_program(GeneralUtilities.get_python_executable(), "UpdateDependencies.py", update_dependencies_script_folder)
+        self.__ensure_changelog_is_there(repository)
+
+    @GeneralUtilities.check_arguments
+    def __ensure_changelog_is_there(self, repository: str) -> None:
+        if not self.__sc.git_repository_has_uncommitted_changes(repository):
+            return
+        changelog_file: str = os.path.join(repository, "Other", "Resources", "Changelog", f"v{self.__tfcps_tools_general.get_version_of_project(repository)}.md")
+        if os.path.isfile(changelog_file):
+            return
+        self.__tfcps_tools_general.create_changelog_entry(repository, "Updated dependencies.", False, False)
 
     @GeneralUtilities.check_arguments
     def run_after_codeunit_was_built(self, codeunit_build: TFCPS_CodeUnit_BuildCodeUnit) -> None:
@@ -46,6 +56,7 @@ class TFCPS_UpdateDependenciesHook(TFCPS_BuildCodeUnitsHook):
             return
         self.__sc.log.log(f"Update dependencies of codeunit {codeunit_name}...")
         self.__sc.run_program(GeneralUtilities.get_python_executable(), "UpdateDependencies.py", os.path.join(codeunit_folder, "Other"))
+        self.__ensure_changelog_is_there(repository)
         if self.__sc.git_repository_has_uncommitted_changes(repository):
             #the update changed something, so it has to be verified that the codeunit is still buildable with the updated dependencies.
             self.__sc.log.log(f"Build codeunit {codeunit_name} again to verify it is still buildable with the updated dependencies...")
@@ -693,10 +704,6 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.update_year_in_license_file()
         self.sc.assert_is_git_repository(repository)
         self.sc.assert_no_uncommitted_changes(repository)
-        #the update is done while the codeunits are built regularly (see TFCPS_UpdateDependenciesHook): a codeunit is built before its
-        #dependencies are updated (some programming-languages need that) and again afterwards if the update changed something. Using the
-        #regular build means the update also gets all preparation-steps of a build - especially the package-sources which are required to
-        #resolve dependencies which are not available on a public package-source.
         self.build_codeunits(TFCPS_UpdateDependenciesHook(self.sc, self.tfcps_tools_general))
         if self.sc.git_repository_has_uncommitted_changes(repository):
             changelog_folder = os.path.join(repository, "Other", "Resources", "Changelog")
@@ -705,6 +712,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             if not os.path.isfile(changelog_file):
                 self.__ensure_changelog_file_is_added(repository, project_version)
             self.build_codeunits()#check the codeunits are buildable at all with all updates together
+            self.sc.log.log("Build all codeunits again to ensure they are buildable with all updates together...")
             self.sc.git_commit(repository, "Updated dependencies", stage_all_changes=True)
 
     @GeneralUtilities.check_arguments

@@ -3,7 +3,7 @@ name: "automation-using-scriptcollection"
 description: "Contains information about the automations provided by ScriptCollection and how to use them, especially in repositories which implement the \"common project structure\"."
 purpose: "Information about automation using ScriptCollection."
 tags: information, automation, conventions
-version: 1.5.42
+version: 1.5.43
 ---
 
 # General

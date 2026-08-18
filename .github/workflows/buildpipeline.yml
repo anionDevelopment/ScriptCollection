@@ -6,6 +6,10 @@ on:
         description: "Target environment-type for the build (e.g. QualityCheck, Productive)."
         required: false
         default: QualityCheck
+      FastLane:
+        description: "Fast lane for build-pipeline"
+        required: false
+        default: false
 env:
   IS_RUNNING_IN_SERVER_PIPELINE: "true"
   IS_RUNNING_IN_GITHUB_PIPELINE: "true"
@@ -17,7 +21,7 @@ jobs:
       volumes:
         - /var/run/docker.sock:/var/run/docker.sock
     steps:
-      - name: Checkout (full history)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -26,7 +30,7 @@ jobs:
       - name: Prepare build-pipeline
         run: scpreparebuildpipelineforgithub
       - name: Build codeunits
-        run: scbuildcodeunits --assertnonewchanges --verbosity 4 --targetenvironment "${{ inputs.TargetEnvironmentType }}"
+        run: scbuildcodeunits --assertnonewchanges --verbosity 4 --targetenvironment "${{ inputs.TargetEnvironmentType }}"${{ inputs.FastLane == 'true' && ' --fastlane' || '' }}
       - name: Upload artifacts
         if: success()
         uses: actions/upload-artifact@v4
