@@ -247,6 +247,26 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
                 sarif_target_file = os.path.join(sarif_folder_target, sarif_filename)
                 GeneralUtilities.ensure_file_does_not_exist(sarif_target_file)
                 shutil.copyfile(sarif_source_file, sarif_target_file)
+            # The lock-file of this runtime becomes a part of the build-result: it states which version of which package
+            # the build actually used, which is what makes it possible to reproduce a build later or to check an
+            # artifact against a vulnerability afterwards. The working-copy keeps its own lock-file, so this is a copy
+            # and not a move.
+            # It is copied into a folder per project, because the name of the file only contains the runtime while a
+            # codeunit builds more than one project (itself and its test-project) for the same runtime, so a flat folder
+            # would let the second project overwrite the file of the first one. The name of the file itself stays
+            # unchanged, because it is the name nuget expects and a consumer of the artifact reads the runtime from it.
+            lock_file = os.path.join(csproj_file_folder, self.__get_lock_file_name(runtime))
+            if os.path.isfile(lock_file):
+                lock_file_folder_target = os.path.join(codeunit_folder, "Other", "Artifacts", "PackagesLock", csproj_file_name_without_extension)
+                GeneralUtilities.ensure_directory_exists(lock_file_folder_target)
+                lock_file_target = os.path.join(lock_file_folder_target, os.path.basename(lock_file))
+                GeneralUtilities.ensure_file_does_not_exist(lock_file_target)
+                shutil.copyfile(lock_file, lock_file_target)
+            else:
+                # The restore which ran above creates the file whenever the project demands one (see
+                # __get_lock_file_arguments), so a missing file means the project does not set
+                # RestorePackagesWithLockFile - and then the build-result does not state which versions it used.
+                self._protected_sc.log.log(f"The lock-file \"{lock_file}\" does not exist, so the build-result of \"{csproj_file_name_without_extension}\" does not contain the versions which were used for the runtime \"{runtime}\".", LogLevel.Warning)
 
     @GeneralUtilities.check_arguments
     def standardized_tasks_build_for_dotnet_project(self,runtimes:list[str]) -> None:
@@ -274,7 +294,6 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def __standardized_tasks_build_for_dotnet_project(self,runtimes:list[str]) -> None:
-
         target_environment_type: str=self.get_target_environment_type()
         copy_license_file_to_target_folder: bool=True
         codeunitname: str = self.get_codeunit_name()
@@ -282,7 +301,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         workspace_folder=os.path.join(self.get_codeunit_folder(),"Other","Workspace")
         GeneralUtilities.ensure_directory_does_not_exist(workspace_folder)
         
-        files_to_sign: dict[str, str] = self.get_filestosign_from_commandline_arguments(  dict())
+        files_to_sign: dict[str, str] = self.get_filestosign_from_commandline_arguments(dict())
         repository_folder: str = self.get_repository_folder()
         commitid = self._protected_sc.git_get_commit_id(repository_folder)
         outputfolder = GeneralUtilities.resolve_relative_path("./Other/Artifacts", self.get_codeunit_folder())
