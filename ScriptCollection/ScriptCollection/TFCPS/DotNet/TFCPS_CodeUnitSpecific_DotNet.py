@@ -191,6 +191,20 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         return result
 
     @GeneralUtilities.check_arguments
+    def __get_arguments_which_prevent_writing_a_lock_file(self) -> list[str]:
+        """Returns the arguments which keep a dotnet-operation from writing a lock-file.
+
+        The lock-files belong to the restore of the build alone, because only there the runtime - and with it the name of the
+        lock-file which belongs to that runtime - is known. Every other dotnet-operation of a codeunit (linting, test, ...)
+        works on the solution instead of on one runtime and restores implicitly, and the csproj-property
+        "RestorePackagesWithLockFile" would make each of those restores write a lock-file under the default-name. Such a file
+        is never validated against anything, because locked mode is only requested for the runtime-specific one, so it would
+        only be an additional file which looks like the relevant pinning without being it. The value has to be passed on the
+        command-line because a property which the project-file sets explicitly wins over one which comes from the
+        environment."""
+        return ["-p:RestorePackagesWithLockFile=false"]
+
+    @GeneralUtilities.check_arguments
     def __standardized_tasks_build_for_dotnet_build(self, csproj_file: str, originaloutputfolder: str, files_to_sign: dict[str, str], commitid: str, runtimes: list[str],  target_environmenttype_mapping:  dict[str, str], copy_license_file_to_target_folder: bool, repository_folder: str, codeunit_name: str) -> None:
         self._protected_sc.assert_is_git_repository(repository_folder)
         csproj_filename = os.path.basename(csproj_file)
@@ -319,7 +333,11 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         self._protected_sc.log.log("Generate SBOM...")
         codeunit_name = os.path.basename(codeunit_folder)
         bomfile_folder = "Other/Artifacts/BOM"
-        self._protected_sc.run_program_argsasarray("dotnet", ["CycloneDX", f"{codeunit_name}/{codeunit_name}.csproj", "-o", bomfile_folder], codeunit_folder)
+        # "-dpr" keeps CycloneDX from restoring the project itself. The SBOM is generated directly after the project and its
+        # test-project were built, so the dependencies are restored and the assets-file CycloneDX reads is up-to-date already.
+        # Its restore would also not be able to name the lock-file of the runtime the build used, so it would write one under
+        # the default-name (see __get_arguments_which_prevent_writing_a_lock_file).
+        self._protected_sc.run_program_argsasarray("dotnet", ["CycloneDX", f"{codeunit_name}/{codeunit_name}.csproj", "-o", bomfile_folder, "-dpr"], codeunit_folder)
         codeunitversion = self.tfcps_Tools_General.get_version_of_codeunit(os.path.join(codeunit_folder, f"{codeunit_name}.codeunit.xml"))
         target = f"{codeunit_folder}/{bomfile_folder}/{codeunit_name}.{codeunitversion}.sbom.xml"
         GeneralUtilities.ensure_file_does_not_exist(target)
@@ -351,7 +369,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             # begin with a drive-letter anymore) and resolves against the working-directory, so it writes to a path
             # which contains a quote in the middle. On Linux that only creates a strangely named folder, on Windows a
             # quote is not allowed in a path and the msbuild-task GenerateDepsFile fails with an IOException.
-            run_result = self._protected_sc.run_program_argsasarray("dotnet", ["build", sln_file, "-nologo", "-v", "minimal", "-o", temp_output_folder], temp_output_folder, throw_exception_if_exitcode_is_not_zero=False, env_vars={"DOTNET_CLI_UI_LANGUAGE": "en-US", "MSBUILDDISABLENODEREUSE": "1"})
+            run_result = self._protected_sc.run_program_argsasarray("dotnet", ["build", sln_file, "-nologo", "-v", "minimal", "-o", temp_output_folder]+self.__get_arguments_which_prevent_writing_a_lock_file(), temp_output_folder, throw_exception_if_exitcode_is_not_zero=False, env_vars={"DOTNET_CLI_UI_LANGUAGE": "en-US", "MSBUILDDISABLENODEREUSE": "1"})
         finally:
             GeneralUtilities.ensure_directory_does_not_exist(temp_output_folder)
         diagnostics: list[tuple[LogLevel, str, str | None, int | None]] = []
@@ -676,7 +694,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         GeneralUtilities.ensure_file_does_not_exist(target_file)
 
         sln_file = os.path.join(codeunit_folder, f"{codeunit_name}.sln")
-        args: list[str] = ["test", sln_file, "-c", dotnet_build_configuration, "-o", temp_folder]
+        args: list[str] = ["test", sln_file, "-c", dotnet_build_configuration, "-o", temp_folder]+self.__get_arguments_which_prevent_writing_a_lock_file()
         runsettings_path = os.path.join(codeunit_folder, runsettings_file)
         if os.path.isfile(runsettings_path):
             args += ["--settings", runsettings_path]
