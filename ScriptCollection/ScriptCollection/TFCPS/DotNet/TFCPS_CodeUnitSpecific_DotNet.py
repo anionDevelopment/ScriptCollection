@@ -17,6 +17,8 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
     csproj_file:bool = None
     #the output of the dotnet-cli is localized. The language is set explicitly for the commands whose output gets parsed, because otherwise the parsing would only work on machines which are configured to use english.
     __dotnet_cli_environment_variables:dict = {"DOTNET_CLI_UI_LANGUAGE": "en-US"}
+    #the only accepted form of a version of a package-reference: an exact version in square brackets. Everything else is a version-range.
+    __pinned_version_regex = re.compile(r"^\[[^,\[\]]+\]$")
 
     def __init__(self,current_file:str,verbosity:LogLevel,targetenvironmenttype:str,use_cache:bool,is_pre_merge:bool):
         super().__init__(current_file, verbosity,targetenvironmenttype,use_cache,is_pre_merge)
@@ -162,6 +164,33 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         return value
 
     @GeneralUtilities.check_arguments
+    def __get_lock_file_name(self, runtime: str) -> str:
+        """Returns the name of the lock-file which belongs to the given runtime.
+
+        Every runtime needs its own lock-file: the lock-file records the set of runtime-identifiers it was created for, and a
+        restore in locked mode fails with NU1004 when that set differs from the one which is currently restored (the restore
+        gets exactly one runtime via "--runtime"). The name is relative, so NuGet resolves it per project - a restore over the
+        solution therefore creates one lock-file next to each of the two project-files instead of letting them collide."""
+        return f"packages.{runtime}.lock.json"
+
+    @GeneralUtilities.check_arguments
+    def __get_lock_file_arguments(self, codeunit_folder: str, codeunit_name: str, runtime: str) -> list[str]:
+        """Returns the restore-arguments which pin the dependencies of the given runtime to the content of its lock-files.
+
+        Locked mode is only requested when the lock-file of every project of the codeunit already exists, because a restore in
+        locked mode can not create one. A codeunit which does not have them yet is restored without it and gets a warning, so
+        introducing the lock-files does not break the build of a codeunit which was not migrated yet."""
+        lock_file_name: str = self.__get_lock_file_name(runtime)
+        expected_lock_files: list[str] = [os.path.join(codeunit_folder, project_name, lock_file_name) for project_name in [codeunit_name, codeunit_name+"Tests"]]
+        missing_lock_files: list[str] = [lock_file for lock_file in expected_lock_files if not os.path.isfile(lock_file)]
+        result: list[str] = [f"-p:NuGetLockFilePath={lock_file_name}"]
+        if len(missing_lock_files) == 0:
+            result.append("--locked-mode")
+        else:
+            self._protected_sc.log.log(f"The dependencies of codeunit \"{codeunit_name}\" are not restored in locked mode for the runtime \"{runtime}\", because the following lock-file(s) do not exist yet: {', '.join(missing_lock_files)}. The restore creates them now; commit them so that the dependencies of this codeunit are pinned.", LogLevel.Warning)
+        return result
+
+    @GeneralUtilities.check_arguments
     def __standardized_tasks_build_for_dotnet_build(self, csproj_file: str, originaloutputfolder: str, files_to_sign: dict[str, str], commitid: str, runtimes: list[str],  target_environmenttype_mapping:  dict[str, str], copy_license_file_to_target_folder: bool, repository_folder: str, codeunit_name: str) -> None:
         self._protected_sc.assert_is_git_repository(repository_folder)
         csproj_filename = os.path.basename(csproj_file)
@@ -181,7 +210,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             GeneralUtilities.ensure_directory_does_not_exist(outputfolder)
             self._protected_sc.run_program("dotnet", "clean", csproj_file_folder)
             GeneralUtilities.ensure_directory_exists(outputfolder)
-            self._protected_sc.run_program_argsasarray("dotnet", ["restore", "--runtime", runtime], codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
+            self._protected_sc.run_program_argsasarray("dotnet", ["restore", "--runtime", runtime]+self.__get_lock_file_arguments(codeunit_folder, codeunit_name, runtime), codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
             self._protected_sc.run_program_argsasarray("dotnet", ["build", "--no-restore", csproj_file_name, "-c", dotnet_build_configuration, "-o", outputfolder, "--runtime", runtime], csproj_file_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
             if copy_license_file_to_target_folder:
                 license_file = os.path.join(repository_folder, "License.txt")
@@ -393,6 +422,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             hints: str = "\n".join(result1[2])
             raise ValueError(f"'{csproj_file}' with content '{GeneralUtilities.read_text_from_file(csproj_file)}' does not match the standardized .csproj-file-format which is defined by the regex '{result1[1]}'.\n{hints}")
         self.__check_csproj_urls(csproj_file)
+        self.__verify_that_all_package_references_are_pinned(csproj_file)
 
         test_csproj_project_name = csproj_project_name+"Tests"
         test_csproj_file = os.path.join(codeunit_folder, test_csproj_project_name, test_csproj_project_name+".csproj")
@@ -401,6 +431,35 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             hints: str = "\n".join(result2[2])
             raise ValueError(f"'{test_csproj_file}' with content '{GeneralUtilities.read_text_from_file(test_csproj_file)}' does not match the standardized .csproj-file-format which is defined by the regex '{result2[1]}'.\n{hints}")
         self.__check_csproj_urls(test_csproj_file)
+        self.__verify_that_all_package_references_are_pinned(test_csproj_file)
+
+    @GeneralUtilities.check_arguments
+    def __verify_that_all_package_references_are_pinned(self, csproj_file: str) -> None:
+        """Ensures that every package-reference of the given project is pinned to exactly one version.
+
+        The version-attribute of a package-reference is a version-*range*, not a version: "1.2.3" means "at least 1.2.3".
+        NuGet resolves such a range to the lowest version which satisfies it - or, when exactly that version is not available
+        on the feed (unlisted, removed, incomplete mirror), silently to the next higher one. "[1.2.3]" means exactly 1.2.3,
+        so a version which is not available fails loudly instead of becoming a different version than the one which is
+        written in the project-file. This keeps the restore deterministic and makes the version which is deployed readable
+        from the source-code."""
+        root: etree._ElementTree = etree.parse(csproj_file)
+        not_pinned: list[str] = []
+        for package_reference in root.xpath("//PackageReference"):
+            #the attributes are read case-insensitively because msbuild reads them that way: a "version"-attribute is as
+            #effective as a "Version"-attribute, so a case-sensitive check would report a version which exists as missing.
+            attributes: dict[str, str] = {name.lower(): value for name, value in package_reference.attrib.items()}
+            package_name: str = attributes.get("include") or attributes.get("update") or "(package-reference without a name)"
+            if 0 < len(package_reference.xpath("*[translate(local-name(),'VERSION','version')='version']")):
+                not_pinned.append(f"{package_name}: the version is set as child-element; it must be set as attribute in the form Version=\"[<version>]\".")
+                continue
+            version: str = attributes.get("version")
+            if version is None:
+                not_pinned.append(f"{package_name}: no version is set at all, so the restore decides which version is used.")
+            elif self.__pinned_version_regex.match(version.strip()) is None:
+                not_pinned.append(f"{package_name}: the version \"{version}\" is a version-range, not a pinned version. Pin it in the form Version=\"[<version>]\".")
+        if 0 < len(not_pinned):
+            raise ValueError(f"The following package-reference(s) in \"{csproj_file}\" are not pinned to exactly one version:\n" + "\n".join(f"  {entry}" for entry in not_pinned))
 
     @GeneralUtilities.check_arguments
     def __check_csproj_urls(self, csproj_file: str) -> None:
@@ -437,6 +496,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
     <IsPackable>false<\\/IsPackable>
     <PreserveCompilationContext>false<\\/PreserveCompilationContext>
     <GenerateRuntimeConfigurationFiles>true<\\/GenerateRuntimeConfigurationFiles>
+    <RestorePackagesWithLockFile>true<\\/RestorePackagesWithLockFile>
     <Copyright>([^<]+)<\\/Copyright>
     <Description>{codeunit_description_regex}<\\/Description>
     <PackageProjectUrl>https:\\/\\/([^<]+)<\\/PackageProjectUrl>
@@ -502,6 +562,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
     <IsPackable>false<\\/IsPackable>
     <PreserveCompilationContext>false<\\/PreserveCompilationContext>
     <GenerateRuntimeConfigurationFiles>true<\\/GenerateRuntimeConfigurationFiles>
+    <RestorePackagesWithLockFile>true<\\/RestorePackagesWithLockFile>
     <Copyright>([^<]+)<\\/Copyright>
     <Description>{codeunit_name_regex}Tests is the test-project for {codeunit_name_regex}\\.<\\/Description>
     <PackageProjectUrl>https:\\/\\/([^<]+)<\\/PackageProjectUrl>
