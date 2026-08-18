@@ -311,20 +311,12 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
     @GeneralUtilities.check_arguments
     def build_codeunits_in_container(self,base_mount_folder:str) -> tuple[bool, str]:
-        #base_mount_folder is assumed to be an absolute path set correctly by the caller (see BuildCodeUnitsC in Executables.py, which defaults it to the repository itself).
-        #it may be the repository itself or any parent-folder of it, which allows the caller to mount not only the repository but the whole surrounding folder-structure into the container.
-        normalized_base_mount_folder = os.path.normpath(base_mount_folder)
-        normalized_repository = os.path.normpath(self.repository)
-        relative_repository_path = os.path.relpath(normalized_repository, normalized_base_mount_folder).replace(os.sep, "/")
-        GeneralUtilities.assert_condition(relative_repository_path == "." or not relative_repository_path.startswith(".."), f"The repository '{self.repository}' is not located inside the base-mount-folder '{base_mount_folder}'.")
-        container_base_mount_folder = f"/Workspace/Project/{os.path.basename(normalized_base_mount_folder)}"
-        container_repository_folder = container_base_mount_folder if relative_repository_path == "." else f"{container_base_mount_folder}/{relative_repository_path}"
-        image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "SCBuilder")
+        container_base_mount_folder, container_repository_folder = self.__get_folders_inside_container(base_mount_folder)
 
         #build the scbuildcodeunits-arguments based on the current state (analogous to the arguments accepted by the scbuildcodeunits-executable). each token must be a separate argument because run_program_argsasarray passes every list-element verbatim and does not split on spaces.
         scbuildcodeunits_arguments = ["scbuildcodeunits", "-r", container_repository_folder, "-v", "4"]
         if not self.__use_cache:
-            scbuildcodeunits_arguments.append("-c")
+            scbuildcodeunits_arguments.append("-n")
         if self.__is_pre_merge:
             scbuildcodeunits_arguments.append("-p")
         if self.__assert_no_new_changes:
@@ -335,12 +327,53 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             scbuildcodeunits_arguments.append("-f")
         if GeneralUtilities.string_has_content(self.additionalargumentsfile):
             scbuildcodeunits_arguments += ["-a", self.__translate_path_into_container(self.additionalargumentsfile, container_repository_folder)]
+        return self.__run_scriptcollection_executable_in_container(base_mount_folder, container_base_mount_folder, container_repository_folder, scbuildcodeunits_arguments, "Build codeunits in container")
+
+    @GeneralUtilities.check_arguments
+    def update_dependencies_in_container(self,base_mount_folder:str) -> tuple[bool, str]:
+        """Runs the update of the dependencies inside the SCBuilder-image, analogous to build_codeunits_in_container.
+
+        The whole update runs in the container and not only the codeunit-builds which it triggers: update_dependencies
+        hands a hook-object to build_codeunits, and an object can not be passed to a program through
+        commandline-arguments, so a containerized inner build would build without updating anything."""
+        container_base_mount_folder, container_repository_folder = self.__get_folders_inside_container(base_mount_folder)
+
+        #only the arguments which scupdatedependencies really accepts are passed. It has no equivalent of the
+        #pre-merge-, assert-no-new-changes-, ready-to-merge- and fastlane-flags of scbuildcodeunits, so passing one
+        #of them would make the argument-parsing fail inside the container.
+        scupdatedependencies_arguments = ["scupdatedependencies", "-r", container_repository_folder, "-v", "4"]
+        if not self.__use_cache:
+            scupdatedependencies_arguments.append("-n")
+        if GeneralUtilities.string_has_content(self.additionalargumentsfile):
+            scupdatedependencies_arguments += ["--additionalargumentsfile", self.__translate_path_into_container(self.additionalargumentsfile, container_repository_folder)]
+        return self.__run_scriptcollection_executable_in_container(base_mount_folder, container_base_mount_folder, container_repository_folder, scupdatedependencies_arguments, "Update dependencies in container")
+
+    @GeneralUtilities.check_arguments
+    def __get_folders_inside_container(self, base_mount_folder: str) -> tuple[str, str]:
+        """Returns the folder which the base-mount-folder is mounted to inside the container and the folder which the
+        repository has inside the container."""
+        #base_mount_folder is assumed to be an absolute path set correctly by the caller (see BuildCodeUnitsC in Executables.py, which defaults it to the repository itself).
+        #it may be the repository itself or any parent-folder of it, which allows the caller to mount not only the repository but the whole surrounding folder-structure into the container.
+        normalized_base_mount_folder = os.path.normpath(base_mount_folder)
+        normalized_repository = os.path.normpath(self.repository)
+        relative_repository_path = os.path.relpath(normalized_repository, normalized_base_mount_folder).replace(os.sep, "/")
+        GeneralUtilities.assert_condition(relative_repository_path == "." or not relative_repository_path.startswith(".."), f"The repository '{self.repository}' is not located inside the base-mount-folder '{base_mount_folder}'.")
+        container_base_mount_folder = f"/Workspace/Project/{os.path.basename(normalized_base_mount_folder)}"
+        container_repository_folder = container_base_mount_folder if relative_repository_path == "." else f"{container_base_mount_folder}/{relative_repository_path}"
+        return (container_base_mount_folder, container_repository_folder)
+
+    @GeneralUtilities.check_arguments
+    def __run_scriptcollection_executable_in_container(self, base_mount_folder: str, container_base_mount_folder: str, container_repository_folder: str, executable_arguments: list[str], log_message: str) -> tuple[bool, str]:
+        """Runs one of the commandline-tools of ScriptCollection inside the SCBuilder-image. The tool and its
+        arguments are given by the caller; everything which is required to make the container able to run it (the
+        mounts, the environment-variables and the preparation-hooks) is done here."""
+        image = self.tfcps_tools_general.oci_image_manager.get_registry_address_for_image_with_default_tag(self.repository, "SCBuilder")
 
         update_scriptcollection=True
         update_argument:str=""
         if update_scriptcollection:
             update_argument="pip3 install scriptcollection --upgrade && "
-        scbuildcodeunits_arguments=["bash","-c", f"{update_argument}scshowversion && "+" ".join(scbuildcodeunits_arguments)]
+        executable_arguments=["bash","-c", f"{update_argument}scshowversion && "+" ".join(executable_arguments)]
 
         #run the optional user-specific script which prepares this host for a container-build (for example to log in to the registry the image is pulled from).
         #it runs before the environment-variables are resolved, so it can also create the files their values are read from.
@@ -358,7 +391,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             mount_arguments += ["-v", f"{custom_scripts_folder_for_inside_the_container}:{self.tfcps_tools_general.get_folder_of_custom_scripts_in_container()}"]
 
         #pass the environment-variables which are declared as required in <repository>/.ScriptCollection/ProductInformation.xml into the container
-        #so they do not have to be specified explicitly on every scbuildcodeunits-call. Their values are resolved from the user-specific
+        #so they do not have to be specified explicitly on every call. Their values are resolved from the user-specific
         #configuration-file (see TFCPS_Tools_General.get_environment_variables_configuration_file), which only exists on the host.
         #only the names are passed as arguments; the values are given to the docker-client through its own environment, because arguments
         #are written to the log and are visible in the process-list of this host, which must not happen for a value which is typically a secret.
@@ -367,7 +400,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         for env_variable_name in required_environment_variables:
             env_arguments += ["-e", env_variable_name]
 
-        #run scbuildcodeunits inside the SCBuilder-image. base_mount_folder is mounted into the container (covering the repository and, for submodules, its real gitdir) and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
+        #run the tool inside the SCBuilder-image. base_mount_folder is mounted into the container (covering the repository and, for submodules, its real gitdir) and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
         docker_arguments = [
             "run", "--rm",
             "-v", f"{base_mount_folder}:{container_base_mount_folder}",
@@ -375,8 +408,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             "-w", container_repository_folder,
         ] + mount_arguments + env_arguments + [
             image,
-        ] + scbuildcodeunits_arguments
-        self.sc.log.log(f"Build codeunits in container using image \"{image}\"...")
+        ] + executable_arguments
+        self.sc.log.log(f"{log_message} using image \"{image}\"...")
         image_address, image_tag = ScriptCollectionCore.split_image_address_and_tag(image)
         self.sc.docker_pull(image_address, image_tag)
         # the exitcode is evaluated by the caller (returned as part of the result-tuple), so the program-runner must not raise on a non-zero exitcode here.
