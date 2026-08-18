@@ -43,6 +43,13 @@ class TFCPS_VisualRegressionTests:
     # beginning of every run.
     __test_results_folder_relative_path: str = "Other/Artifacts/VisualRegressionTestResults"
 
+    # The file which maps a domain to an address inside a container. It belongs to the container which owns the
+    # network-namespace, so the playwright-container uses the one of this container when it joins it.
+    __hosts_file: str = "/etc/hosts"
+
+    # The address the application under test listens on when it was started by this process.
+    __loopback_address: str = "127.0.0.1"
+
     # The folder the screenshots of failed testcases are preserved in. Both folders are located in
     # "Other/Artifacts", which is ignored by git.
     __failed_testcases_folder_relative_path: str = "Other/Artifacts/VisualRegressionTestFailures"
@@ -325,14 +332,38 @@ class TFCPS_VisualRegressionTests:
             # loopback-interface of that container. Sharing its network-namespace is the only way to reach it:
             # its ports are not published to the host, and publishing them would additionally make two parallel
             # builds on the same host collide with each other.
-            address_of_application: str = "127.0.0.1"
+            # The domain can not be passed as "--add-host" in this case: a container which joins the
+            # network-namespace of another one uses the hosts-file of that other container and therefore can not
+            # have entries of its own, which docker refuses with "conflicting options: custom host-to-IP mapping
+            # and the network mode". The mapping is therefore written into the hosts-file of this container, which
+            # the playwright-container sees through exactly that sharing.
+            self.__ensure_domain_is_mapped_in_the_own_hosts_file(domain_of_application)
             result: list[str] = ["--network", f"container:{self.__get_own_container_id()}"]
         else:
             # The application runs directly on the host of the container, which docker makes reachable under the
-            # address "host-gateway".
-            address_of_application: str = "host-gateway"
-            result: list[str] = []
-        return result+["--add-host", f"{domain_of_application}:{address_of_application}", "-e", f"{self.__environment_variable_name_of_application_host}={domain_of_application}"]
+            # address "host-gateway". The playwright-container has a hosts-file of its own in this case, so the
+            # mapping can be passed as an argument.
+            result: list[str] = ["--add-host", f"{domain_of_application}:host-gateway"]
+        return result+["-e", f"{self.__environment_variable_name_of_application_host}={domain_of_application}"]
+
+    @GeneralUtilities.check_arguments
+    def __ensure_domain_is_mapped_in_the_own_hosts_file(self, domain_of_application: str) -> None:
+        """Maps the given domain to the loopback-interface in the hosts-file of the container this process runs in.
+
+        The playwright-container joins the network-namespace of this container and therefore uses its hosts-file, so
+        this is the only place where the mapping can be put for the browser to resolve the domain.
+        The mapping is appended instead of the file being rewritten, because the file is a bind-mount of the
+        docker-daemon (which is also how __get_own_container_id recognizes the own container): replacing it would
+        break that mount and the mapping would not reach the playwright-container.
+        A mapping which is already there is not appended a second time, so that the runs for the further browsers of
+        the codeunit do not add it again."""
+        for line in GeneralUtilities.read_text_from_file(self.__hosts_file).splitlines():
+            # Everything behind a "#" is a comment, and a line maps its first field (the address) to all further
+            # fields (the names it is reachable under).
+            fields: list[str] = line.split("#", 1)[0].split()
+            if 1 < len(fields) and fields[0] == self.__loopback_address and domain_of_application in fields[1:]:
+                return
+        GeneralUtilities.append_line_to_file(self.__hosts_file, f"{self.__loopback_address}\t{domain_of_application}")
 
     @GeneralUtilities.check_arguments
     def __get_mount_arguments(self, codeunit_folder: str, codeunit_folder_in_container: str, playwright_project_folder_relative_path: str) -> list[str]:

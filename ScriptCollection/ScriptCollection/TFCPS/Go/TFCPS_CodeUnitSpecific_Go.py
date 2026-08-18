@@ -80,7 +80,6 @@ class TFCPS_CodeUnitSpecific_Go_Functions(TFCPS_CodeUnitSpecific_Base):
     @GeneralUtilities.check_arguments
     def run_testcases(self) -> None:
         codeunit_name = self.get_codeunit_name()
-        go_module_folder = self.get_go_module_folder()
         coverprofile_file = os.path.join(GeneralUtilities.get_temp_folder(), f"{codeunit_name}.coverprofile")
         GeneralUtilities.ensure_file_does_not_exist(coverprofile_file)
         coverage_file = os.path.join(self.get_artifacts_folder(), "TestCoverage", "TestCoverage.xml")
