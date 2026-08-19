@@ -300,12 +300,11 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         # of them at once, because only the metadata-command accepts "--property". That property is required because docfx
         # restores the project before it reads it (which is what its option "--noRestore" switches off): that restore does
         # not know the name of the lock-file which belongs to the runtime the build restored for, so it would write one
-        # under the default-name besides them (see
-        # TFCPS_CodeUnitSpecific_DotNet.__get_arguments_which_prevent_writing_a_lock_file). The restore itself is kept
-        # (instead of passing "--noRestore"), because the reference of a codeunit can also be generated on its own, without
-        # a build before it.
+        # under the default-name besides them. It is therefore pointed at a throwaway-path outside of the repository (see
+        # TFCPS_Tools_General.get_throwaway_lock_file). The restore itself is kept (instead of passing "--noRestore"),
+        # because the reference of a codeunit can also be generated on its own, without a build before it.
         if self.__docfx_configuration_declares_metadata(os.path.join(reference_folder, "docfx.json")):
-            self._protected_sc.run_program("docfx", "metadata docfx.json --property RestorePackagesWithLockFile=false", reference_folder)
+            self._protected_sc.run_program("docfx", f"metadata docfx.json --property NuGetLockFilePath={self.tfcps_Tools_General.get_throwaway_lock_file(self.get_codeunit_name())}", reference_folder)
         self._protected_sc.run_program("docfx", "build -t default,templates/darkfx docfx.json", reference_folder)
         GeneralUtilities.ensure_directory_does_not_exist(obj_folder)
 

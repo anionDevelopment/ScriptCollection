@@ -192,17 +192,19 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def __get_arguments_which_prevent_writing_a_lock_file(self) -> list[str]:
-        """Returns the arguments which keep a dotnet-operation from writing a lock-file.
+        """Returns the arguments which keep a dotnet-operation from writing a lock-file into the codeunit.
 
         The lock-files belong to the restore of the build alone, because only there the runtime - and with it the name of the
         lock-file which belongs to that runtime - is known. Every other dotnet-operation of a codeunit (linting, test, ...)
         works on the solution instead of on one runtime and restores implicitly, and the csproj-property
-        "RestorePackagesWithLockFile" would make each of those restores write a lock-file under the default-name. Such a file
-        is never validated against anything, because locked mode is only requested for the runtime-specific one, so it would
-        only be an additional file which looks like the relevant pinning without being it. The value has to be passed on the
-        command-line because a property which the project-file sets explicitly wins over one which comes from the
-        environment."""
-        return ["-p:RestorePackagesWithLockFile=false"]
+        "RestorePackagesWithLockFile" would make each of those restores write a lock-file under the default-name next to the
+        runtime-specific ones.
+        The lock-file of those operations is therefore pointed at a throwaway-path outside of the repository. Switching the
+        property off instead does not work: nuget rejects a restore with NU1005 as soon as a lock-file under the default-name
+        exists, which is exactly the case this has to survive (a developer who ran "dotnet build" once has such a file). The
+        value has to be passed on the command-line, because a property which the project-file sets explicitly wins over one
+        which comes from the environment."""
+        return [f"-p:NuGetLockFilePath={self.tfcps_Tools_General.get_throwaway_lock_file(self.get_codeunit_name())}"]
 
     @GeneralUtilities.check_arguments
     def __standardized_tasks_build_for_dotnet_build(self, csproj_file: str, originaloutputfolder: str, files_to_sign: dict[str, str], commitid: str, runtimes: list[str],  target_environmenttype_mapping:  dict[str, str], copy_license_file_to_target_folder: bool, repository_folder: str, codeunit_name: str) -> None:
