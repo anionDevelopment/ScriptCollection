@@ -331,6 +331,27 @@ def UpdateDependencies() -> int:
         t.update_dependencies()
         return 0
 
+def UpdateLockFilesOfDotNetCodeUnits() -> int:
+    parser = argparse.ArgumentParser(description="Restores the projects of every dotnet-codeunit of a repository and writes what was resolved into their lock-files. Run this after a dependency was changed on purpose: the build restores in locked mode and reports a project which asks for something else than its lock-file states with NU1004.")
+    parser.add_argument('-r', '--repositoryfolder', required=False, default=".", help="Folder of the repository. Defaults to the current working directory.")
+    verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
+    parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
+    args = parser.parse_args()
+    repository_folder: str = GeneralUtilities.resolve_relative_path(args.repositoryfolder, os.getcwd())
+    sc: ScriptCollectionCore = ScriptCollectionCore()
+    sc.log.loglevel = LogLevel(int(args.verbosity))
+    tools: TFCPS_Tools_General = TFCPS_Tools_General(sc)
+    amount_of_updated_codeunits: int = 0
+    for codeunit_name in tools.get_codeunits(repository_folder):
+        codeunit_folder: str = os.path.join(repository_folder, codeunit_name)
+        # a codeunit without a solution is one of another kind (an image, a frontend, ...) and has no lock-files
+        if os.path.isfile(os.path.join(codeunit_folder, f"{codeunit_name}.sln")):
+            tools.update_lock_files_of_dotnet_codeunit(codeunit_folder)
+            amount_of_updated_codeunits = amount_of_updated_codeunits+1
+    if amount_of_updated_codeunits == 0:
+        sc.log.log(f"The repository \"{repository_folder}\" contains no dotnet-codeunit, so there is no lock-file to update.", LogLevel.Warning)
+    return 0
+
 def UpdateDependenciesC() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('-r','--repositoryfolder', required=False, default=".")

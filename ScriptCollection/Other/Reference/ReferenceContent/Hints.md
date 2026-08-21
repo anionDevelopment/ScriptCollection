@@ -127,23 +127,36 @@ update anything.
 
 ### How the file is updated
 
-A change of the dependencies is meant to change the file, so the update is part of the change:
+A change of the dependencies is meant to change the file, so the update is part of the change. Run this in the
+repository whose dependency was changed:
+
+```cmd
+scupdatelockfiles
+scupdatelockfiles -r <path-to-the-repository>
+```
+
+It restores the solution of every dotnet-codeunit of the repository and writes what was resolved into the lock-file of
+every project of it. The same thing for a single codeunit and without the command is:
 
 ```cmd
 dotnet restore <codeunit>\<codeunit>.sln
 ```
 
-The restore writes the new content, and the diff of the file is what a reviewer reads: a new version, a new transitive
-package or a changed hash all appear there. Commit it together with the changed project-file.
+The diff of the file is what a reviewer reads afterwards: a new version, a new transitive package or a changed hash all
+appear there. Commit it together with the changed project-file.
 
-`scupdatedependencies` (`task bud`) does the same as part of updating the dependencies of a repository, so the file it
-leaves behind belongs to the commit of that update.
+`scupdatedependencies` (`task bud`) does this on its own at the end of updating the dependencies of a dotnet-codeunit,
+so the file it leaves behind belongs to the commit of that update. Note that nuget suggests `--force-evaluate` in the
+text of NU1004; that is only needed for a restore which runs in locked mode anyway, not for the plain restore above.
 
 Two things which are worth knowing:
 
 - **Do not delete the file to make an error go away.** Without it the restore resolves whatever a feed currently
   offers, and the build silently loses the property the file exists for. Update it, or find out why its content does
   not match anymore.
+- **The runtimes of a codeunit are stated by its project-files** (RuntimeIdentifiers), and the restore resolves the
+  dependencies of exactly those. Changing that declaration therefore changes the lock-file as well and needs the same
+  update; a build which finds a project whose runtimes the lock-file does not know reports NU1004.
 - **The line-endings of the file follow the repository.** A restore on windows writes it with CRLF while the build
   normalizes it, so the first diff after a manual restore can look like the whole file changed. `git diff
   --ignore-cr-at-eol` shows what actually differs.

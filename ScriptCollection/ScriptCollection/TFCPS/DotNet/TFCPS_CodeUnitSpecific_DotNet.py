@@ -6,7 +6,7 @@ import json
 from lxml import etree
 import yaml
 from .CertificateGeneratorInformationBase import CertificateGeneratorInformationBase
-from ...GeneralUtilities import GeneralUtilities
+from ...GeneralUtilities import GeneralUtilities, VersionEcholon
 from ...SCLog import  LogLevel
 from ..PackageSource import PackageSource
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_CodeUnitSpecific_Base_CLI
@@ -100,7 +100,30 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         return url.strip().rstrip("/").lower() == other_url.strip().rstrip("/").lower()
 
     @GeneralUtilities.check_arguments
-    def build(self,runtimes:list[str],generate_open_api_spec:bool) -> None:
+    def get_runtimes(self) -> list[str]:
+        """Returns the runtimes this codeunit is built for.
+
+        They are stated by the project-file itself (RuntimeIdentifiers). That is the one place which has to know them
+        anyway: the restore resolves the dependencies of exactly these runtimes, and an ide reads the same file. A
+        second list somewhere else could differ from it, and a build for a runtime which the project does not state has
+        no dependencies."""
+        content: str = GeneralUtilities.read_text_from_file(self.csproj_file)
+        result: list[str] = []
+        for entry in re.findall(r"<RuntimeIdentifiers>([^<]*)</RuntimeIdentifiers>", content):
+            for runtime in entry.split(";"):
+                runtime = runtime.strip()
+                # an empty entry (a superfluous semicolon for example) is stated and not skipped: it is a mistake in the
+                # declaration, and a declaration which is read differently than it is written is worse than an error.
+                GeneralUtilities.assert_condition(0 < len(runtime), f"The project \"{self.csproj_file}\" states an empty runtime in \"{entry}\".")
+                if runtime not in result:
+                    result.append(runtime)
+        if len(result) == 0:
+            raise ValueError(f"The project \"{self.csproj_file}\" does not state the runtimes it is built for. Add \"<RuntimeIdentifiers>win-x64</RuntimeIdentifiers>\" (with the runtimes of this codeunit) to the project-file.")
+        return result
+
+    @GeneralUtilities.check_arguments
+    def build(self,generate_open_api_spec:bool) -> None:
+        runtimes: list[str] = self.get_runtimes()
         if self.is_library:
             self.standardized_tasks_build_for_dotnet_library_project(runtimes)
             GeneralUtilities.assert_condition(not generate_open_api_spec,"OpenAPI-Specification can not be generated for a library.")
@@ -175,35 +198,37 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         return "packages.lock.json"
 
     @GeneralUtilities.check_arguments
-    def __get_lock_file_arguments(self, codeunit_folder: str, codeunit_name: str) -> list[str]:
-        """Returns the restore-arguments which pin the dependencies of a codeunit to the content of its lock-files.
+    def __ensure_lock_files_exist(self, codeunit_folder: str, codeunit_name: str) -> None:
+        """Creates the lock-files of the codeunit when they do not exist yet.
 
-        Locked mode is only requested when the lock-file of every project of the codeunit already exists, because a restore in
-        locked mode can not create one. A codeunit which does not have them yet is restored without it and gets a warning, so
-        introducing the lock-files does not break the build of a codeunit which was not migrated yet."""
+        The restore of the build runs in locked mode, and a restore in locked mode can not create a lock-file - it needs one.
+        A codeunit which does not have them yet (because it was just created, or because it was not migrated yet) therefore
+        gets them here, so introducing the lock-files does not break its build. They are stated as a warning, because a
+        lock-file which is not committed pins nothing on the next machine."""
         lock_file_name: str = self.__get_lock_file_name()
         expected_lock_files: list[str] = [os.path.join(codeunit_folder, project_name, lock_file_name) for project_name in [codeunit_name, codeunit_name+"Tests"]]
         missing_lock_files: list[str] = [lock_file for lock_file in expected_lock_files if not os.path.isfile(lock_file)]
-        result: list[str] = []
-        if len(missing_lock_files) == 0:
-            result.append("--locked-mode")
-        else:
-            self._protected_sc.log.log(f"The dependencies of codeunit \"{codeunit_name}\" are not restored in locked mode, because the following lock-file(s) do not exist yet: {', '.join(missing_lock_files)}. The restore creates them now; commit them so that the dependencies of this codeunit are pinned.", LogLevel.Warning)
-        return result
+        if 0 < len(missing_lock_files):
+            self._protected_sc.log.log(f"The following lock-file(s) of codeunit \"{codeunit_name}\" do not exist yet: {', '.join(missing_lock_files)}. They are created now; commit them so that the dependencies of this codeunit are pinned.", LogLevel.Warning)
+            self.tfcps_Tools_General.update_lock_files_of_dotnet_codeunit(codeunit_folder)
 
     @GeneralUtilities.check_arguments
     def __assert_projects_state_their_runtimes(self, csproj_file: str, runtimes: list[str]) -> None:
         """Ensures that the given project states the runtimes it is built for.
 
-        The build restores once without naming a runtime and builds each runtime from that result, so the project has to state
-        its runtimes itself - a restore which does not know them resolves no dependencies for them, and the build of the first
-        runtime fails with NETSDK1047, which names the assets-file and not the missing declaration. It is checked here instead,
+        The runtimes come from the project-file of the codeunit itself (see get_runtimes), so this checks the test-project:
+        it is built for the same runtimes and needs the same declaration. The build restores once without naming a runtime
+        and builds each runtime from that result - a project which does not state a runtime gets no dependencies for it and
+        fails with NETSDK1047, which names the assets-file and not the missing declaration. It is checked here instead,
         where the reason and the remedy can be stated."""
         content: str = GeneralUtilities.read_text_from_file(csproj_file)
         declared_runtimes: list[str] = re.findall(r"<RuntimeIdentifiers>([^<]*)</RuntimeIdentifiers>", content)
         declared: set[str] = set()
         for entry in declared_runtimes:
-            declared.update([runtime.strip() for runtime in entry.split(";") if 0 < len(runtime.strip())])
+            for runtime in entry.split(";"):
+                runtime = runtime.strip()
+                GeneralUtilities.assert_condition(0 < len(runtime), f"The project \"{csproj_file}\" states an empty runtime in \"{entry}\".")
+                declared.add(runtime)
         missing: list[str] = [runtime for runtime in runtimes if runtime not in declared]
         if 0 < len(missing):
             raise ValueError(f"The project \"{csproj_file}\" is built for the runtime(s) {', '.join(missing)}, but does not state them. Add \"<RuntimeIdentifiers>{';'.join(runtimes)}</RuntimeIdentifiers>\" to the project-file, so that the restore of the codeunit resolves the dependencies of these runtimes.")
@@ -228,7 +253,8 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         # ("--runtime") would narrow the project to that one runtime and contradict that file with NU1004.
         GeneralUtilities.ensure_directory_does_not_exist(os.path.join(csproj_file_folder, "obj"))
         self._protected_sc.run_program("dotnet", "clean", csproj_file_folder)
-        self._protected_sc.run_program_argsasarray("dotnet", ["restore"]+self.__get_lock_file_arguments(codeunit_folder, codeunit_name), codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
+        self.__ensure_lock_files_exist(codeunit_folder, codeunit_name)
+        self._protected_sc.run_program_argsasarray("dotnet", ["restore", "--locked-mode"], codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
         for runtime in runtimes:
             outputfolder = originaloutputfolder+runtime
             GeneralUtilities.ensure_directory_does_not_exist(outputfolder)
@@ -810,6 +836,16 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
     @GeneralUtilities.check_arguments
     def get_available_versions(self,dependencyname:str)->list[str]:
         return []#TODO
+
+    @GeneralUtilities.check_arguments
+    def update_dependencies_with_specific_echolon(self, echolon: VersionEcholon) -> None:
+        """Updates the dependencies of this codeunit and confirms the result in its lock-files.
+
+        The update changes the versions the project-files ask for, and the lock-files still state the versions which were
+        resolved before. Writing them again is part of the update: without it the next build fails with NU1004, and the
+        state of the dependencies of the codeunit would be spread over two places which do not agree."""
+        super().update_dependencies_with_specific_echolon(echolon)
+        self.tfcps_Tools_General.update_lock_files_of_dotnet_codeunit(self.get_codeunit_folder())
 
     def set_dependency_version(self,name:str,new_version:str)->None:
         raise ValueError(f"Operation is not implemented.")
