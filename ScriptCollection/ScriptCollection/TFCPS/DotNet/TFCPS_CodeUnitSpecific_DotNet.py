@@ -164,47 +164,49 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         return value
 
     @GeneralUtilities.check_arguments
-    def __get_lock_file_name(self, runtime: str) -> str:
-        """Returns the name of the lock-file which belongs to the given runtime.
+    def __get_lock_file_name(self) -> str:
+        """Returns the name of the lock-file of a project.
 
-        Every runtime needs its own lock-file: the lock-file records the set of runtime-identifiers it was created for, and a
-        restore in locked mode fails with NU1004 when that set differs from the one which is currently restored (the restore
-        gets exactly one runtime via "--runtime"). The name is relative, so NuGet resolves it per project - a restore over the
-        solution therefore creates one lock-file next to each of the two project-files instead of letting them collide."""
-        return f"packages.{runtime}.lock.json"
+        There is exactly one, and it carries the name nuget uses on its own. A codeunit is built for more than one runtime, but
+        the runtime is not part of the restore anymore: the projects state their runtimes (see
+        __assert_projects_state_their_runtimes), so one restore resolves all of them and writes one lock-file which knows all of
+        them. Every operation - the build, the linting, the testcases, the reference, and a developer who builds in an ide -
+        therefore reads and writes the same file, and none of them has to be kept away from it."""
+        return "packages.lock.json"
 
     @GeneralUtilities.check_arguments
-    def __get_lock_file_arguments(self, codeunit_folder: str, codeunit_name: str, runtime: str) -> list[str]:
-        """Returns the restore-arguments which pin the dependencies of the given runtime to the content of its lock-files.
+    def __get_lock_file_arguments(self, codeunit_folder: str, codeunit_name: str) -> list[str]:
+        """Returns the restore-arguments which pin the dependencies of a codeunit to the content of its lock-files.
 
         Locked mode is only requested when the lock-file of every project of the codeunit already exists, because a restore in
         locked mode can not create one. A codeunit which does not have them yet is restored without it and gets a warning, so
         introducing the lock-files does not break the build of a codeunit which was not migrated yet."""
-        lock_file_name: str = self.__get_lock_file_name(runtime)
+        lock_file_name: str = self.__get_lock_file_name()
         expected_lock_files: list[str] = [os.path.join(codeunit_folder, project_name, lock_file_name) for project_name in [codeunit_name, codeunit_name+"Tests"]]
         missing_lock_files: list[str] = [lock_file for lock_file in expected_lock_files if not os.path.isfile(lock_file)]
-        result: list[str] = [f"-p:NuGetLockFilePath={lock_file_name}"]
+        result: list[str] = []
         if len(missing_lock_files) == 0:
             result.append("--locked-mode")
         else:
-            self._protected_sc.log.log(f"The dependencies of codeunit \"{codeunit_name}\" are not restored in locked mode for the runtime \"{runtime}\", because the following lock-file(s) do not exist yet: {', '.join(missing_lock_files)}. The restore creates them now; commit them so that the dependencies of this codeunit are pinned.", LogLevel.Warning)
+            self._protected_sc.log.log(f"The dependencies of codeunit \"{codeunit_name}\" are not restored in locked mode, because the following lock-file(s) do not exist yet: {', '.join(missing_lock_files)}. The restore creates them now; commit them so that the dependencies of this codeunit are pinned.", LogLevel.Warning)
         return result
 
     @GeneralUtilities.check_arguments
-    def __get_arguments_which_prevent_writing_a_lock_file(self) -> list[str]:
-        """Returns the arguments which keep a dotnet-operation from writing a lock-file into the codeunit.
+    def __assert_projects_state_their_runtimes(self, csproj_file: str, runtimes: list[str]) -> None:
+        """Ensures that the given project states the runtimes it is built for.
 
-        The lock-files belong to the restore of the build alone, because only there the runtime - and with it the name of the
-        lock-file which belongs to that runtime - is known. Every other dotnet-operation of a codeunit (linting, test, ...)
-        works on the solution instead of on one runtime and restores implicitly, and the csproj-property
-        "RestorePackagesWithLockFile" would make each of those restores write a lock-file under the default-name next to the
-        runtime-specific ones.
-        The lock-file of those operations is therefore pointed at a throwaway-path outside of the repository. Switching the
-        property off instead does not work: nuget rejects a restore with NU1005 as soon as a lock-file under the default-name
-        exists, which is exactly the case this has to survive (a developer who ran "dotnet build" once has such a file). The
-        value has to be passed on the command-line, because a property which the project-file sets explicitly wins over one
-        which comes from the environment."""
-        return [f"-p:NuGetLockFilePath={self.tfcps_Tools_General.get_throwaway_lock_file(self.get_codeunit_name())}"]
+        The build restores once without naming a runtime and builds each runtime from that result, so the project has to state
+        its runtimes itself - a restore which does not know them resolves no dependencies for them, and the build of the first
+        runtime fails with NETSDK1047, which names the assets-file and not the missing declaration. It is checked here instead,
+        where the reason and the remedy can be stated."""
+        content: str = GeneralUtilities.read_text_from_file(csproj_file)
+        declared_runtimes: list[str] = re.findall(r"<RuntimeIdentifiers>([^<]*)</RuntimeIdentifiers>", content)
+        declared: set[str] = set()
+        for entry in declared_runtimes:
+            declared.update([runtime.strip() for runtime in entry.split(";") if 0 < len(runtime.strip())])
+        missing: list[str] = [runtime for runtime in runtimes if runtime not in declared]
+        if 0 < len(missing):
+            raise ValueError(f"The project \"{csproj_file}\" is built for the runtime(s) {', '.join(missing)}, but does not state them. Add \"<RuntimeIdentifiers>{';'.join(runtimes)}</RuntimeIdentifiers>\" to the project-file, so that the restore of the codeunit resolves the dependencies of these runtimes.")
 
     @GeneralUtilities.check_arguments
     def __standardized_tasks_build_for_dotnet_build(self, csproj_file: str, originaloutputfolder: str, files_to_sign: dict[str, str], commitid: str, runtimes: list[str],  target_environmenttype_mapping:  dict[str, str], copy_license_file_to_target_folder: bool, repository_folder: str, codeunit_name: str) -> None:
@@ -220,13 +222,17 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         GeneralUtilities.ensure_directory_exists(sarif_folder)
         gitkeep_file = os.path.join(sarif_folder, ".gitkeep")
         GeneralUtilities.ensure_file_exists(gitkeep_file)
+        self.__assert_projects_state_their_runtimes(csproj_file, runtimes)
+        # One restore for all runtimes, before the first of them is built: the projects state their runtimes, so this restore
+        # resolves the dependencies of every one of them and writes one lock-file which knows them all. A restore per runtime
+        # ("--runtime") would narrow the project to that one runtime and contradict that file with NU1004.
+        GeneralUtilities.ensure_directory_does_not_exist(os.path.join(csproj_file_folder, "obj"))
+        self._protected_sc.run_program("dotnet", "clean", csproj_file_folder)
+        self._protected_sc.run_program_argsasarray("dotnet", ["restore"]+self.__get_lock_file_arguments(codeunit_folder, codeunit_name), codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
         for runtime in runtimes:
             outputfolder = originaloutputfolder+runtime
-            GeneralUtilities.ensure_directory_does_not_exist(os.path.join(csproj_file_folder, "obj"))
             GeneralUtilities.ensure_directory_does_not_exist(outputfolder)
-            self._protected_sc.run_program("dotnet", "clean", csproj_file_folder)
             GeneralUtilities.ensure_directory_exists(outputfolder)
-            self._protected_sc.run_program_argsasarray("dotnet", ["restore", "--runtime", runtime]+self.__get_lock_file_arguments(codeunit_folder, codeunit_name, runtime), codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
             self._protected_sc.run_program_argsasarray("dotnet", ["build", "--no-restore", csproj_file_name, "-c", dotnet_build_configuration, "-o", outputfolder, "--runtime", runtime], csproj_file_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
             if copy_license_file_to_target_folder:
                 license_file = os.path.join(repository_folder, "License.txt")
@@ -249,26 +255,24 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
                 sarif_target_file = os.path.join(sarif_folder_target, sarif_filename)
                 GeneralUtilities.ensure_file_does_not_exist(sarif_target_file)
                 shutil.copyfile(sarif_source_file, sarif_target_file)
-            # The lock-file of this runtime becomes a part of the build-result: it states which version of which package
-            # the build actually used, which is what makes it possible to reproduce a build later or to check an
-            # artifact against a vulnerability afterwards. The working-copy keeps its own lock-file, so this is a copy
-            # and not a move.
-            # It is copied into a folder per project, because the name of the file only contains the runtime while a
-            # codeunit builds more than one project (itself and its test-project) for the same runtime, so a flat folder
-            # would let the second project overwrite the file of the first one. The name of the file itself stays
-            # unchanged, because it is the name nuget expects and a consumer of the artifact reads the runtime from it.
-            lock_file = os.path.join(csproj_file_folder, self.__get_lock_file_name(runtime))
-            if os.path.isfile(lock_file):
-                lock_file_folder_target = os.path.join(codeunit_folder, "Other", "Artifacts", "PackagesLock", csproj_file_name_without_extension)
-                GeneralUtilities.ensure_directory_exists(lock_file_folder_target)
-                lock_file_target = os.path.join(lock_file_folder_target, os.path.basename(lock_file))
-                GeneralUtilities.ensure_file_does_not_exist(lock_file_target)
-                shutil.copyfile(lock_file, lock_file_target)
-            else:
-                # The restore which ran above creates the file whenever the project demands one (see
-                # __get_lock_file_arguments), so a missing file means the project does not set
-                # RestorePackagesWithLockFile - and then the build-result does not state which versions it used.
-                self._protected_sc.log.log(f"The lock-file \"{lock_file}\" does not exist, so the build-result of \"{csproj_file_name_without_extension}\" does not contain the versions which were used for the runtime \"{runtime}\".", LogLevel.Warning)
+        # The lock-file becomes a part of the build-result: it states which version of which package the build actually used,
+        # which is what makes it possible to reproduce a build later or to check an artifact against a vulnerability
+        # afterwards. It covers every runtime which was built, so it is copied once and not per runtime. The working-copy
+        # keeps its own lock-file, so this is a copy and not a move.
+        # The target is a folder per project, because every project of the codeunit has a lock-file of the same name and a
+        # flat folder would let the second project overwrite the file of the first one.
+        lock_file = os.path.join(csproj_file_folder, self.__get_lock_file_name())
+        if os.path.isfile(lock_file):
+            lock_file_folder_target = os.path.join(codeunit_folder, "Other", "Artifacts", "PackagesLock", csproj_file_name_without_extension)
+            GeneralUtilities.ensure_directory_exists(lock_file_folder_target)
+            lock_file_target = os.path.join(lock_file_folder_target, os.path.basename(lock_file))
+            GeneralUtilities.ensure_file_does_not_exist(lock_file_target)
+            shutil.copyfile(lock_file, lock_file_target)
+        else:
+            # The restore which ran above creates the file whenever the project demands one (see __get_lock_file_arguments),
+            # so a missing file means the project does not set RestorePackagesWithLockFile - and then the build-result does
+            # not state which versions it used.
+            self._protected_sc.log.log(f"The lock-file \"{lock_file}\" does not exist, so the build-result of \"{csproj_file_name_without_extension}\" does not contain the versions which were used.", LogLevel.Warning)
 
     @GeneralUtilities.check_arguments
     def standardized_tasks_build_for_dotnet_project(self,runtimes:list[str]) -> None:
@@ -356,8 +360,6 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         bomfile_folder = "Other/Artifacts/BOM"
         # "-dpr" keeps CycloneDX from restoring the project itself. The SBOM is generated directly after the project and its
         # test-project were built, so the dependencies are restored and the assets-file CycloneDX reads is up-to-date already.
-        # Its restore would also not be able to name the lock-file of the runtime the build used, so it would write one under
-        # the default-name (see __get_arguments_which_prevent_writing_a_lock_file).
         self._protected_sc.run_program_argsasarray("dotnet", ["CycloneDX", f"{codeunit_name}/{codeunit_name}.csproj", "-o", bomfile_folder, "-dpr"], codeunit_folder)
         codeunitversion = self.tfcps_Tools_General.get_version_of_codeunit(os.path.join(codeunit_folder, f"{codeunit_name}.codeunit.xml"))
         target = f"{codeunit_folder}/{bomfile_folder}/{codeunit_name}.{codeunitversion}.sbom.xml"
@@ -390,7 +392,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             # begin with a drive-letter anymore) and resolves against the working-directory, so it writes to a path
             # which contains a quote in the middle. On Linux that only creates a strangely named folder, on Windows a
             # quote is not allowed in a path and the msbuild-task GenerateDepsFile fails with an IOException.
-            run_result = self._protected_sc.run_program_argsasarray("dotnet", ["build", sln_file, "-nologo", "-v", "minimal", "-o", temp_output_folder]+self.__get_arguments_which_prevent_writing_a_lock_file(), temp_output_folder, throw_exception_if_exitcode_is_not_zero=False, env_vars={"DOTNET_CLI_UI_LANGUAGE": "en-US", "MSBUILDDISABLENODEREUSE": "1"})
+            run_result = self._protected_sc.run_program_argsasarray("dotnet", ["build", sln_file, "-nologo", "-v", "minimal", "-o", temp_output_folder], temp_output_folder, throw_exception_if_exitcode_is_not_zero=False, env_vars={"DOTNET_CLI_UI_LANGUAGE": "en-US", "MSBUILDDISABLENODEREUSE": "1"})
         finally:
             GeneralUtilities.ensure_directory_does_not_exist(temp_output_folder)
         diagnostics: list[tuple[LogLevel, str, str | None, int | None]] = []
@@ -527,6 +529,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         regex = f"""^<Project Sdk=\\"Microsoft\\.NET\\.Sdk\\">
   <PropertyGroup>
     <TargetFramework>([^<]+)<\\/TargetFramework>
+    <RuntimeIdentifiers>([^<]+)<\\/RuntimeIdentifiers>
     <Authors>([^<]+)<\\/Authors>
     <Version>{codeunit_version_regex}<\\/Version>
     <AssemblyVersion>{codeunit_version_regex}<\\/AssemblyVersion>
@@ -593,6 +596,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         regex = f"""^<Project Sdk=\\"Microsoft\\.NET\\.Sdk\\">
   <PropertyGroup>
     <TargetFramework>([^<]+)<\\/TargetFramework>
+    <RuntimeIdentifiers>([^<]+)<\\/RuntimeIdentifiers>
     <Authors>([^<]+)<\\/Authors>
     <Version>{codeunit_version_regex}<\\/Version>
     <AssemblyVersion>{codeunit_version_regex}<\\/AssemblyVersion>
@@ -685,11 +689,10 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
     def _protected_restore_projects_for_the_metadata_of_docfx(self) -> None:
         """Restores the projects of this codeunit, so that docfx can read them without restoring them itself.
 
-        The reference is generated from the sourcecode and not for one runtime, so this restore knows no runtime either and
-        its lock-file is pointed at the throwaway-path like the one of every other operation of that kind (see
-        __get_arguments_which_prevent_writing_a_lock_file). The restore is done here and not left to docfx, because the
-        reference of a codeunit can also be generated on its own, without a build before it."""
-        self._protected_sc.run_program_argsasarray("dotnet", ["restore"]+self.__get_arguments_which_prevent_writing_a_lock_file(), self.get_codeunit_folder(), print_live_output=self.get_verbosity() == LogLevel.Debug)
+        Like every restore of a codeunit this one names no runtime, so it writes the same lock-file the build reads and there
+        is nothing to keep it away from. The restore is done here and not left to docfx, because docfx is called with
+        "--noRestore" and because the reference of a codeunit can also be generated on its own, without a build before it."""
+        self._protected_sc.run_program_argsasarray("dotnet", ["restore"], self.get_codeunit_folder(), print_live_output=self.get_verbosity() == LogLevel.Debug)
 
     @GeneralUtilities.check_arguments
     def generate_reference(self, generate_class_reference:bool=False) -> None:
@@ -725,7 +728,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         GeneralUtilities.ensure_file_does_not_exist(target_file)
 
         sln_file = os.path.join(codeunit_folder, f"{codeunit_name}.sln")
-        args: list[str] = ["test", sln_file, "-c", dotnet_build_configuration, "-o", temp_folder]+self.__get_arguments_which_prevent_writing_a_lock_file()
+        args: list[str] = ["test", sln_file, "-c", dotnet_build_configuration, "-o", temp_folder]
         runsettings_path = os.path.join(codeunit_folder, runsettings_file)
         if os.path.isfile(runsettings_path):
             args += ["--settings", runsettings_path]
