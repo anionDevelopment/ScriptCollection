@@ -1877,6 +1877,23 @@ class TFCPS_Tools_General:
         self.__sc.run_program_argsasarray("gh", ["release", "create", f"v{projectversion}", "--repo",  github_repo, "--notes-file", changelog_file, "--title", f"Release v{projectversion}"]+artifact_files)
 
     @GeneralUtilities.check_arguments
+    def update_lock_files_of_dotnet_codeunit(self, codeunit_folder: str) -> None:
+        """Restores the projects of the given dotnet-codeunit and writes what was resolved into their lock-files.
+
+        This is how a changed dependency is confirmed: the build restores in locked mode, which resolves exactly what the
+        lock-files state and fails with NU1004 as soon as the project asks for something else. A dependency which was
+        changed on purpose therefore needs this - it says "this is the new state" - and the changed lock-files belong to
+        the commit of that change.
+        No runtime is named, so the restore resolves the runtimes which the projects state and writes one lock-file per
+        project which covers all of them."""
+        codeunit_name: str = os.path.basename(codeunit_folder)
+        sln_file: str = os.path.join(codeunit_folder, f"{codeunit_name}.sln")
+        if not os.path.isfile(sln_file):
+            raise ValueError(f"The codeunit-folder \"{codeunit_folder}\" does not contain the solution \"{codeunit_name}.sln\", so it is no dotnet-codeunit whose lock-files could be updated.")
+        self.__sc.log.log(f"Update the lock-files of codeunit \"{codeunit_name}\"...")
+        self.__sc.run_program_argsasarray("dotnet", ["restore", sln_file], codeunit_folder)
+
+    @GeneralUtilities.check_arguments
     def get_dependency_version_in_resources_folder(self, resources_folder:str, dependency_name: str) ->str:
         dependency_folder = os.path.join(resources_folder, "Dependencies", dependency_name)
         version_file = os.path.join(dependency_folder, "Version.txt")
