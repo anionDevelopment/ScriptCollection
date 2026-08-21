@@ -682,6 +682,16 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         return result
 
     @GeneralUtilities.check_arguments
+    def _protected_restore_projects_for_the_metadata_of_docfx(self) -> None:
+        """Restores the projects of this codeunit, so that docfx can read them without restoring them itself.
+
+        The reference is generated from the sourcecode and not for one runtime, so this restore knows no runtime either and
+        its lock-file is pointed at the throwaway-path like the one of every other operation of that kind (see
+        __get_arguments_which_prevent_writing_a_lock_file). The restore is done here and not left to docfx, because the
+        reference of a codeunit can also be generated on its own, without a build before it."""
+        self._protected_sc.run_program_argsasarray("dotnet", ["restore"]+self.__get_arguments_which_prevent_writing_a_lock_file(), self.get_codeunit_folder(), print_live_output=self.get_verbosity() == LogLevel.Debug)
+
+    @GeneralUtilities.check_arguments
     def generate_reference(self, generate_class_reference:bool=False) -> None:
         self.generate_reference_using_docfx(generate_class_reference)
 
