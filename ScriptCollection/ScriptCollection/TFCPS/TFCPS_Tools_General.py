@@ -1877,6 +1877,21 @@ class TFCPS_Tools_General:
         self.__sc.run_program_argsasarray("gh", ["release", "create", f"v{projectversion}", "--repo",  github_repo, "--notes-file", changelog_file, "--title", f"Release v{projectversion}"]+artifact_files)
 
     @GeneralUtilities.check_arguments
+    def get_throwaway_lock_file(self, codeunit_name: str) -> str:
+        """Returns the path of a lock-file whose content is not used by anybody.
+
+        Every dotnet-operation of a codeunit restores, and a project which demands a lock-file (see the property
+        RestorePackagesWithLockFile) makes each of those restores write one. Only the restore of the build knows which
+        runtime it restores for and therefore which lock-file belongs to the result; every other operation would write
+        one under the default-name next to it, which is not validated against anything and only looks like the relevant
+        pinning. Those operations are therefore pointed at this path instead.
+        The path is not inside the repository, so the operations leave nothing behind there, and it contains the name of
+        the codeunit, so two codeunits which are built at the same time do not write to the same file."""
+        folder = os.path.join(GeneralUtilities.get_temp_folder(), "ScriptCollection", "ThrowawayLockFiles", codeunit_name)
+        GeneralUtilities.ensure_directory_exists(folder)
+        return os.path.join(folder, "packages.lock.json")
+
+    @GeneralUtilities.check_arguments
     def get_dependency_version_in_resources_folder(self, resources_folder:str, dependency_name: str) ->str:
         dependency_folder = os.path.join(resources_folder, "Dependencies", dependency_name)
         version_file = os.path.join(dependency_folder, "Version.txt")
