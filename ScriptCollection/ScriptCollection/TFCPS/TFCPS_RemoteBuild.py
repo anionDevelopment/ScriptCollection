@@ -45,6 +45,11 @@ class TFCPS_RemoteBuild:
         self.__sc = sc
 
     @GeneralUtilities.check_arguments
+    def has_any_runner_configured(self) -> bool:
+        """Whether at least one remote-build-runner is configured (see run_program_on_runner)."""
+        return len(self.__load_runner_endpoints()) > 0
+
+    @GeneralUtilities.check_arguments
     def run_program_on_runner(self, required_os: RunnerOperatingSystem, repository_folder: str, codeunit_name: str, program: str, arguments: list[str], working_directory: str, poll_interval_in_seconds: int = 3, timeout_in_seconds: int = 60*60) -> None:
         endpoints = self.__load_runner_endpoints()
         if len(endpoints) == 0:
