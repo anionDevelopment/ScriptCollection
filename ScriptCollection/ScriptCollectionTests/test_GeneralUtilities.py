@@ -208,6 +208,30 @@ class GeneralUtilitiesTests(unittest.TestCase):
     def test_float_to_string(self) -> None:
         assert GeneralUtilities.float_to_string(2.39, 2, 5) == "02.39000"
 
+    @unittest.skipUnless(GeneralUtilities.current_system_is_windows(), "Windows only")
+    def test_normalize_path_collapses_repeated_separators_but_preserves_unc_prefix_windows(self) -> None:
+        # arrange
+        test_input = "//server//path/"
+        expected = "\\\\server\\path\\"
+
+        # act
+        actual = GeneralUtilities.normalize_path(test_input)
+
+        # assert
+        assert actual == expected
+
+    @unittest.skipUnless(not GeneralUtilities.current_system_is_windows(), "Linux only")
+    def test_normalize_path_collapses_repeated_separators_but_preserves_unc_prefix_linux(self) -> None:
+        # arrange
+        test_input = "\\\\server\\\\path\\"
+        expected = "//server/path/"
+
+        # act
+        actual = GeneralUtilities.normalize_path(test_input)
+
+        # assert
+        assert actual == expected
+
     def test_datetime_to_string_for_logfile_name_with_milliseconds(self) -> None:
         # arrange
         input_value = datetime(2025, 9, 2, 20, 30, 5, 123, tzinfo=timezone(timedelta(hours=2)))

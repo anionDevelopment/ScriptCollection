@@ -425,7 +425,10 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
     def copy_source_files_to_output_directory(self) -> None:
         self._protected_sc.log.log("Copy sourcecode...")
         codeunit_folder =self.get_codeunit_folder()
-        result = self._protected_sc.run_program_argsasarray("git", ["ls-tree", "-r", "HEAD", "--name-only"], codeunit_folder)
+        # "git ls-files" (unlike "git ls-tree -r HEAD --name-only") reads the index, so a file which is staged but not
+        # yet committed is recognized here too - a freshly scaffolded codeunit which was only "git add"ed still gets a
+        # SourceCode-artifact instead of an empty one.
+        result = self._protected_sc.run_program_argsasarray("git", ["ls-files"], codeunit_folder)
         files = [f for f in result[1].split('\n') if len(f) > 0]
         for file in files:
             full_source_file = os.path.join(codeunit_folder, file)

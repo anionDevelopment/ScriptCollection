@@ -90,8 +90,17 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
         #TODO call the flutter-linting here when available
 
     @GeneralUtilities.check_arguments
-    def do_common_tasks(self,current_codeunit_version:str )-> None:
+    def do_common_tasks(self,current_codeunit_version:str,package_name:str=None )-> None:
         self.do_common_tasks_base(current_codeunit_version)
+        if package_name is not None:
+            # The codeunit-version is the single source of truth for the version of a flutter/dart-codeunit, so the
+            # version of its package (which pub itself never derives from anything else) has to be kept in sync with it.
+            repository_folder = self.get_repository_folder()
+            version = current_codeunit_version if current_codeunit_version is not None else self.tfcps_Tools_General.get_version_of_project(repository_folder)
+            pubspec_file = os.path.join(self.get_codeunit_folder(), package_name, "pubspec.yaml")
+            content = GeneralUtilities.read_text_from_file(pubspec_file)
+            content = re.sub(r"(?m)^version:.*$", f"version: {version}", content, count=1)
+            GeneralUtilities.write_text_to_file(pubspec_file, content)
 
     @GeneralUtilities.check_arguments
     def generate_reference(self) -> None:
