@@ -1,11 +1,12 @@
 import os
+import platform
 import shutil
 import re
 import zipfile
 from ...GeneralUtilities import GeneralUtilities
 from ...SCLog import  LogLevel
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_CodeUnitSpecific_Base_CLI
-from ..TFCPS_RemoteBuild import RunnerOperatingSystem
+from ..TFCPS_RemoteBuild import TFCPS_RemoteBuild, RunnerOperatingSystem
 
 class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
  
@@ -40,9 +41,17 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                 GeneralUtilities.ensure_directory_exists(web_folder)
                 GeneralUtilities.copy_content_of_folder(web_relase_folder, web_folder)
             elif target == "windows":
-                # Windows-builds always run on a Windows-task-runner - even when building on a Windows-client - so that all
-                # builds are produced uniformly in the same defined environment. See the remote-build-article in the reference.
-                self.run_program_on_remote_runner(RunnerOperatingSystem.Windows, "flutter", ["build", "windows"], src_folder)
+                # Windows-builds prefer a Windows-task-runner - even when building on a Windows-client - so that all builds
+                # are produced uniformly in the same defined environment. See the remote-build-article in the reference. If
+                # no runner is configured, fall back to building locally (only possible when already running on Windows)
+                # instead of failing, so a development machine without a configured runner is not blocked.
+                if platform.system() == "Windows" and not TFCPS_RemoteBuild(self._protected_sc).has_any_runner_configured():
+                    self._protected_sc.log.log("No remote-build-runner is configured; building the windows-target locally "
+                                                "instead. This build is not guaranteed to be produced in the same uniform "
+                                                "environment as a runner-built one.", LogLevel.Warning)
+                    self._protected_sc.run_with_epew("flutter", "build windows", src_folder)
+                else:
+                    self.run_program_on_remote_runner(RunnerOperatingSystem.Windows, "flutter", ["build", "windows"], src_folder)
                 windows_release_folder = os.path.join(src_folder, "build/windows/x64/runner/Release")
                 windows_folder = os.path.join(artifacts_folder, "BuildResult_Windows")
                 GeneralUtilities.ensure_directory_does_not_exist(windows_folder)
@@ -82,6 +91,17 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
             else:
                 raise ValueError(f"Not supported target: {target}")
         self.copy_source_files_to_output_directory()
+        if len(targets) == 0:
+            # A pure Dart/Flutter library codeunit (no platform target) has no compiled artifact of its own, but
+            # TFCPS_CodeUnit_BuildCodeUnit.build_codeunit() requires a 'BuildResult_.+'-matching artifact for every
+            # codeunit. Publish a copy of the SourceCode-artifact under a BuildResult_-name to satisfy that generic
+            # check instead of weakening it for every codeunit type. The SourceCode-artifact folder itself keeps its
+            # name unchanged because the DependentCodeUnits-convention (see the reference) already relies on it.
+            source_code_folder = os.path.join(artifacts_folder, "SourceCode")
+            build_result_source_code_folder = os.path.join(artifacts_folder, "BuildResult_SourceCode")
+            GeneralUtilities.ensure_directory_does_not_exist(build_result_source_code_folder)
+            GeneralUtilities.ensure_directory_exists(build_result_source_code_folder)
+            GeneralUtilities.copy_content_of_folder(source_code_folder, build_result_source_code_folder)
 
     @GeneralUtilities.check_arguments
     def linting(self) -> None:
