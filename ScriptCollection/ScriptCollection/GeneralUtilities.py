@@ -1400,10 +1400,21 @@ class GeneralUtilities:
         path=str(path)
         path=os.path.expandvars(path)
         if GeneralUtilities.current_system_is_windows():
-            path=path.replace("/","\\")
+            path=GeneralUtilities.__sanitize(path.replace("/","\\"),"\\")
         else:
-            path=path.replace("\\","/")
+            path=GeneralUtilities.__sanitize(path.replace("\\","/"),"/")
         return path
+    
+    @staticmethod
+    @check_arguments
+    def __sanitize(string:str,separator:str) -> str:
+        first_non_separator_index = 0
+        while first_non_separator_index < len(string) and string[first_non_separator_index] == separator:
+            first_non_separator_index = first_non_separator_index + 1
+        prefix = string[:first_non_separator_index]
+        suffix = string[first_non_separator_index:]
+        suffix = re.sub(re.escape(separator) + r"{2,}", lambda _: separator, suffix)
+        return prefix + suffix
     
     @staticmethod
     @check_arguments
