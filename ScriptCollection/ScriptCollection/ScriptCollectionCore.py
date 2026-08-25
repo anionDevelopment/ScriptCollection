@@ -39,7 +39,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.14"
+version = "4.4.15"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -4441,9 +4441,11 @@ OCR-content:
         GeneralUtilities.assert_condition(self.is_running_in_build_container(), "This function should only be run in the build container.")
         
         expected_image = self.__get_scbuilder_image_from_image_definition_file(repository_folder)
-        minimal_required_scbuilder_version = Version("1.2.8")#the preparation-steps below require at least this SCBuilder-version
-        defined_scbuilder_version = self.__get_version_of_scbuilder_image(expected_image)#TODO remove this check after 2026-12-31
-        GeneralUtilities.assert_condition(defined_scbuilder_version >= minimal_required_scbuilder_version, f"The SCBuilder-version {defined_scbuilder_version} defined in the image-definition-file of the repository is older than the minimal required version {minimal_required_scbuilder_version}. Please update the SCBuilder-image.")
+        GeneralUtilities.assert_condition("scbuilder:" in expected_image, f"The SCBuilder-image '{expected_image}' defined in the image-definition-file of the repository is not a valid SCBuilder-image. It must contain 'scbuilder:'.")
+        if not expected_image.endswith(":latest"):
+            minimal_required_scbuilder_version = Version("1.2.9")#the preparation-steps below require at least this SCBuilder-version
+            defined_scbuilder_version = self.__get_version_of_scbuilder_image(expected_image)#TODO remove this check after 2026-12-31
+            GeneralUtilities.assert_condition(defined_scbuilder_version >= minimal_required_scbuilder_version, f"The SCBuilder-version {defined_scbuilder_version} defined in the image-definition-file of the repository is older than the minimal required version {minimal_required_scbuilder_version}. Please update the SCBuilder-image.")
 
         self.run_program("update-ca-certificates")
         self.run_program_argsasarray("sh",["-c","docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder"])
