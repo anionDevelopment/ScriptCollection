@@ -113,11 +113,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             if self.sc.is_runnning_in_container():
                 scbuilder_version_environment_value = os.environ.get("SCBuilderVersion")
                 GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(scbuilder_version_environment_value), "The environment-variable 'SCBuilderVersion' is not set although the build runs inside a container (environment-variable 'ISRUNNINGINCONTAINER' is 'true').")
-                required_scbuilder_version = Version(self.tfcps_tools_general.oci_image_manager.get_tag_for_image(self.repository, "SCBuilder"))
-                version_match = re.search(r"\d+(\.\d+)+", scbuilder_version_environment_value)
-                GeneralUtilities.assert_condition(version_match is not None, f"The environment-variable 'SCBuilderVersion' (value: '{scbuilder_version_environment_value}') does not contain a version-string.")
-                actual_scbuilder_version = Version(version_match.group(0))
-                GeneralUtilities.assert_condition(actual_scbuilder_version >= required_scbuilder_version, f"The used SCBuilder-version {actual_scbuilder_version} is older than the version {required_scbuilder_version} required by '{self.tfcps_tools_general.get_product_name(self.repository)}' (defined in .ScriptCollection/OCIImages/ImageDefinition.csv). Please update to a newer SCBuilder-image.")
+                scbuilder_tag=self.tfcps_tools_general.oci_image_manager.get_tag_for_image(self.repository, "SCBuilder")
+                if scbuilder_tag!="latest":
+                    required_scbuilder_version = Version(scbuilder_tag)
+                    version_match = re.search(r"\d+(\.\d+)+", scbuilder_version_environment_value)
+                    GeneralUtilities.assert_condition(version_match is not None, f"The environment-variable 'SCBuilderVersion' (value: '{scbuilder_version_environment_value}') does not contain a version-string.")
+                    actual_scbuilder_version = Version(version_match.group(0))
+                    GeneralUtilities.assert_condition(actual_scbuilder_version >= required_scbuilder_version, f"The used SCBuilder-version {actual_scbuilder_version} is older than the version {required_scbuilder_version} required by '{self.tfcps_tools_general.get_product_name(self.repository)}' (defined in .ScriptCollection/OCIImages/ImageDefinition.csv). Please update to a newer SCBuilder-image.")
             
             if self.is_pre_merge():
                 GeneralUtilities.assert_condition(not self.__assert_no_new_changes,f"A pre-merge build can not be done with the assert-no-new-changes-option.")
