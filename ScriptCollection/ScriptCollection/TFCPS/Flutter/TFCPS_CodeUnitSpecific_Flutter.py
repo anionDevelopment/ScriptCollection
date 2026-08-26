@@ -145,12 +145,24 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
         content = GeneralUtilities.read_text_from_file(coverage_file)
         content = re.sub('<![^<]+>', '', content)
         content = re.sub('\\\\', '/', content)
-        content = re.sub('\\ name=\\"lib\\"', '', content)
+        content = self.__rewrite_flutter_coverage_package_names(content, codeunit_name)
         content = re.sub('\\ filename=\\"lib/', f' filename="{package_name}/lib/', content)
         GeneralUtilities.write_text_to_file(coverage_file, content)
-        self.tfcps_Tools_General.merge_packages(coverage_file, self.get_codeunit_name())
+        self.tfcps_Tools_General.merge_packages(coverage_file, codeunit_name)
         self.tfcps_Tools_General.calculate_entire_line_rate(coverage_file)
         self.run_testcases_common_post_task(repository_folder, codeunit_name, True, self.get_target_environment_type())
+
+    @staticmethod
+    def __rewrite_flutter_coverage_package_names(cobertura_xml_content:str,codeunit_name:str) -> str:
+        """lcov_cobertura names a package after its source-subfolder relative to "lib" (for example "lib" itself
+        for a file directly in "lib", "lib.chess" for a file in "lib/chess"), which has nothing to do with the
+        codeunit-name. TFCPS_Tools_General.merge_packages expects every package of this coverage-file to equal the
+        codeunit-name or to be dotted below it, so every "lib"-prefix is rewritten to the codeunit-name here
+        instead: "lib" becomes "<codeunit-name>", "lib.chess" becomes "<codeunit-name>.chess". Without this,
+        merge_packages either keeps nothing (a Flutter-codeunit's packages never actually match the codeunit-name)
+        or - once the codeunit's lib-folder has only that single, unprefixed "lib"-package - crashes outright,
+        because merge_packages is not the only caller which expects every package to have a name."""
+        return re.sub(r' name="lib(\.[^"]*)?"', lambda match: f' name="{codeunit_name}{match.group(1) or ""}"', cobertura_xml_content)
     
     
     def get_dependencies(self)->dict[str,set[str]]:

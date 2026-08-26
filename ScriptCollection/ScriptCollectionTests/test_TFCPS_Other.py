@@ -8,6 +8,15 @@ from ..ScriptCollection.SCLog import LogLevel
 from ..ScriptCollection.TFCPS.TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base
 from ..ScriptCollection.TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
 from ..ScriptCollection.TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
+from ..ScriptCollection.TFCPS.Flutter.TFCPS_CodeUnitSpecific_Flutter import TFCPS_CodeUnitSpecific_Flutter_Functions
+
+
+def rewrite_flutter_coverage_package_names(cobertura_xml_content: str, codeunit_name: str) -> str:
+    """Calls the private TFCPS_CodeUnitSpecific_Flutter_Functions.__rewrite_flutter_coverage_package_names for a test,
+    the same way generate_toc_md_file_content_for_toc_yml_content above accesses another private method."""
+    # pylint:disable=protected-access
+    rewrite = TFCPS_CodeUnitSpecific_Flutter_Functions._TFCPS_CodeUnitSpecific_Flutter_Functions__rewrite_flutter_coverage_package_names
+    return rewrite(cobertura_xml_content, codeunit_name)
 
 
 def generate_toc_md_file_content_for_toc_yml_content(toc_yml_content: str) -> str:
@@ -562,3 +571,61 @@ items:
 
         # assert
         assert expected_result == actual_result
+
+    def test_rewrite_flutter_coverage_package_names_renames_the_root_package(self) -> None:
+        # arrange
+        cobertura_xml_content = '<packages><package line-rate="1.0" name="lib" complexity="0"><classes/></package></packages>'
+
+        # act
+        actual_result = rewrite_flutter_coverage_package_names(cobertura_xml_content, "AthenaTournamentManager")
+
+        # assert
+        self.assertIn(' name="AthenaTournamentManager"', actual_result)
+        self.assertNotIn(' name="lib"', actual_result)
+
+    def test_rewrite_flutter_coverage_package_names_renames_a_subfolder_package(self) -> None:
+        # arrange
+        cobertura_xml_content = '<packages><package line-rate="1.0" name="lib.chess" complexity="0"><classes/></package></packages>'
+
+        # act
+        actual_result = rewrite_flutter_coverage_package_names(cobertura_xml_content, "AthenaTournamentManager")
+
+        # assert
+        self.assertIn(' name="AthenaTournamentManager.chess"', actual_result)
+        self.assertNotIn(' name="lib.chess"', actual_result)
+
+    def test_rewrite_flutter_coverage_package_names_renames_every_package_of_a_multi_subfolder_codeunit(self) -> None:
+        # This is the regression-scenario: as soon as a Flutter-codeunit's lib-folder has more than one subfolder,
+        # lcov_cobertura produces one "lib"-package (for the files directly in "lib") plus one "lib.<subfolder>"-
+        # package per subfolder. TFCPS_Tools_General.merge_packages only keeps a package whose name equals or is
+        # dotted below the codeunit-name, so every one of them has to be renamed, not just the root one.
+        # arrange
+        cobertura_xml_content = (
+            '<packages>'
+            '<package line-rate="1.0" name="lib" complexity="0"><classes/></package>'
+            '<package line-rate="1.0" name="lib.chess" complexity="0"><classes/></package>'
+            '<package line-rate="1.0" name="lib.darts" complexity="0"><classes/></package>'
+            '</packages>'
+        )
+
+        # act
+        actual_result = rewrite_flutter_coverage_package_names(cobertura_xml_content, "AthenaTournamentManager")
+
+        # assert
+        self.assertIn(' name="AthenaTournamentManager"', actual_result)
+        self.assertIn(' name="AthenaTournamentManager.chess"', actual_result)
+        self.assertIn(' name="AthenaTournamentManager.darts"', actual_result)
+        self.assertNotIn('lib', actual_result.replace("AthenaTournamentManager", ""))
+
+    def test_rewrite_flutter_coverage_package_names_does_not_touch_other_attributes(self) -> None:
+        # arrange
+        cobertura_xml_content = '<packages><package line-rate="1.0" branch-rate="0.0" name="lib" complexity="0"><classes/></package></packages>'
+
+        # act
+        actual_result = rewrite_flutter_coverage_package_names(cobertura_xml_content, "AthenaTournamentManager")
+
+        # assert
+        self.assertEqual(
+            '<packages><package line-rate="1.0" branch-rate="0.0" name="AthenaTournamentManager" complexity="0"><classes/></package></packages>',
+            actual_result,
+        )
