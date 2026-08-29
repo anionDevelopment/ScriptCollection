@@ -2,9 +2,11 @@ import os
 import platform
 import shutil
 import re
+import socket
 import zipfile
 from ...GeneralUtilities import GeneralUtilities
 from ...SCLog import  LogLevel
+from ...ScriptCollectionCore import ScriptCollectionCore
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_CodeUnitSpecific_Base_CLI
 from ..TFCPS_RemoteBuild import TFCPS_RemoteBuild, RunnerOperatingSystem
 
@@ -28,8 +30,10 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
         target_names: dict[str, str] = {
             "web": "WebApplication",
             "windows": "Windows",
+            "linux": "Linux",
+            "macos": "MacOS",
             "ios": "IOS",
-            "appbundle": "Android",
+            "android": "Android",
         }
         for target in targets:
             self._protected_sc.log.log(f"Build flutter-codeunit {codeunit_name} for target {target_names[target]}...")
@@ -57,17 +61,42 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                 GeneralUtilities.ensure_directory_does_not_exist(windows_folder)
                 GeneralUtilities.ensure_directory_exists(windows_folder)
                 GeneralUtilities.copy_content_of_folder(windows_release_folder, windows_folder)
+            elif target == "linux":
+                # Linux-desktop-builds run in a sibling-container of the "SCBuilder"-image (defined in
+                # ".ScriptCollection/OCIImages/ImageDefinition.csv" of the repository, like every other image the
+                # build uses), which has the Linux-desktop-toolchain (clang/cmake/ninja/libgtk-3-dev) this target
+                # needs. Unlike windows/ios/appbundle this is not a permanently-running remote-task-runner: SCBuilder
+                # is started fresh, just for this one build-step, and removed again afterwards.
+                self.__build_linux_in_container(codeunit_folder, src_folder)
+                linux_release_folder = os.path.join(src_folder, "build/linux/x64/release/bundle")
+                linux_folder = os.path.join(artifacts_folder, "BuildResult_Linux")
+                GeneralUtilities.ensure_directory_does_not_exist(linux_folder)
+                GeneralUtilities.ensure_directory_exists(linux_folder)
+                GeneralUtilities.copy_content_of_folder(linux_release_folder, linux_folder)
+            elif target == "macos":
+                # macOS-desktop-builds must run on macOS and therefore always run on the macOS-task-runner (uniform
+                # builds), analogous to how ios-builds always run on the iOS-task-runner. See SCTaskRunnerMacOS and
+                # the remote-build-article in the reference.
+                self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "flutter", ["build", "macos"], src_folder)
+                macos_release_folder = os.path.join(src_folder, "build/macos/Build/Products/Release")
+                macos_folder = os.path.join(artifacts_folder, "BuildResult_MacOS")
+                GeneralUtilities.ensure_directory_does_not_exist(macos_folder)
+                GeneralUtilities.ensure_directory_exists(macos_folder)
+                GeneralUtilities.copy_content_of_folder(macos_release_folder, macos_folder)
             elif target == "ios":
-                # iOS-builds must run on macOS and therefore always run on a macOS-task-runner (uniform builds). See the
-                # remote-build-article in the reference.
-                self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "flutter", ["build", "ios"], src_folder)
+                # iOS-builds must run on macOS and therefore always run on the dedicated iOS-task-runner (uniform
+                # builds). See SCTaskRunnerIOS and the remote-build-article in the reference.
+                self.run_program_on_remote_runner(RunnerOperatingSystem.IOS, "flutter", ["build", "ios"], src_folder)
                 ios_release_folder = os.path.join(src_folder, "build/ios/iphoneos")
                 ios_folder = os.path.join(artifacts_folder, "BuildResult_IOS")
                 GeneralUtilities.ensure_directory_does_not_exist(ios_folder)
                 GeneralUtilities.ensure_directory_exists(ios_folder)
                 GeneralUtilities.copy_content_of_folder(ios_release_folder, ios_folder)
-            elif target == "appbundle":
-                self._protected_sc.run_with_epew("flutter", "build appbundle", src_folder)
+            elif target == "android":
+                # Android-app-builds always run on an Android-task-runner (see SCTaskRunnerAndroid and the
+                # remote-build-article in the reference), analogous to how ios-builds always run on a macOS-task-runner:
+                # the Android-SDK/NDK-toolchain no longer lives in SCBuilder itself, it moved into SCTaskRunnerAndroid.
+                self.run_program_on_remote_runner(RunnerOperatingSystem.Android, "flutter", ["build", "appbundle"], src_folder)
                 enabled=False
                 if enabled:#TODO move to external because this is not platform indepent
                     aab_folder = os.path.join(artifacts_folder, "BuildResult_AAB")
@@ -151,6 +180,55 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
         self.tfcps_Tools_General.merge_packages(coverage_file, codeunit_name)
         self.tfcps_Tools_General.calculate_entire_line_rate(coverage_file)
         self.run_testcases_common_post_task(repository_folder, codeunit_name, True, self.get_target_environment_type())
+
+    @GeneralUtilities.check_arguments
+    def __build_linux_in_container(self, codeunit_folder: str, src_folder: str) -> None:
+        """Runs "flutter build linux" inside a sibling-container of the "SCBuilder"-image (see the "linux"-branch of
+        build() for why). If this process itself already runs inside a container (e.g. a "scbuildcodeunits -c"-run),
+        the sibling-container is given access to the same volumes via "--volumes-from" instead of a bind-mount: a
+        bind-mount of a path of this container would be resolved by the docker-daemon of the host, where that path
+        does not exist or points to unrelated data (same reasoning as TFCPS_VisualRegressionTests)."""
+        repository_folder = self.get_repository_folder()
+        image = self.tfcps_Tools_General.oci_image_manager.get_registry_address_for_image_with_default_tag(repository_folder, "SCBuilder")
+        image_address, image_tag = ScriptCollectionCore.split_image_address_and_tag(image)
+        self._protected_sc.docker_pull(image_address, image_tag)
+        working_directory_relative = os.path.relpath(src_folder, codeunit_folder).replace("\\", "/").strip("/")
+        if self.__is_running_in_container():
+            mount_arguments = ["--volumes-from", self.__get_own_container_id()]
+            codeunit_folder_in_container = codeunit_folder.replace("\\", "/")
+        else:
+            codeunit_folder_in_container = "/codeunit"
+            mount_arguments = ["-v", f"{codeunit_folder}:{codeunit_folder_in_container}"]
+        working_folder = codeunit_folder_in_container if working_directory_relative in ("", ".") else f"{codeunit_folder_in_container}/{working_directory_relative}"
+        arguments = ["run", "--rm"]+mount_arguments+["-w", working_folder, image, "flutter", "build", "linux"]
+        self._protected_sc.run_program_argsasarray("docker", arguments, print_live_output=True)
+
+    @GeneralUtilities.check_arguments
+    def __is_running_in_container(self) -> bool:
+        # The filesystem-marker is checked in addition to the convention-based environment-variable because a wrong
+        # result here does not only change a message but makes the sibling-container access the wrong folder.
+        return os.path.exists("/.dockerenv") or self._protected_sc.is_runnning_in_container()
+
+    @GeneralUtilities.check_arguments
+    def __get_own_container_id(self) -> str:
+        # Determines the id of the container this process runs in, so that its volumes can be shared with the
+        # SCBuilder-sibling-container via "docker run --volumes-from" (see TFCPS_VisualRegressionTests, which uses
+        # the identical approach for the same reason).
+        try:
+            with open("/proc/self/mountinfo", "r", encoding="utf-8") as file_handle:
+                match = re.search(r"/containers/([0-9a-f]{64})/", file_handle.read())
+                if match is not None:
+                    return match.group(1)
+        except OSError:
+            pass
+        try:
+            with open("/proc/self/cgroup", "r", encoding="utf-8") as file_handle:
+                match = re.search(r"[0-9a-f]{64}", file_handle.read())
+                if match is not None:
+                    return match.group(0)
+        except OSError:
+            pass
+        return socket.gethostname()
 
     @staticmethod
     def __rewrite_flutter_coverage_package_names(cobertura_xml_content:str,codeunit_name:str) -> str:
