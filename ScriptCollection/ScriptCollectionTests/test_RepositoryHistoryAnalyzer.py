@@ -87,6 +87,22 @@ class RepositoryHistoryAnalyzerTests(unittest.TestCase):
             ("Bob", "2026-01-06"): 1,
         }
 
+    def test_get_git_history_data_with_month_scale_aggregates_same_month(self) -> None:
+        # arrange
+        repository = self.__create_test_repository()
+        analyzer = RepositoryHistoryAnalyzer()
+
+        # act
+        data = analyzer.get_git_history_data(repository, GitHistoryScale.Month)
+
+        # assert
+        # Both of Alice's commits fall into January 2026, so they must be aggregated into a single "2026-01"-bucket.
+        buckets = {(dp.committer, dp.bucket): dp.commit_count for dp in data.data_points}
+        assert buckets == {
+            ("Alice", "2026-01"): 2,
+            ("Bob", "2026-01"): 1,
+        }
+
     def test_get_git_history_data_with_year_scale_aggregates_same_year(self) -> None:
         # arrange
         repository = self.__create_test_repository()

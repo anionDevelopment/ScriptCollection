@@ -29,10 +29,10 @@ reusable unit that does not depend on any other `ScriptCollectionCore`-state. Se
 
 ### Data model
 Two dataclasses plus one enum, defined in `RepositoryHistoryAnalyzer.py`:
-- `GitHistoryScale(Enum)`: `Day`, `Week`, `Year` - controls the bucket-granularity of `get_git_history_data`.
+- `GitHistoryScale(Enum)`: `Day`, `Week`, `Month`, `Year` - controls the bucket-granularity of `get_git_history_data`.
 - `CommitterActivityDataPoint`: `committer: str`, `bucket: str`, `commit_count: int`. `bucket` is a pre-formatted,
-  chart-ready label (`YYYY-MM-DD`, ISO-week `YYYY-Www`, `YYYY`, a weekday-name, or a zero-padded hour `"00"`..`"23"`,
-  depending on which analyzer-method produced it).
+  chart-ready label (`YYYY-MM-DD`, ISO-week `YYYY-Www`, `YYYY-MM`, `YYYY`, a weekday-name, or a zero-padded hour
+  `"00"`..`"23"`, depending on which analyzer-method produced it).
 - `CommitterActivityData`: `committers: list[str]` (order and identities exactly as `git shortlog -n -s`),
   `committer_emails: dict[str, str]` (committer name -> email), `data_points: list[CommitterActivityDataPoint]`.
 

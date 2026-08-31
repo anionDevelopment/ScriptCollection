@@ -9,7 +9,8 @@ from .ScriptCollectionCore import ScriptCollectionCore
 class GitHistoryScale(Enum):
     Day = 0
     Week = 1
-    Year = 2
+    Month = 2
+    Year = 3
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,8 @@ class RepositoryHistoryAnalyzer:
         if scale == GitHistoryScale.Week:
             iso_calendar = moment.isocalendar()
             return f"{iso_calendar[0]}-W{iso_calendar[1]:02d}"
+        if scale == GitHistoryScale.Month:
+            return moment.strftime("%Y-%m")
         if scale == GitHistoryScale.Year:
             return moment.strftime("%Y")
         raise ValueError(f"Unknown GitHistoryScale: {scale}")
