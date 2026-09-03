@@ -1,15 +1,14 @@
 import json
 import os
 import xml.etree.ElementTree as ET
-from ...GeneralUtilities import GeneralUtilities
-from .TFCPS_CodeUnitSpecific_Flutter import TFCPS_CodeUnitSpecific_Flutter_Functions
+from .GeneralUtilities import GeneralUtilities
+from .ScriptCollectionCore import ScriptCollectionCore
 
 
 class ARBTranslationHelper:
     """Reusable helper-functions for interacting with a Flutter-codeunit's ARB translation-files
     (lib/l10n/app_<locale>.arb) and with the XLIFF 2.0 files (Other/Resources/Translations/messages(.language).xlf)
-    used to synchronize them, plus translate_safe() to actually translate untranslated xlf-segments. See
-    ArbTranslationsOrganizer for the algorithm these are used by.
+    used to synchronize them. See ArbTranslationsOrganizer for the algorithm these are used by.
     """
 
     _XLIFF2_NAMESPACE = "urn:oasis:names:tc:xliff:document:2.0"
@@ -102,49 +101,32 @@ class ARBTranslationHelper:
         with open(file, "wb") as f:#binary mode (as opposed to passing the filename directly to tree.write): guarantees LF line-endings regardless of the OS' default line-ending, since binary mode never translates "\n" to "\r\n".
             tree.write(f, encoding="utf-8", xml_declaration=True)
 
-    @staticmethod
-    def translate_safe(tf, base_language: str = "en", throw_if_no_credentials: bool = False) -> None:
-        """Translates every not-yet-translated segment of Other/Resources/Translations/messages.<language>.xlf via
-        LibreTranslate, if a translation-service is configured. The translation-service can be configured by creating
-        a file at ~/.ScriptCollection/TranslationServiceProperties.txt with the content
-        "LibreTranslateAPI=your_api_server_url" (matching TFCPS_CodeUnitSpecific_NodeJS_Functions.translate_safe, since
-        a Flutter-codeunit has no equivalent method of its own yet)."""
-        translationservice_file = os.path.join(tf._protected_sc.get_global_cache_folder(), "TranslationServiceProperties.txt")
-        api_server: str | None = None
-        if os.path.isfile(translationservice_file):
-            for line in GeneralUtilities.read_nonempty_lines_from_file(translationservice_file):
-                if line.startswith("LibreTranslateAPI="):
-                    api_server = line.replace("LibreTranslateAPI=", "").strip()
-        if api_server is None:
-            if throw_if_no_credentials:
-                raise ValueError(
-                    "No translation-service configured. Please create a file at "
-                    "~/.ScriptCollection/TranslationServiceProperties.txt with the content "
-                    "'LibreTranslateAPI=your_api_server_url' to enable automatic translation of xlf-files."
-                )
-        else:
-            xlf_folder = os.path.join(tf.get_codeunit_folder(), "Other", "Resources", "Translations")
-            tf._protected_sc.translate_xlf_files_in_folder(xlf_folder, base_language, api_server)
-
 
 class ArbTranslationsOrganizer:
+    """Synchronizes a codeunit's ARB translation-files (lib/l10n/app_<locale>.arb) with XLIFF 2.0 files
+    (messages(.language).xlf), so both stay consistent. This type makes no assumption about which kind of codeunit
+    calls it or where its files live within that codeunit - it only operates on the given, already-resolved
+    "arb_folder"/"xlf_folder" paths and the given ScriptCollectionCore instance (used for the actual xlf-sync, see
+    ScriptCollectionCore.sync_xlf2_files); a caller like TFCPS_CodeUnitSpecific_Flutter_Functions.organize_translations()
+    resolves those paths from its own codeunit-folder-conventions first.
+    """
 
     BaseLanguage="en"#"en" means en-US; this is also why "en-GB" is allowed to be contained in "languages" further down.
 
-    def organize_translations(self,tf:TFCPS_CodeUnitSpecific_Flutter_Functions,arb_folder_relative_path:str,languages:list[str]):#languages look like ["fr","de","es","de-CH","en-GB"]; "en" is not contained because en is always the default language.
+    def organize_translations(self,sc:ScriptCollectionCore,arb_folder:str,xlf_folder:str,languages:list[str])->dict[str,dict[int,float]]:#languages look like ["fr","de","es","de-CH","en-GB"]; "en" is not contained because en is always the default language.
         #after this functions all texts in the arb files should be in the xlf files, and all texts in the xlf files should be in the arb files. see algorithm below
         #in general: arb_en.arb is the source of the truth regarding to which texts exist and the source of truh for the english texts.
-        arb_folder=os.path.join(tf.get_codeunit_folder(),arb_folder_relative_path)#original flutter arb files
+        #returns the translation-state-statistics of the xlf-files (not of the arb-files), see ScriptCollectionCore.sync_xlf2_files.
         GeneralUtilities.assert_folder_exists(arb_folder)
-        xlf_folder=os.path.join(tf.get_codeunit_folder(),"Other/Resources/Translations")#here should xlf files be stored like in E:\Data\Projects\ConSurv\ConSurvFrontend\Other\Resources\Translations: messages.xlf (with english texts), and messages.de.xlf, messages.fr.xlf, etc with the translations
         GeneralUtilities.ensure_directory_exists(xlf_folder)
 
         self.__ensure_arb_files_exist(arb_folder,languages)
         self.__ensure_xlf_files_exist(arb_folder,xlf_folder,languages)
         self.__clean_up_arb_files(arb_folder,languages)
         self.__write_arb_entries_to_xlf_files(arb_folder,xlf_folder)
-        self.__sync_xlf_files(tf,xlf_folder,languages)
+        statistics=self.__sync_xlf_files(sc,xlf_folder,languages)
         self.__sync_xlf_files_to_arb_files(arb_folder,xlf_folder,languages)
+        return statistics
 
     def __ensure_arb_files_exist(self,arb_folder:str,languages:list[str]):
         #after this function in arb_folder should be a arb-file for each language in languages. create the file if not already exist.
@@ -178,9 +160,9 @@ class ArbTranslationsOrganizer:
         units=[ARBTranslationHelper.build_unit(key,value,None) for key,value in english_messages.items()]
         ARBTranslationHelper.write_xliff2_file(ARBTranslationHelper.base_xlf_file_path(xlf_folder),self.BaseLanguage,None,units)
 
-    def __sync_xlf_files(self,tf:TFCPS_CodeUnitSpecific_Flutter_Functions,xlf_folder:str,languages:list[str]):
+    def __sync_xlf_files(self,sc:ScriptCollectionCore,xlf_folder:str,languages:list[str])->dict[str,dict[int,float]]:
         #sync xlf-files. after this function the xlf files should be synchronized in that way that all xlf-files do have all values, does not matter if translated or untranslated (even if the xlf file for other languages than english should state it if a text is not translated in the usual way it is stated in xlf files). also ensure that the messages.<language>.xlf files do not have message-keys which are not contained in messages.xlf
-        tf._protected_sc.sync_xlf2_files("messages",languages,xlf_folder)
+        return sc.sync_xlf2_files("messages",languages,xlf_folder)
 
     def __sync_xlf_files_to_arb_files(self,arb_folder:str,xlf_folder:str,languages:list[str]):
         #for each "messages.<language>.xlf"-xlf-file (means: for all xlf files other than messages.xlf): for each message-key: write the message-value to the corresponding arb-file in arb_folder. overwrite any existing value in the corresponding arb-file.

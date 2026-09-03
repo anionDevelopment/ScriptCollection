@@ -28,6 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "build>=1.5.0",
+    "CountryInformation>=1.0.12",
     "coverage>=7.15.2",
     "cyclonedx-bom>=7.1.0",
     "defusedxml>=0.7.1",

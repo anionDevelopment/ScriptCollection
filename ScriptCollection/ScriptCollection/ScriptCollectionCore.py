@@ -187,6 +187,11 @@ class ProjectServerIssue:
         self.description=description
         self.comments=comments
 
+class TranslationState:
+    Initial:int = 0
+    Translated:int = 1
+    Reviewed:int = 2
+    Final:int = 3
 
 class ScriptCollectionCore:
 
@@ -3165,8 +3170,7 @@ Currently there are no technical depts.""")
 | Abbreviation | Meaning |
 | ------------ | ------- |""")
 
-        GeneralUtilities.append_to_file(main_reference_file, """
-
+        GeneralUtilities.append_lines_to_file(main_reference_file, """
 ## Responsibilities
 
 | Responsibility  | Name and contact-information |
@@ -3183,8 +3187,7 @@ TXDX
 
 - [Repository](TXDX)
 - [Productive-System](TXDX)
-- [QualityCheck-system](TXDX)
-""".replace("XDX", "ODO"))
+- [QualityCheck-system](TXDX)""".replace("XDX", "ODO").split("\n"))
 
     @GeneralUtilities.check_arguments
     def run_with_timeout(self, method, timeout_in_seconds: float) -> bool:
@@ -3900,6 +3903,18 @@ OCR-content:
 
     @GeneralUtilities.check_arguments
     def generate_chart_diagram(self,source_file:str,target_file:str):
+        """Renders a Vega-Lite diagram-specification (source_file) into an svg-file (target_file) using "vl2svg". Use
+        generate_full_vega_chart_diagram instead for a diagram-specification which uses the full Vega-syntax."""
+        self.__generate_chart_diagram_with_renderer("vl2svg",source_file,target_file)
+
+    @GeneralUtilities.check_arguments
+    def generate_full_vega_chart_diagram(self,source_file:str,target_file:str):
+        """Renders a (full-syntax) Vega diagram-specification (source_file) into an svg-file (target_file) using
+        "vg2svg". Use generate_chart_diagram instead for a diagram-specification which uses the Vega-Lite-syntax."""
+        self.__generate_chart_diagram_with_renderer("vg2svg",source_file,target_file)
+
+    @GeneralUtilities.check_arguments
+    def __generate_chart_diagram_with_renderer(self,renderer_program:str,source_file:str,target_file:str):
         workingfolder=os.path.dirname(source_file)
         argument=f"\"{source_file}\" \"{target_file}\""
         loglevelMap = {
@@ -3910,8 +3925,7 @@ OCR-content:
         }
         if self.log.loglevel==LogLevel.Debug:
             argument=f"-l {loglevelMap[self.log.loglevel]} {argument}"
-        self.run_with_epew("vl2svg",argument,workingfolder,encode_argument_in_base64=True)
-        #this uses vega-light. to use vega "vg2svg" should be used instead.
+        self.run_with_epew(renderer_program,argument,workingfolder,encode_argument_in_base64=True)
 
     @GeneralUtilities.check_arguments
     def add_tooltips_to_chart_diagram(self, svg_file: str) -> int:
@@ -4177,11 +4191,13 @@ OCR-content:
     def __sync_xlf2_files(self,base_file:ET.ElementTree, language_files:dict [
         str,#filepath
         ET.ElementTree#parsed file
-        ]):
+        ])->dict[str,dict[int,float]]:
         """This function assumes that all files are valid xliff2 files and that the base file is the reference for syncing.
         This function adds new entries from the base file to the language files if they do not already exist using the value from base_file.
         This function removes entries from the language files if they do not exist in the base file anymore.
-        In the end the updated language files are written to the disk. The base file is not changed."""
+        In the end the updated language files are written to the disk. The base file is not changed.
+        Returns for each language (derived from the filename of the language-file) a dict which contains for each TranslationState
+        the percentage (as a value between 0.0 and 1.0) of translation-units which are in that state."""
         #The file which was parsed looks like:
         #<?xml version="1.0" encoding="UTF-8" ?>
         #<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en">
@@ -4226,6 +4242,7 @@ OCR-content:
             for unit in base_file_element.findall("x:unit", namespaces=NSMAP)
         }
         base_ids = set(base_units.keys())
+        result:dict[str,dict[int,float]]=dict()
         for filepath, lang_tree in language_files.items():
             lang_root = lang_tree.getroot()
             lang_file_element = lang_root.find("x:file", namespaces=NSMAP)
@@ -4255,6 +4272,27 @@ OCR-content:
                 unit.get("id"): unit
                 for unit in lang_file_element.findall("x:unit", namespaces=NSMAP)
             }
+
+            # Calculate translation-state-statistics
+            state_name_to_state = {
+                "initial": TranslationState.Initial,
+                "translated": TranslationState.Translated,
+                "reviewed": TranslationState.Reviewed,
+                "final": TranslationState.Final,
+            }
+            state_counts = {state: 0 for state in state_name_to_state.values()}
+            total_segments = 0
+            for unit in current_units.values():
+                for segment in unit.findall("x:segment", namespaces=NSMAP):
+                    state_counts[state_name_to_state[segment.get("state", "initial")]] += 1
+                    total_segments += 1
+            if total_segments == 0:
+                percentages = {state: 0.0 for state in state_counts}
+            else:
+                percentages = {state: count / total_segments for state, count in state_counts.items()}
+            language = os.path.basename(filepath).split(".")[-2]
+            result[language] = percentages
+
             for unit in list(lang_file_element.findall("x:unit", namespaces=NSMAP)):
                 lang_file_element.remove(unit)
             for unit_id in base_units.keys():
@@ -4274,17 +4312,112 @@ OCR-content:
             )
             ScriptCollectionCore().format_xml_file(filepath)
 
+        return result
+
     @GeneralUtilities.check_arguments
-    def sync_xlf2_files(self,prefix:str, languages:list[str], folder:str):
+    def generate_translation_state_diagram(self, statistics:dict[str,dict[int,float]],target_file:str)->None:
+        """Writes a Vega-Lite specification (see sync_xlf2_files/TranslationState) to target_file (which must already
+        have the appropriate file-extension, usually ".json") which visualizes, for each language contained in
+        "statistics" (sorted alphabetically), a stacked horizontal bar showing the share of translation-units which
+        are in each TranslationState, plus the exact percentages as text next to it. Rendering that specification
+        into an image (for example via generate_chart_diagram) is not done by this function."""
+        state_order = [TranslationState.Initial, TranslationState.Translated, TranslationState.Reviewed, TranslationState.Final]
+        state_names = {
+            TranslationState.Initial: "Initial",
+            TranslationState.Translated: "Translated",
+            TranslationState.Reviewed: "Reviewed",
+            TranslationState.Final: "Final",
+        }
+        #single-hue ordinal ramp (light->dark, light-surface-safe), since the states represent an ordered progress and not just distinct categories
+        state_colors = {
+            TranslationState.Initial: "#86b6ef",
+            TranslationState.Translated: "#3987e5",
+            TranslationState.Reviewed: "#1c5cab",
+            TranslationState.Final: "#0d366b",
+        }
+        languages = sorted(statistics.keys())
+
+        bar_data = []
+        label_data = []
+        for language in languages:
+            percentages = statistics[language]
+            label_parts = []
+            for state_index, state in enumerate(state_order):
+                percentage = percentages.get(state, 0.0)
+                bar_data.append({
+                    "language": language,
+                    "state": state_names[state],
+                    "state_order": state_index,
+                    "percentage": percentage,
+                })
+                label_parts.append(f"{state_names[state]} {percentage:.0%}")
+            label_data.append({"language": language, "label": "   ".join(label_parts)})
+
+        row_height = 24
+        spec = {
+            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "description": "Translation-state of the translation-units per language",
+            "config": {"view": {"stroke": None}, "background": "#fcfcfb"},
+            "hconcat": [
+                {
+                    "height": {"step": row_height},
+                    "width": 400,
+                    "data": {"values": bar_data},
+                    "mark": {"type": "bar"},
+                    "encoding": {
+                        "y": {"field": "language", "type": "nominal", "sort": languages, "title": None},
+                        "x": {"field": "percentage", "type": "quantitative", "stack": "normalize", "axis": {"format": "%", "title": "Share of translation-units"}},
+                        "order": {"field": "state_order", "type": "quantitative"},
+                        "color": {
+                            "field": "state",
+                            "type": "nominal",
+                            "sort": [state_names[state] for state in state_order],
+                            "scale": {
+                                "domain": [state_names[state] for state in state_order],
+                                "range": [state_colors[state] for state in state_order],
+                            },
+                            "legend": {"title": "Translation state"},
+                        },
+                        "tooltip": [
+                            {"field": "language", "type": "nominal", "title": "Language"},
+                            {"field": "state", "type": "nominal", "title": "State"},
+                            {"field": "percentage", "type": "quantitative", "title": "Share", "format": ".1%"},
+                        ],
+                    },
+                },
+                {
+                    "height": {"step": row_height},
+                    "width": 220,
+                    "data": {"values": label_data},
+                    "mark": {"type": "text", "align": "left", "baseline": "middle", "color": "#52514e"},
+                    "encoding": {
+                        "y": {"field": "language", "type": "nominal", "sort": languages, "axis": None},
+                        "x": {"value": 0},
+                        "text": {"field": "label", "type": "nominal"},
+                    },
+                },
+            ],
+        }
+        GeneralUtilities.ensure_file_exists(target_file)
+        GeneralUtilities.write_text_to_file(target_file, json.dumps(spec, indent=2, ensure_ascii=False)+"\n")
+
+
+    @GeneralUtilities.check_arguments
+    def sync_xlf2_files(self,prefix:str, languages:list[str], folder:str)->dict[str,dict[int, float]]:
         #languages=["de", "fr"] for example. the default-language (usually english) must not be included.
+        #languages may contain culture-specific entries with a country-code (e.g. "de-AT"); in that case the language without the
+        #country-code (e.g. "de") must also be contained in languages.
         base_file=os.path.join(folder, f"{prefix}.xlf")
         base_file_xml:ET.ElementTree=ET.parse(base_file)
         GeneralUtilities.assert_condition(self.is_xliff2_file(base_file), f"The base file '{base_file}' is not a valid XLIFF 2.0 file.")
         GeneralUtilities.assert_file_exists(base_file)
         if len(languages)==0:
             raise ValueError("No files provided for syncing.")
-        if len(languages)==1:
-            return
+        for language in languages:
+            if "-" in language:
+                base_language = language.split("-")[0]
+                if base_language != "en":  # "en" is always the implicit default-language (see above) and therefore never has to be listed itself, unlike every other base-language.
+                    GeneralUtilities.assert_condition(base_language in languages, f"The languages-list contains the culture '{language}' but not its base-language '{base_language}'.")
         language_files_list=[os.path.join(folder, f"{prefix}.{language}.xlf") for language in languages]
         language_files_with_content:dict[str,ET.ElementTree]=dict()
         for language_file in language_files_list:
@@ -4293,8 +4426,10 @@ OCR-content:
             language_files_with_content[language_file]=ET.parse(language_file)
 
         #sync existing files
-        self.__sync_xlf2_files(base_file_xml, language_files_with_content)
-            
+        statistics = self.__sync_xlf2_files(base_file_xml, language_files_with_content)
+
+        #english and cultures with a country-code (e.g. "de-AT") are not contained in the result
+        return {language: percentages for language, percentages in statistics.items() if language != "en" and "-" not in language}
 
     @GeneralUtilities.check_arguments
     def translate_xlf_files_in_folder(self, folder: str, base_language: str, libre_translate_api_server: str):

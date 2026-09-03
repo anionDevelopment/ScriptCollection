@@ -1199,6 +1199,7 @@ class GeneralUtilities:
                 information = "Internal assertion error."
             raise ValueError("Condition failed. "+information)
 
+
     @staticmethod
     def current_system_is_windows():
         return platform.system() == 'Windows'

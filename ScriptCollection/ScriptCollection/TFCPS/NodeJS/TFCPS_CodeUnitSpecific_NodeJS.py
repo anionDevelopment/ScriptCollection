@@ -204,9 +204,15 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def organize_translations(self,languages:list[str])->None:
+        self.tfcps_Tools_General.write_languages_as_resource(self.get_codeunit_folder(),languages)
+        GeneralUtilities.assert_condition("en" in languages, "The languages-list must contain \"en\" (the default-language), even though \"en\" itself is never translated.")
+        translated_languages = [language for language in languages if language != "en"]
         self._protected_sc.run_with_epew("npm","run extract-translations",self.get_codeunit_folder())
-        self.__ensure_translations_exist(languages)
-        self._protected_sc.sync_xlf2_files("messages",languages,os.path.join(self.get_codeunit_folder(),"Other","Resources","Translations"))
+        self.__ensure_translations_exist(translated_languages)
+        translations_folder=os.path.join(self.get_codeunit_folder(),"Other","Resources","Translations")
+        statistics=self._protected_sc.sync_xlf2_files("messages",translated_languages,translations_folder)
+        target_file=os.path.join(translations_folder,"TranslationState.json")
+        self._protected_sc.generate_translation_state_diagram(statistics,target_file)
 
     @GeneralUtilities.check_arguments
     def translate_safe(self,base_language:str="en", throw_if_no_credentials:bool=False)->None:
@@ -223,6 +229,7 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
                 raise ValueError("No translation service configured. Please create a file at ~/.ScriptCollection/TranslationServiceProperties.txt with the content 'LibreTranslateAPI=your_api_server_url' to enable automatic translation of XLF files.")
         else:
             self.translate(api_server,base_language)
+
 
     @GeneralUtilities.check_arguments
     def translate(self,api_server:str,base_language:str="en")->None:

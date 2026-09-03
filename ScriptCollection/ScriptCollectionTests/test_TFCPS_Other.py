@@ -19,6 +19,36 @@ def rewrite_flutter_coverage_package_names(cobertura_xml_content: str, codeunit_
     return rewrite(cobertura_xml_content, codeunit_name)
 
 
+def rewrite_vendored_pubspec_path_dependencies(codeunit_folder: str) -> None:
+    """Calls the private TFCPS_CodeUnitSpecific_Flutter_Functions.__rewrite_vendored_pubspec_path_dependencies for a
+    test, the same way rewrite_flutter_coverage_package_names above accesses another private method."""
+    # pylint:disable=protected-access
+    rewrite = TFCPS_CodeUnitSpecific_Flutter_Functions._TFCPS_CodeUnitSpecific_Flutter_Functions__rewrite_vendored_pubspec_path_dependencies
+    rewrite(codeunit_folder)
+
+
+def write_vendored_pubspec(dependent_codeunits_folder: str, codeunit_name: str, flavor: str, package_name: str, pubspec_content: str) -> str:
+    """Writes pubspec_content as the vendored copy of package_name (of codeunit_name, in the given "SourceCode"- or
+    "BuildResult_SourceCode"-flavor) inside dependent_codeunits_folder, the same shape
+    copy_artifacts_from_dependent_code_units produces, and returns the written file's path."""
+    package_folder = os.path.join(dependent_codeunits_folder, codeunit_name, flavor, package_name)
+    GeneralUtilities.ensure_directory_exists(package_folder)
+    pubspec_file = os.path.join(package_folder, "pubspec.yaml")
+    GeneralUtilities.write_text_to_file(pubspec_file, pubspec_content)
+    return pubspec_file
+
+
+def get_bom_content(lockfile_content: str, codeunit_name: str, codeunit_version: str) -> str:
+    """Writes lockfile_content as a "pubspec.lock" into a temporary folder and returns the bill-of-materials
+    TFCPS_CodeUnitSpecific_Flutter_Functions generates for it, the same way rewrite_flutter_coverage_package_names
+    above accesses another private method."""
+    # pylint:disable=protected-access
+    get_content = TFCPS_CodeUnitSpecific_Flutter_Functions._TFCPS_CodeUnitSpecific_Flutter_Functions__get_bom_content
+    with tempfile.TemporaryDirectory() as temporary_folder:
+        lockfile = os.path.join(temporary_folder, "pubspec.lock")
+        GeneralUtilities.write_text_to_file(lockfile, lockfile_content)
+        return get_content(lockfile, codeunit_name, codeunit_version)
+
 def generate_toc_md_file_content_for_toc_yml_content(toc_yml_content: str) -> str:
     """Writes the given toc.yml-content to a temporary file and returns the generated toc.md-content for it."""
     # pylint:disable=protected-access
@@ -629,3 +659,200 @@ items:
             '<packages><package line-rate="1.0" branch-rate="0.0" name="AthenaTournamentManager" complexity="0"><classes/></package></packages>',
             actual_result,
         )
+
+    def test_rewrite_vendored_pubspec_path_dependencies_does_nothing_when_dependentcodeunits_folder_is_missing(self) -> None:
+        # A codeunit with no dependent-codeunits at all (or one which was not yet prepared) has no
+        # "Other/Resources/DependentCodeUnits"-folder; the function must not fail on that, just do nothing.
+        # arrange
+        with tempfile.TemporaryDirectory() as codeunit_folder:
+            # act
+            rewrite_vendored_pubspec_path_dependencies(codeunit_folder)
+            # assert: no exception
+
+    def test_rewrite_vendored_pubspec_path_dependencies_redirects_a_dangling_path_to_the_flat_sibling(self) -> None:
+        # This is the regression-scenario: AthenaGameChess's own pubspec.yaml depends on athena_base via a path
+        # which is only valid inside AthenaGameChess's own repository-layout; once vendored as a flat sibling of
+        # AthenaBase inside another codeunit's DependentCodeUnits-folder, that path has to be redirected there.
+        # arrange
+        with tempfile.TemporaryDirectory() as codeunit_folder:
+            dependent_codeunits_folder = os.path.join(codeunit_folder, "Other", "Resources", "DependentCodeUnits")
+            write_vendored_pubspec(dependent_codeunits_folder, "AthenaBase", "SourceCode", "athena_base", "name: athena_base\nversion: 0.1.1\n")
+            chess_pubspec_file = write_vendored_pubspec(
+                dependent_codeunits_folder, "AthenaGameChess", "SourceCode", "athena_game_chess",
+                "name: athena_game_chess\nversion: 0.1.1\n\ndependencies:\n  athena_base:\n    path: ../Other/Resources/DependentCodeUnits/AthenaBase/SourceCode/athena_base\n",
+            )
+
+            # act
+            rewrite_vendored_pubspec_path_dependencies(codeunit_folder)
+
+            # assert
+            actual_content = GeneralUtilities.read_text_from_file(chess_pubspec_file)
+            self.assertIn("path: ../../../AthenaBase/SourceCode/athena_base", actual_content)
+            self.assertNotIn("DependentCodeUnits/AthenaBase", actual_content)
+
+    def test_rewrite_vendored_pubspec_path_dependencies_also_rewrites_the_buildresult_sourcecode_copy(self) -> None:
+        # build() (see TFCPS_CodeUnitSpecific_Flutter) publishes "BuildResult_SourceCode" as a copy of "SourceCode"
+        # only to satisfy a generic artifact-naming check - its own pubspec.yaml has the same dangling path and
+        # must be rewritten too, even though "pub get" never actually resolves this particular copy.
+        # arrange
+        with tempfile.TemporaryDirectory() as codeunit_folder:
+            dependent_codeunits_folder = os.path.join(codeunit_folder, "Other", "Resources", "DependentCodeUnits")
+            write_vendored_pubspec(dependent_codeunits_folder, "AthenaBase", "SourceCode", "athena_base", "name: athena_base\nversion: 0.1.1\n")
+            chess_pubspec_content = (
+                "name: athena_game_chess\nversion: 0.1.1\n\ndependencies:\n  athena_base:\n"
+                "    path: ../Other/Resources/DependentCodeUnits/AthenaBase/SourceCode/athena_base\n"
+            )
+            write_vendored_pubspec(dependent_codeunits_folder, "AthenaGameChess", "SourceCode", "athena_game_chess", chess_pubspec_content)
+            build_result_pubspec_file = write_vendored_pubspec(dependent_codeunits_folder, "AthenaGameChess", "BuildResult_SourceCode", "athena_game_chess", chess_pubspec_content)
+
+            # act
+            rewrite_vendored_pubspec_path_dependencies(codeunit_folder)
+
+            # assert
+            actual_content = GeneralUtilities.read_text_from_file(build_result_pubspec_file)
+            self.assertIn("path: ../../../AthenaBase/SourceCode/athena_base", actual_content)
+
+    def test_rewrite_vendored_pubspec_path_dependencies_leaves_an_already_correct_path_unchanged(self) -> None:
+        # Idempotency: running the rewrite again on an already-correct pubspec.yaml must not change it further.
+        # arrange
+        with tempfile.TemporaryDirectory() as codeunit_folder:
+            dependent_codeunits_folder = os.path.join(codeunit_folder, "Other", "Resources", "DependentCodeUnits")
+            write_vendored_pubspec(dependent_codeunits_folder, "AthenaBase", "SourceCode", "athena_base", "name: athena_base\nversion: 0.1.1\n")
+            already_correct_content = "name: athena_game_chess\nversion: 0.1.1\n\ndependencies:\n  athena_base:\n    path: ../../../AthenaBase/SourceCode/athena_base\n"
+            chess_pubspec_file = write_vendored_pubspec(dependent_codeunits_folder, "AthenaGameChess", "SourceCode", "athena_game_chess", already_correct_content)
+
+            # act
+            rewrite_vendored_pubspec_path_dependencies(codeunit_folder)
+
+            # assert
+            self.assertEqual(already_correct_content, GeneralUtilities.read_text_from_file(chess_pubspec_file))
+
+    def test_rewrite_vendored_pubspec_path_dependencies_leaves_a_dependency_with_no_known_vendored_sibling_untouched(self) -> None:
+        # A "path"-dependency whose name does not match any vendored sibling (for example a typo, or a dependency
+        # which is not itself a codeunit of this repository) must be left exactly as-is rather than guessed at.
+        # arrange
+        with tempfile.TemporaryDirectory() as codeunit_folder:
+            dependent_codeunits_folder = os.path.join(codeunit_folder, "Other", "Resources", "DependentCodeUnits")
+            original_content = "name: athena_game_chess\nversion: 0.1.1\n\ndependencies:\n  some_other_package:\n    path: ../not/a/vendored/sibling\n"
+            chess_pubspec_file = write_vendored_pubspec(dependent_codeunits_folder, "AthenaGameChess", "SourceCode", "athena_game_chess", original_content)
+
+            # act
+            rewrite_vendored_pubspec_path_dependencies(codeunit_folder)
+
+            # assert
+            self.assertEqual(original_content, GeneralUtilities.read_text_from_file(chess_pubspec_file))
+
+    def test_get_bom_content_contains_every_package_of_the_lockfile(self) -> None:
+        # The bill-of-materials has to state every package the codeunit really uses, so a transitive package
+        # belongs into it exactly like a direct one.
+        # arrange
+        lockfile_content = (
+            "packages:\n"
+            "  shared_preferences:\n"
+            "    dependency: \"direct main\"\n"
+            "    description:\n"
+            "      name: shared_preferences\n"
+            "      sha256: \"aabbcc\"\n"
+            "      url: \"https://pub.dev\"\n"
+            "    source: hosted\n"
+            "    version: \"2.5.5\"\n"
+            "  meta:\n"
+            "    dependency: transitive\n"
+            "    description:\n"
+            "      name: meta\n"
+            "      sha256: \"ddeeff\"\n"
+            "      url: \"https://pub.dev\"\n"
+            "    source: hosted\n"
+            "    version: \"1.18.3\"\n"
+            "sdks:\n"
+            "  dart: \">=3.9.0 <4.0.0\"\n"
+        )
+
+        # act
+        actual_result = get_bom_content(lockfile_content, "MatDarkmodeToggleButton", "0.1.1")
+
+        # assert
+        self.assertIn("<name>shared_preferences</name>", actual_result)
+        self.assertIn("<name>meta</name>", actual_result)
+
+    def test_get_bom_content_describes_a_package_of_the_registry_with_its_package_url_and_its_hash(self) -> None:
+        # arrange
+        lockfile_content = (
+            "packages:\n"
+            "  shared_preferences:\n"
+            "    dependency: \"direct main\"\n"
+            "    description:\n"
+            "      name: shared_preferences\n"
+            "      sha256: \"aabbcc\"\n"
+            "      url: \"https://pub.dev\"\n"
+            "    source: hosted\n"
+            "    version: \"2.5.5\"\n"
+        )
+
+        # act
+        actual_result = get_bom_content(lockfile_content, "MatDarkmodeToggleButton", "0.1.1")
+
+        # assert
+        self.assertIn("<purl>pkg:pub/shared_preferences@2.5.5</purl>", actual_result)
+        self.assertIn("<hash alg=\"SHA-256\">aabbcc</hash>", actual_result)
+        self.assertIn("<url>https://pub.dev/packages/shared_preferences/versions/2.5.5</url>", actual_result)
+
+    def test_get_bom_content_does_not_give_a_package_which_is_not_published_a_package_url(self) -> None:
+        # A package which comes from the sdk or from a local path does not exist under a package-url, so stating
+        # one for it would claim an identity which can not be resolved by whoever reads the bill-of-materials.
+        # arrange
+        lockfile_content = (
+            "packages:\n"
+            "  flutter:\n"
+            "    dependency: \"direct main\"\n"
+            "    description: flutter\n"
+            "    source: sdk\n"
+            "    version: \"0.0.0\"\n"
+        )
+
+        # act
+        actual_result = get_bom_content(lockfile_content, "MatDarkmodeToggleButton", "0.1.1")
+
+        # assert
+        self.assertIn("<name>flutter</name>", actual_result)
+        self.assertNotIn("<purl>", actual_result)
+        self.assertNotIn("<hashes>", actual_result)
+
+    def test_get_bom_content_orders_the_packages_by_their_name(self) -> None:
+        # Two builds of the same state have to result in the same document, so the order must not depend on the
+        # order the lockfile happens to have.
+        # arrange
+        lockfile_content = (
+            "packages:\n"
+            "  zeta:\n"
+            "    dependency: transitive\n"
+            "    description:\n"
+            "      name: zeta\n"
+            "      url: \"https://pub.dev\"\n"
+            "    source: hosted\n"
+            "    version: \"1.0.0\"\n"
+            "  alpha:\n"
+            "    dependency: transitive\n"
+            "    description:\n"
+            "      name: alpha\n"
+            "      url: \"https://pub.dev\"\n"
+            "    source: hosted\n"
+            "    version: \"1.0.0\"\n"
+        )
+
+        # act
+        actual_result = get_bom_content(lockfile_content, "MatDarkmodeToggleButton", "0.1.1")
+
+        # assert
+        self.assertLess(actual_result.index("<name>alpha</name>"), actual_result.index("<name>zeta</name>"))
+
+    def test_get_bom_content_states_the_codeunit_the_bill_of_materials_belongs_to(self) -> None:
+        # arrange
+        lockfile_content = "packages:\n"
+
+        # act
+        actual_result = get_bom_content(lockfile_content, "MatDarkmodeToggleButton", "0.1.1")
+
+        # assert
+        self.assertIn("<name>MatDarkmodeToggleButton</name>", actual_result)
+        self.assertIn("<version>0.1.1</version>", actual_result)

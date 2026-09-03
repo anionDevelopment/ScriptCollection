@@ -1,0 +1,9 @@
+Hash: SHA256
+
+# If you would like to report a security issue
+# you may report it to:
+Contact: mailto:marius.goecke@gmail.com
+Expires: 2034-12-31T23:59:59.999
+Encryption: https://raw.githubusercontent.com/anionDevevlopment/anionDev/main/PublicKeys/PGP-Key.txt
+Preferred-Languages: en, de
+Canonical: https://raw.githubusercontent.com/anionDevevlopment/ScriptCollection/main/.well-known/security.txt

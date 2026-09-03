@@ -182,12 +182,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
             self.search_for_secrets()
             self.tfcps_tools_general.generate_svg_files_from_plantuml_files_for_repository(self.repository, self.use_cache())
+            self.tfcps_tools_general.generate_svg_files_from_vega_files_for_repository(self.repository, self.use_cache())
+            self.tfcps_tools_general.generate_svg_files_from_vegalite_files_for_repository(self.repository, self.use_cache())
             self.__normalize_line_endings_of_common_files()
 
             self.sc.log.log(GeneralUtilities.get_line())
 
             if self.is_pre_merge():
-                self.__translate()
                 self.__collect_metrics()
                 self.__generate_loc_diagram()
                 self.sc.log.log(GeneralUtilities.get_line())
@@ -440,17 +441,6 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             relative_path = os.path.relpath(normalized_path, normalized_repository).replace(os.sep, "/")
             return f"{container_repository_folder}/{relative_path}"
         return host_path
-
-    @GeneralUtilities.check_arguments
-    def __translate(self) -> None:
-        for taskfile_name in ("Taskfile.yml", "Taskfile.yaml"):
-            taskfile = os.path.join(self.repository, taskfile_name)
-            if os.path.isfile(taskfile):
-                with open(taskfile, "r", encoding="utf-8") as f:
-                    taskfile_content = yaml.safe_load(f)
-                if isinstance(taskfile_content.get("tasks"), dict) and "Translate" in taskfile_content["tasks"]:
-                    self.sc.run_program("task", "Translate", self.repository, print_live_output=self.sc.log.loglevel == LogLevel.Debug)
-                break
 
     @GeneralUtilities.check_arguments
     def __collect_metrics(self) -> None:
