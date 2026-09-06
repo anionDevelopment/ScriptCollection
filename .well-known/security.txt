@@ -1,26 +1,28 @@
 -----BEGIN PGP SIGNED MESSAGE-----
 Hash: SHA256
 
+Hash: SHA256
+
 # If you would like to report a security issue
 # you may report it to:
 Contact: mailto:marius.goecke@gmail.com
-Expires: 2029-12-31T23:59:59.999
+Expires: 2034-12-31T23:59:59.999
 Encryption: https://raw.githubusercontent.com/anionDevevlopment/anionDev/main/PublicKeys/PGP-Key.txt
 Preferred-Languages: en, de
 Canonical: https://raw.githubusercontent.com/anionDevevlopment/ScriptCollection/main/.well-known/security.txt
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCAAdFiEEvVGQBLyIDHMspke4cqOMNHa+Jy8FAmKCo90ACgkQcqOMNHa+
-Jy/OfhAAoth7ZCOBKnP2bnY7PMbnAcF9zxY6f7bx5ToByXvlecsAVzvop0Arv/aN
-kZKj4qOuL1VAdgLAZpznVDWqXV/tKzWU7OgbEHEvGhRJE77ZxFVBhSEUL9aQJMYW
-DsSe//GPdMNnxw65KpL1creVXxDgPnlSPWOX6DodS8ZHlq+WUz+3ETsL4X651mAi
-Hx2mHiv5+efq+UmO/3RInrpDPxyBvnqyS4U59IFpwGYlhtxWSf7W1N7RyJyJw3u+
-J4CSUKVlFzoGbg/EMTopo9ZU/zdrrD09Yo9PiegY28edEnAnY62jvorG13uVgxkS
-HPSL7PWenAbLoWidLNhDXJg/SNgaGnoj9tGLgv0jx7HWq94MiTUkEsZNxU+RCjj3
-Qb7EQIhPoil9L2VdjeJZL32cc22hQM+FNkt40qwbj6vNcGf7t7oo4X0bJskD8cLR
-YfxZSVczVeFoH0VRCV2f2Yp/gZuXSvxmTUYp98g5kFue8PC2pVP0BRScw8l09ANR
-mnis7Feo0s7gdSFiyvCoUqkuwc/2pIDZDzibTNq+DA0ze+sGEpD2EdNe2iqIxAEx
-vTHwMFB9zNuNjy6h+GlDuvxCQRkj7B1OSbR44vWyXEr0nm4F7TXvAdSmz5vi7cqC
-81moCxKcpOYCLFr5/c54Yvl5GgNiDRiEsGQpbxfyiDAAsiQXkkI=
-=yfCP
+iQIzBAEBCAAdFiEEvVGQBLyIDHMspke4cqOMNHa+Jy8FAmqZ2TMACgkQcqOMNHa+
+Jy/2JhAAg7VoYLCyhtK0Fx0dDP/qasgkUqBWt/kNANsYtoBk7RGk7Q0FMC1pHku2
+BNcN8qljmWrDeM5ouCNxwjP6XG2rCv7eK+ar4xS+QsnB6GZ62QQD6TvB0jlbbVEh
+qUQx0/YyK4Sx+IZhoVWwzByMZqWJYOSovpBKJeokEmiKMi9anYen02/TKW1WBQUL
+/5knzyfZeNnUsOSu0NbX0Dj5TCtbqCqrJox+2DmfglOQ+EvZETDWSoCzvMCVxonM
+nxWLIizKwqMn+LQ5Wy7/qMBDXV7JtXl01ORGNCEQvGkvqkd4MvbochkNLr8ajDjf
+K4jkY3p1wnak282mjNE0kwtN8lnopDsWaXuXigTFYe7SraxI0oLTVmpoIY3NOcLD
+ibYn8/XNALMajfETPnWexcpKyEv+M3YmQSelCXVATxrvW1L1oKKV/RQ2qRRCtGE8
+GGf+G2EDpmgYvJ1vitmRKiKYPadKj4tV9ASlxGFxeFY3fD+9nCD1eblcINY2XFp7
+fSsXYZeqeAVDqu89XaECUPnpHB3BjGbOiflizSXOqUPWoeNTALOxFKgmZCT+hZzI
+6CW8AhyPkyuKGq8dJrB2SuUPZrOGGruscMOdhXFa5St2vrnMlWcNb0ufqPYNdXpt
+HXxYvfkcI3bGqubBr1OBXE8RMBDRy2zTUGn8gdPc+IqESyR6zck=
+=jbbg
 -----END PGP SIGNATURE-----

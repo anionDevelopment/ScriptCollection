@@ -905,6 +905,34 @@ class TFCPS_Tools_General:
         self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file, java_executable)
 
     @GeneralUtilities.check_arguments
+    def generate_svg_files_from_vega_files_for_repository(self, repository_folder: str,use_cache:bool) -> None:
+        # "use_cache" is accepted for interface-parity with generate_svg_files_from_plantuml_files_for_repository.
+        # Unlike plantuml/the JRE, "vg2svg" is assumed to already be available on the PATH (like "vl2svg", see
+        # ScriptCollectionCore.generate_chart_diagram), so there is nothing here which could be cached/downloaded.
+        self.__sc.log.log("Generate svg-files from vega-files...")
+        self.__sc.assert_is_git_repository(repository_folder)
+        target_folder = os.path.join(repository_folder, "Other", "Reference")
+        self.__generate_svg_files_from_vega_or_vegalite(target_folder, ".vega.json", self.__sc.generate_full_vega_chart_diagram)
+
+    @GeneralUtilities.check_arguments
+    def generate_svg_files_from_vegalite_files_for_repository(self, repository_folder: str,use_cache:bool) -> None:
+        # see generate_svg_files_from_vega_files_for_repository regarding "use_cache"
+        self.__sc.log.log("Generate svg-files from vegalite-files...")
+        self.__sc.assert_is_git_repository(repository_folder)
+        target_folder = os.path.join(repository_folder, "Other", "Reference")
+        self.__generate_svg_files_from_vega_or_vegalite(target_folder, ".vegalite.json", self.__sc.generate_chart_diagram)
+
+    @GeneralUtilities.check_arguments
+    def __generate_svg_files_from_vega_or_vegalite(self, diagrams_files_folder: str, file_extension: str, render_diagram) -> None:
+        for file in GeneralUtilities.get_all_files_of_folder(diagrams_files_folder):
+            if file.endswith(file_extension):
+                output_filename = Path(file).name[:-len(file_extension)]+".svg"
+                render_diagram(file, output_filename)
+                result_file = os.path.join(os.path.dirname(file), output_filename)
+                GeneralUtilities.assert_file_exists(result_file)
+                self.__sc.format_xml_file(result_file)
+
+    @GeneralUtilities.check_arguments
     def ensure_plantuml_is_available(self, enforce_update: bool, program_version: str) -> str:
         """Ensures the plantuml.jar for the given version is available in the global cache and returns its absolute path.
         The jar is stored under a version-specific subfolder ('<cache>/Tools/PlantUML/<version>/plantuml.jar') so that
@@ -2331,3 +2359,13 @@ class TFCPS_Tools_General:
         if count == 0:
             raise ValueError(f"No matching image '{image_name}' found in workflow file.")
         workflow_file.write_text(new_content, encoding="utf-8")
+
+    def write_languages_as_resource(self,codeunit_folder:str,languages:list[str])->None:
+        languages=sorted(languages)
+        resources_folder = os.path.join(codeunit_folder, "Other", "Resources")
+        GeneralUtilities.ensure_directory_exists(resources_folder)
+        languages_folder:str = os.path.join(resources_folder, "Languages")
+        GeneralUtilities.ensure_folder_exists_and_is_empty(languages_folder)
+        languages_file = os.path.join(languages_folder, "Languages.txt")
+        GeneralUtilities.ensure_file_exists(languages_file)
+        GeneralUtilities.write_lines_to_file(languages_file, languages)

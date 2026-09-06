@@ -19,6 +19,8 @@ class RunnerOperatingSystem(Enum):
     Windows = "Windows"
     MacOS = "MacOS"
     Linux = "Linux"
+    Android = "Android"
+    IOS = "IOS"
 
 
 class RunnerEndpoint:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.4.18"
+version = "4.4.19"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
@@ -28,6 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "build>=1.5.0",
+    "CountryInformation>=1.0.12",
     "coverage>=7.15.2",
     "cyclonedx-bom>=7.1.0",
     "defusedxml>=0.7.1",
