@@ -1,6 +1,7 @@
 import os
 import json
 import base64
+import shutil
 import ssl
 import uuid
 import threading
@@ -11,6 +12,12 @@ from ..GeneralUtilities import GeneralUtilities
 from ..ScriptCollectionCore import ScriptCollectionCore
 from ..SCLog import LogLevel
 
+#Size of the chunks in which the archives are copied between the network-connection and the disk. The archives are
+#transferred chunk-wise instead of being held in memory as a whole because both of them are regularly large (the payload
+#contains the whole repository of the client, the result contains the whole codeunit-folder including its build-output),
+#while a runner often runs in a container with a small memory-limit and needs that memory for the build itself.
+_transfer_chunk_size_in_bytes: int = 1024*1024
+
 
 class _RunnerJob:
     def __init__(self, workspace_folder: str, codeunit_name: str):
@@ -20,6 +27,12 @@ class _RunnerJob:
         self.exitcode = None
         self.log = GeneralUtilities.empty_string
         self.lock = threading.Lock()
+        #Serializes the transfer of the result-archive against the deletion of the workspace. A client deletes the job as
+        #soon as it stops waiting for the result - which also happens when it gives up on a still-running result-request,
+        #for example because a reverse-proxy in front of the runner ran into its timeout. Without this lock that deletion
+        #removes the workspace while it is being packed, which makes the transfer fail with a FileNotFoundError naming an
+        #arbitrary file of the build-output and can leave a partially deleted workspace behind.
+        self.transfer_lock = threading.Lock()
 
 
 class SCTaskRunnerServer:
@@ -53,15 +66,19 @@ class SCTaskRunnerServer:
         server.serve_forever()
 
     @GeneralUtilities.check_arguments
-    def __start_job(self, archive_bytes: bytes, codeunit_name: str, program: str, arguments: list[str], working_directory: str) -> str:  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
+    def __start_job(self, archive_stream, archive_size: int, codeunit_name: str, program: str, arguments: list[str], working_directory: str) -> str:  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
+        """Starts a job for the repository-archive which can be read from archive_stream (the body of the request which
+        submitted the job; archive_size is its announced length). The archive is taken as a stream instead of as bytes
+        because it contains the complete repository of the client and is therefore regularly several hundred megabytes,
+        which must not be held in memory in addition to the build which runs afterwards."""
         job_id = str(uuid.uuid4())
         workspace_folder = os.path.join(self.work_folder, job_id)
         # Isolation: each job gets a fresh, empty workspace-folder.
         GeneralUtilities.ensure_directory_does_not_exist(workspace_folder)
         GeneralUtilities.ensure_directory_exists(workspace_folder)
         archive_file = os.path.join(self.work_folder, f"{job_id}.payload.tar.gz")
-        GeneralUtilities.write_binary_to_file(archive_file, archive_bytes)
         try:
+            self.__copy_stream_to_file(archive_stream, archive_size, archive_file)
             with tarfile.open(archive_file, "r:gz") as tar:
                 tar.extractall(workspace_folder, filter="fully_trusted")
         finally:
@@ -72,6 +89,21 @@ class SCTaskRunnerServer:
         thread = threading.Thread(target=self.__run_job, args=(job, program, arguments, working_directory), daemon=True)
         thread.start()
         return job_id
+
+    @GeneralUtilities.check_arguments
+    def __copy_stream_to_file(self, stream, amount_of_bytes: int, target_file: str) -> None:
+        """Copies exactly amount_of_bytes bytes from stream into target_file, chunk-wise (see
+        _transfer_chunk_size_in_bytes for why the content is not read into memory as a whole). A stream which ends early
+        is reported as an error instead of resulting in a truncated file which would fail later as an unspecific
+        archive-error."""
+        remaining_amount_of_bytes = amount_of_bytes
+        with open(target_file, "wb") as target_file_object:
+            while 0 < remaining_amount_of_bytes:
+                chunk = stream.read(min(_transfer_chunk_size_in_bytes, remaining_amount_of_bytes))
+                if not chunk:
+                    raise ValueError(f"The transferred content ended after {amount_of_bytes-remaining_amount_of_bytes} bytes although {amount_of_bytes} bytes were announced.")
+                target_file_object.write(chunk)
+                remaining_amount_of_bytes = remaining_amount_of_bytes-len(chunk)
 
     @GeneralUtilities.check_arguments
     def __run_job(self, job: _RunnerJob, program: str, arguments: list[str], working_directory: str) -> None:
@@ -93,22 +125,30 @@ class SCTaskRunnerServer:
                 job.state = "failed"
 
     @GeneralUtilities.check_arguments
-    def __get_result_archive(self, job: _RunnerJob) -> bytes:  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
+    def __create_result_archive(self, job: _RunnerJob) -> str:  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
+        """Packs the codeunit-folder of the job and returns the file the archive was written to. The archive is returned
+        as a file (and not as bytes) because it contains the whole build-output of the codeunit and therefore regularly
+        has a size of several gigabytes, which must not be held in memory. The caller is responsible for deleting the
+        returned file after it was transferred."""
         codeunit_folder = os.path.join(job.workspace_folder, job.codeunit_name)
         archive_file = os.path.join(self.work_folder, f"{uuid.uuid4()}.result.tar.gz")
         try:
             with tarfile.open(archive_file, "w:gz") as tar:
                 tar.add(codeunit_folder, arcname=".")
-            return GeneralUtilities.read_binary_from_file(archive_file)
-        finally:
+        except Exception:
             GeneralUtilities.ensure_file_does_not_exist(archive_file)
+            raise
+        return archive_file
 
     @GeneralUtilities.check_arguments
     def __delete_job(self, job_id: str) -> None:  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
         with self.__jobs_lock:
             job = self.__jobs.pop(job_id, None)
         if job is not None:
-            GeneralUtilities.ensure_directory_does_not_exist(job.workspace_folder)
+            # The job was already removed from the job-list above, so no further result-request can start for it. This
+            # waits for one which is still running (see _RunnerJob.transfer_lock) before the workspace is removed.
+            with job.transfer_lock:
+                GeneralUtilities.ensure_directory_does_not_exist(job.workspace_folder)
 
     def __create_request_handler(self):
         outer = self
@@ -135,6 +175,16 @@ class SCTaskRunnerServer:
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+
+            def __send_file(self, status: int, file: str) -> None:
+                """Sends the content of a file without reading it into memory as a whole (see
+                _transfer_chunk_size_in_bytes)."""
+                self.send_response(status)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Length", str(os.path.getsize(file)))
+                self.end_headers()
+                with open(file, "rb") as file_object:
+                    shutil.copyfileobj(file_object, self.wfile, _transfer_chunk_size_in_bytes)
 
             def __send_text(self, status: int, text: str) -> None:
                 self.__send(status, text.encode("utf-8"), "text/plain; charset=utf-8")
@@ -178,9 +228,19 @@ class SCTaskRunnerServer:
                     if not ready:
                         self.__send_text(409, "Job is not completed")
                         return
-                    self.__send(200, outer._SCTaskRunnerServer__get_result_archive(job))
+                    self.__send_result_archive(job)
                     return
                 self.__send_text(404, "Not found")
+
+            def __send_result_archive(self, job: _RunnerJob) -> None:
+                # The transfer-lock is held while the archive is created and sent, so a DELETE for this job waits instead
+                # of removing the workspace while it is being packed (see _RunnerJob.transfer_lock).
+                with job.transfer_lock:
+                    archive_file = outer._SCTaskRunnerServer__create_result_archive(job)
+                    try:
+                        self.__send_file(200, archive_file)
+                    finally:
+                        GeneralUtilities.ensure_file_does_not_exist(archive_file)
 
             def do_POST(self):  # pylint:disable=invalid-name
                 if not self.__is_authorized():
@@ -190,12 +250,12 @@ class SCTaskRunnerServer:
                     self.__send_text(404, "Not found")
                     return
                 content_length = int(self.headers.get("Content-Length", "0"))
-                archive_bytes = self.rfile.read(content_length)
                 codeunit_name = self.headers.get("X-Codeunit-Name")
                 program = self.headers.get("X-Program")
                 arguments = json.loads(base64.b64decode(self.headers.get("X-Arguments", "")).decode("utf-8"))
                 working_directory = self.headers.get("X-Working-Directory", ".")
-                job_id = outer._SCTaskRunnerServer__start_job(archive_bytes, codeunit_name, program, arguments, working_directory)
+                #the body is handed over as a stream (and not read here) so the archive is written to disk chunk-wise, see __start_job.
+                job_id = outer._SCTaskRunnerServer__start_job(self.rfile, content_length, codeunit_name, program, arguments, working_directory)
                 self.__send_json(200, {"job_id": job_id})
 
             def do_DELETE(self):  # pylint:disable=invalid-name
