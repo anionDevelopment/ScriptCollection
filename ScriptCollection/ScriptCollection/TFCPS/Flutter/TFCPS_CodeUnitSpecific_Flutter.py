@@ -546,7 +546,15 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
         codeunit_name = os.path.basename(codeunit_folder)
         src_folder = GeneralUtilities.resolve_relative_path(package_name, codeunit_folder)
         
-        self._protected_sc.run_with_epew("flutter", "test --coverage", src_folder)
+        # The testcases are executed one after the other ("--concurrency=1") although that is slower than the
+        # default (one test-file per processor-core): the coverage which is collected while several test-files run
+        # at the same time is not reproducible. Flutter attaches to the vm-service of every test-isolate to read
+        # its coverage, and under load a library which was loaded by another isolate is sometimes counted and
+        # sometimes not - the very same code produced 91.14, 91.14 and 90.58 percent in three runs, while it
+        # produces exactly 90.30 percent in every serial run. A coverage-value which changes without the code
+        # changing makes the coverage-badge of a codeunit differ after every build (so the build is not idempotent
+        # anymore) and it can push a codeunit below its minimal-coverage-threshold by chance.
+        self._protected_sc.run_with_epew("flutter", "test --coverage --concurrency=1", src_folder)
         test_coverage_folder_relative = "Other/Artifacts/TestCoverage"
         test_coverage_folder = GeneralUtilities.resolve_relative_path(test_coverage_folder_relative, codeunit_folder)
         GeneralUtilities.ensure_directory_exists(test_coverage_folder)
