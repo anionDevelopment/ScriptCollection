@@ -44,15 +44,8 @@ class TFCPS_Tools_General:
     # Font-files (all faces of the diagram-font) bundled with the package and forced via the JVM-font-path when rendering.
     __bundled_diagram_font_filenames:list[str]=["DejaVuSans.ttf","DejaVuSans-Bold.ttf","DejaVuSans-Oblique.ttf","DejaVuSans-BoldOblique.ttf"]
     # Relative path (in the source-repository and in the ScriptCollection.Resources-package) of the file that pins the
-    # default Eclipse-Temurin-JRE-version used to render the PlantUML-diagrams when a repository does not pin its own
-    # version in '<repo>/Other/Resources/Dependencies/JRE/Version.txt'. The file contains a build like "21.0.6+7" (the
-    # feature-version is derived from it). Pinning the exact JDK-build (not just the major-version) makes the AWT-font-
-    # metrics - and thus the computed SVG-geometry - byte-identical across machines: PlantUML computes the SVG purely as
-    # vector-math from the font-metrics, and different JDK-builds (e.g. a Windows-client vs. the Debian-build-container)
-    # round these metrics slightly differently. Together with the bundled DejaVu-font (see __default_diagram_font_name)
-    # this makes the rendered SVG fully deterministic. The PlantUML-rendering uses this pinned JRE instead of the host's
-    # 'java' on the PATH. When the pinned version is bumped, the committed diagram-SVGs must be regenerated and re-committed
-    # once so they match the new build's metrics.
+    # default Eclipse-Temurin-JRE-version used by ensure_jre_is_available/download_jre when a repository does not pin its
+    # own version in '<repo>/Other/Resources/Dependencies/JRE/Version.txt'. The file contains a build like "21.0.6+7".
     __jre_version_resource_relative_path:str="Dependencies/JRE/Version.txt"
 
     def __init__(self,sc:ScriptCollectionCore):
@@ -70,6 +63,8 @@ class TFCPS_Tools_General:
         local_resource_name="CycloneDXCLI"
         self.ensure_file_from_github_assets_is_available_with_retry("CycloneDX",  "cyclonedx-cli", local_resource_name,"cyclonedx-linux-arm64",lambda latest_version: "cyclonedx-linux-arm64",enforce_update=enforce_update)
         self.ensure_file_from_github_assets_is_available_with_retry("CycloneDX",  "cyclonedx-cli", local_resource_name,"cyclonedx-linux-x64",lambda latest_version: "cyclonedx-linux-x64",enforce_update=enforce_update)
+        self.ensure_file_from_github_assets_is_available_with_retry("CycloneDX",  "cyclonedx-cli", local_resource_name,"cyclonedx-osx-arm64",lambda latest_version: "cyclonedx-osx-arm64",enforce_update=enforce_update)
+        self.ensure_file_from_github_assets_is_available_with_retry("CycloneDX",  "cyclonedx-cli", local_resource_name,"cyclonedx-osx-x64",lambda latest_version: "cyclonedx-osx-x64",enforce_update=enforce_update)
         self.ensure_file_from_github_assets_is_available_with_retry("CycloneDX",  "cyclonedx-cli", local_resource_name,"cyclonedx-win-arm64.exe",lambda latest_version: "cyclonedx-win-arm64.exe",enforce_update=enforce_update)
         self.ensure_file_from_github_assets_is_available_with_retry("CycloneDX",  "cyclonedx-cli", local_resource_name, "cyclonedx-win-x64.exe",lambda latest_version: "cyclonedx-win-x64.exe",enforce_update=enforce_update)
         
@@ -91,6 +86,13 @@ class TFCPS_Tools_General:
                 return os.path.join(resource_folder, "cyclonedx-linux-arm64")
             else:
                 raise ValueError("Unsupported architecture for cyclonedx-cli on linux.")
+        elif GeneralUtilities.current_system_is_macos():
+            if is_x64:
+                return os.path.join(resource_folder, "cyclonedx-osx-x64")
+            elif is_arm:
+                return os.path.join(resource_folder, "cyclonedx-osx-arm64")
+            else:
+                raise ValueError("Unsupported architecture for cyclonedx-cli on macos.")
         else:
             raise ValueError("Unsupported operating system for cyclonedx-cli.")
 
@@ -128,8 +130,11 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def download_jre(self, enforce_update: bool = False) -> None:
         self.__sc.log.log("Download cachable tool \"JRE\" into global cache...", LogLevel.Debug)
-        # Only the executing platform is warmed (unlike e.g. MediaMTX): a JDK-archive is large (~200MB), and the
-        # build-image is built per-platform, so warming foreign platforms would only bloat the image without benefit.
+        # No repository-context is available when warming the global cache (e.g. scdownloadcachabletools in a
+        # build-image), so download the default version pinned by the ScriptCollection-package. Actual builds
+        # pass the version pinned in their own '<repo>/Other/Resources/Dependencies/JRE/Version.txt'. This is
+        # independent of the Java used to render PlantUML-diagrams (see __run_plantuml_in_linux_container), which
+        # always runs inside a Docker-container instead of this cached JRE.
         self.ensure_jre_is_available(enforce_update)
 
     @GeneralUtilities.check_arguments
@@ -865,18 +870,26 @@ class TFCPS_Tools_General:
     def generate_svg_files_from_plantuml_files_for_repository(self, repository_folder: str,use_cache:bool) -> None:
         self.__sc.log.log("Generate svg-files from plantuml-files...")
         self.__sc.assert_is_git_repository(repository_folder)
+        # If the currently checked-out commit is itself tagged with a release-version ('v<semver>') and the working-tree
+        # is clean, the committed diagram-SVGs were generated for exactly this release-state and must not change; a
+        # difference would then indicate a rendering-regression (e.g. a font/JRE-mismatch, see
+        # __generate_svg_files_from_plantuml) instead of an expected content-change and must fail loudly.
+        current_commit_tags = [tag for tag in GeneralUtilities.string_to_lines(self.__sc.run_program_argsasarray("git", ["tag", "--points-at", "HEAD"], repository_folder, throw_exception_if_exitcode_is_not_zero=False)[1]) if GeneralUtilities.string_has_content(tag)]
+        current_commit_has_release_tag = any(re.match(r"^v\d+\.\d+\.\d+$", tag) for tag in current_commit_tags)
+        assert_remains_unchanged: bool = current_commit_has_release_tag and not self.__sc.git_repository_has_uncommitted_changes(repository_folder)
         plantuml_jar_file=self.ensure_plantuml_is_available(not use_cache, self.get_plantuml_version(repository_folder))
-        java_executable=self.ensure_jre_is_available(not use_cache, repository_folder)
         target_folder = os.path.join(repository_folder, "Other",  "Reference")
-        self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file, java_executable)
+        self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file, repository_folder)
+        if assert_remains_unchanged:
+            GeneralUtilities.assert_condition(not self.__sc.git_repository_has_uncommitted_changes(repository_folder), f"Generating svg-files from plantuml-files in '{repository_folder}' changed the repository unexpectedly.")
 
     @GeneralUtilities.check_arguments
     def generate_svg_files_from_plantuml_files_for_codeunit(self, codeunit_folder: str,use_cache:bool) -> None:
         self.assert_is_codeunit_folder(codeunit_folder)
-        plantuml_jar_file=self.ensure_plantuml_is_available(not use_cache, self.get_plantuml_version(os.path.dirname(codeunit_folder)))
-        java_executable=self.ensure_jre_is_available(not use_cache, os.path.dirname(codeunit_folder))
+        repository_folder = os.path.dirname(codeunit_folder)
+        plantuml_jar_file=self.ensure_plantuml_is_available(not use_cache, self.get_plantuml_version(repository_folder))
         target_folder = os.path.join(codeunit_folder, "Other", "Reference")
-        self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file, java_executable)
+        self.__generate_svg_files_from_plantuml(target_folder, plantuml_jar_file, repository_folder)
 
     @GeneralUtilities.check_arguments
     def ensure_plantuml_is_available(self, enforce_update: bool, program_version: str) -> str:
@@ -903,26 +916,10 @@ class TFCPS_Tools_General:
         """Returns the PlantUML-version used when no repository-specific version is pinned (for example when warming
         the global cache via scdownloadcachabletools). The value is read from the version-file bundled with the
         ScriptCollection-package, with a fallback to the source-file for an unbuilt source-checkout."""
-        try:
-            content = GeneralUtilities._internal_load_resource(TFCPS_Tools_General.__plantuml_version_resource_relative_path)
-            return content.decode("utf-8").strip()
-        except (FileNotFoundError, ModuleNotFoundError):
-            source_version_file = GeneralUtilities.resolve_relative_path(f"../../../Other/Resources/{TFCPS_Tools_General.__plantuml_version_resource_relative_path}", os.path.dirname(__file__))
-            GeneralUtilities.assert_file_exists(source_version_file)
-            return GeneralUtilities.read_text_from_file(source_version_file).strip()
 
-    @GeneralUtilities.check_arguments
-    def get_default_jre_version(self) -> str:
-        """Returns the JRE-version used when a repository does not pin its own version (see
-        __jre_version_resource_relative_path). The value is read from the version-file bundled with the
-        ScriptCollection-package, with a fallback to the source-file for an unbuilt source-checkout."""
-        try:
-            content = GeneralUtilities._internal_load_resource(TFCPS_Tools_General.__jre_version_resource_relative_path)
-            return content.decode("utf-8").strip()
-        except (FileNotFoundError, ModuleNotFoundError):
-            source_version_file = GeneralUtilities.resolve_relative_path(f"../../../Other/Resources/{TFCPS_Tools_General.__jre_version_resource_relative_path}", os.path.dirname(__file__))
-            GeneralUtilities.assert_file_exists(source_version_file)
-            return GeneralUtilities.read_text_from_file(source_version_file).strip()
+        content = GeneralUtilities._internal_load_resource(TFCPS_Tools_General.__plantuml_version_resource_relative_path)
+        return content.decode("utf-8").strip()
+
 
     @GeneralUtilities.check_arguments
     def get_jre_version(self, repository_folder: str = None) -> str:
@@ -935,10 +932,19 @@ class TFCPS_Tools_General:
         return self.get_default_jre_version()
 
     @GeneralUtilities.check_arguments
+    def get_default_jre_version(self) -> str:
+        """Returns the JRE-version used when no repository-specific version is pinned (for example when warming
+        the global cache via scdownloadcachabletools). The value is read from the version-file bundled with the
+        ScriptCollection-package."""
+        content = GeneralUtilities._internal_load_resource(TFCPS_Tools_General.__jre_version_resource_relative_path)
+        return content.decode("utf-8").strip()
+
+    @GeneralUtilities.check_arguments
     def ensure_jre_is_available(self, enforce_update: bool, repository_folder: str = None) -> str:
         """Ensures the pinned JDK is available in the global cache for the executing platform and returns the absolute path
         to its 'java'-executable. The version is the repository-specific pin if present, otherwise the bundled default (see
-        get_jre_version). Pinning the exact build makes the PlantUML-rendering deterministic across machines."""
+        get_jre_version). Used by tools which need a locally-runnable, deterministically-versioned JRE (the PlantUML-diagram
+        rendering itself now always runs inside a Docker-container instead, see __run_plantuml_in_linux_container)."""
         local_resource_name = "JRE"
         jre_version = self.get_jre_version(repository_folder)
         feature_version = jre_version.split(".")[0]  # e.g. "21" from "21.0.6+7"
@@ -996,7 +1002,7 @@ class TFCPS_Tools_General:
         return java_executable
 
     @GeneralUtilities.check_arguments
-    def __generate_svg_files_from_plantuml(self, diagrams_files_folder: str, plantuml_jar_file: str, java_executable: str) -> None:
+    def __generate_svg_files_from_plantuml(self, diagrams_files_folder: str, plantuml_jar_file: str, repository_folder: str) -> None:
         # Pin the font for all rendered diagrams via a PlantUML-config-file so the resulting SVG is identical across
         # machines, without having to add a skinparam to every (also hand-written) .plantuml-file. See the comment at
         # __default_diagram_font_name for the reason.
@@ -1006,17 +1012,22 @@ class TFCPS_Tools_General:
         # font-version happens to be installed on the host. This makes the text-measurement - and thus the resulting
         # SVG-geometry - identical across machines (e.g. a Windows-client and the Debian-build-container), because the
         # exact same font-files are used everywhere.
-        java_font_arguments: list[str] = []
         bundled_fonts_folder = self.__extract_bundled_fonts_to_temp_folder()
-        if bundled_fonts_folder is not None:
-            java_font_arguments.append(f"-Dsun.java2d.fontpath=prepend:{bundled_fonts_folder}")
+        # Pinning the JDK-build and the font is sufficient to get byte-identical SVGs on Windows and Linux, because both
+        # use the same FreeType-based font-rasterizer internally, so the AWT-font-metrics (in particular the vertical
+        # ascent/descent used e.g. for the note-box-positioning) round identically there. macOS-builds of the JDK use
+        # Apple's native CoreText font-manager instead, which rounds those vertical metrics slightly differently even
+        # for the exact same pinned font-file and JDK-build, shifting positions in the rendered SVG by a fraction of a
+        # pixel. To still get an identical result on macOS, the rendering itself does not run on a native macOS-JVM
+        # there but inside a short-lived Docker-container that runs the Java-image the repository itself declares in
+        # '.ScriptCollection/OCIImages/ImageDefinition.csv' (image-name 'Java', see __run_plantuml_in_linux_container) -
+        # i.e. the diagram is always rendered by a Linux-JVM, regardless of host.
         try:
             for file in GeneralUtilities.get_all_files_of_folder(diagrams_files_folder):
                 if file.endswith(".plantuml"):
                     output_filename = self.get_output_filename_for_plantuml_filename(file)
-                    argument = java_font_arguments + ['-jar',plantuml_jar_file, '-tsvg', '-config', font_config_file, os.path.basename(file)]
                     folder = os.path.dirname(file)
-                    self.__sc.run_program_argsasarray(java_executable, argument, folder)
+                    self.__run_plantuml_in_linux_container(folder, os.path.basename(file), plantuml_jar_file, font_config_file, bundled_fonts_folder, repository_folder)
                     result_file = folder+"/" + output_filename
                     GeneralUtilities.assert_file_exists(result_file)
                     self.__sc.format_xml_file(result_file)
@@ -1024,6 +1035,28 @@ class TFCPS_Tools_General:
             GeneralUtilities.ensure_file_does_not_exist(font_config_file)
             if bundled_fonts_folder is not None:
                 GeneralUtilities.ensure_directory_does_not_exist(bundled_fonts_folder)
+
+    @GeneralUtilities.check_arguments
+    def __run_plantuml_in_linux_container(self, folder: str, plantuml_filename: str, plantuml_jar_file: str, font_config_file: str, bundled_fonts_folder: str, repository_folder: str) -> None:
+        """Renders a single .plantuml-file into a svg-file by running PlantUML inside a short-lived, disposable Docker-
+        container. All diagram-rendering happens this way, regardless of the host-platform (see __generate_svg_files_from_plantuml
+        for why this is required to get byte-identical results on Windows/Linux/macOS). The image is not hardcoded here: every
+        repository must declare it itself as the image named 'Java' in '<repository>/.ScriptCollection/OCIImages/ImageDefinition.csv'
+        (the same mechanism used for e.g. 'Betterleaks'/'SCBuilder', see __search_for_secrets_in_repository/build_codeunits_in_container
+        in TFCPS_CodeUnit_BuildCodeUnits), so a repository can pin the exact JDK-build it wants rendered with. The bundled font and
+        the font-config are mounted into the container; no network-access is required inside the container for this."""
+        docker_image = self.oci_image_manager.get_registry_address_for_image_with_default_tag(repository_folder, "Java")
+        container_jar_file = "/opt/plantuml.jar"
+        container_font_config_file = "/opt/font-config.cfg"
+        container_fonts_folder = "/opt/fonts"
+        container_work_folder = "/work"
+        docker_arguments = ["run", "--rm", "-v", f"{plantuml_jar_file}:{container_jar_file}:ro", "-v", f"{font_config_file}:{container_font_config_file}:ro", "-v", f"{folder}:{container_work_folder}", "-w", container_work_folder]
+        java_font_arguments: list[str] = []
+        if bundled_fonts_folder is not None:
+            docker_arguments = docker_arguments+["-v", f"{bundled_fonts_folder}:{container_fonts_folder}:ro"]
+            java_font_arguments = [f"-Dsun.java2d.fontpath=prepend:{container_fonts_folder}"]
+        docker_arguments = docker_arguments+[docker_image, "java"]+java_font_arguments+["-jar", container_jar_file, "-tsvg", "-config", container_font_config_file, plantuml_filename]
+        self.__sc.run_program_argsasarray("docker", docker_arguments)
 
     @GeneralUtilities.check_arguments
     def __extract_bundled_fonts_to_temp_folder(self) -> str:
@@ -1632,16 +1665,8 @@ class TFCPS_Tools_General:
         (for example when warming the global cache via scdownloadcachabletools). The value is read from
         '<repo>/Other/Resources/Dependencies/OpenAPIGenerator/Version.txt', which the build copies into the
         ScriptCollection.Resources-package so it is available at runtime from the installed wheel."""
-        try:
-            # Default case: read the version-file that ships inside the installed package (wheel, build-image, ...).
-            content = GeneralUtilities._internal_load_resource(TFCPS_Tools_General.__openapigenerator_version_resource_relative_path)
-            return content.decode("utf-8").strip()
-        except (FileNotFoundError, ModuleNotFoundError):
-            # Fallback for running from an unbuilt source-checkout where the file has not been copied into the
-            # package-resources yet: read the human-editable source-file directly from the repository.
-            source_version_file = GeneralUtilities.resolve_relative_path(f"../../../Other/Resources/{TFCPS_Tools_General.__openapigenerator_version_resource_relative_path}", os.path.dirname(__file__))
-            GeneralUtilities.assert_file_exists(source_version_file)
-            return GeneralUtilities.read_text_from_file(source_version_file).strip()
+        content = GeneralUtilities._internal_load_resource(TFCPS_Tools_General.__openapigenerator_version_resource_relative_path)
+        return content.decode("utf-8").strip()
 
     @GeneralUtilities.check_arguments
     def update_images_in_example_with_default_excluded(self, codeunit_folder: str,custom_updater:AbstractImageHandler):
