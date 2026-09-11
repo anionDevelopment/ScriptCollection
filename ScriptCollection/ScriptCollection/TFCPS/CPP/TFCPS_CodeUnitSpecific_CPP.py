@@ -6,7 +6,7 @@ import shutil
 from ...GeneralUtilities import GeneralUtilities
 from ...SCLog import LogLevel
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base, TFCPS_CodeUnitSpecific_Base_CLI
-from ..TFCPS_RemoteBuild import TFCPS_RemoteBuild, RunnerOperatingSystem
+from ..TFCPS_RemoteBuild import RunnerOperatingSystem
 
 
 class TFCPS_CodeUnitSpecific_CPP_Functions(TFCPS_CodeUnitSpecific_Base):
@@ -164,7 +164,10 @@ class TFCPS_CodeUnitSpecific_CPP_Functions(TFCPS_CodeUnitSpecific_Base):
         else:
             # macOS-binaries can only be produced on macOS, so this always delegates to a macOS-task-runner when not
             # already running on macOS (see the remote-build-article in the reference).
-            self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "/bin/sh", ["-c", " && ".join(self.macos_build_commands)], source_folder)
+            #The result-folder is the sourcecode-folder itself: where a build-command of a C/C++-codeunit puts its
+            #output is defined by that command, so the only folder which is known to contain it is the one the commands
+            #run in - which is also the folder __collect_output_files searches afterwards.
+            self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "/bin/sh", ["-c", " && ".join(self.macos_build_commands)], source_folder, source_folder)
         self.__collect_output_files(source_folder, self.macos_output_file_patterns, "BuildResult_MacOS")
 
     @GeneralUtilities.check_arguments

@@ -36,18 +36,70 @@ build-step) rather than delegating to a permanently-running task-runner.
      example signing-certificates for windows-builds). The runner is part of the build-infrastructure and is trusted exactly
      like the machine/container on which `scbuildcodeunits` runs and from which such secrets originate; therefore there is
      **no** secret-exclude-filter.
-2. The runner extracts the archive into a **fresh, empty workspace** (isolation), runs the requested program on its
-   operating-system, and returns **only the codeunit-folder**.
-3. The client **mirrors the returned codeunit-folder** back into the local repository (a full replacement, so additions,
-   modifications and deletions of the runner are reflected - regardless of whether files are git-ignored). Afterwards it
-   looks exactly as if the runner had built locally.
+2. The runner answers the submit **as soon as the archive has arrived** and does everything else in the job: it extracts
+   the archive into a **fresh, empty workspace** (isolation), runs the requested program on its operating-system, and
+   returns **only the folder the client stated its result is in** (the client sends it as `X-Result-Folder`).
+   - The extraction belongs to the job and not to the submit-request, because extracting the repository of a large
+     codeunit takes minutes during which no data flows - the client and a reverse-proxy between them would run into
+     their timeouts although the job is being prepared correctly. A client therefore sees a job which is already running
+     while its repository is still being extracted, and a failing extraction is a failed job, not a failed request.
+3. The client **writes the returned content into that same folder** of the local repository, so the build-step can
+   continue with the result as if it had been produced locally. **Nothing is deleted for this** and nothing else of the
+   local repository is touched.
 4. The client deletes the job on the runner, which **deletes the runner-workspace immediately**, so no repository-content
    remains on the runner.
 
-## Why only the codeunit-folder is mirrored back
+## Which error reaches the client
 
-A build-script must, by definition, never change anything outside of its own codeunit-folder. Therefore mirroring back just
-the codeunit-folder is sufficient to reproduce the complete result of the remote build, and it keeps the round-trip small.
+A runner separates a build which does not work from a runner which does not work:
+
+- **The build fails** (the app does not compile, a test fails, whatever the delegated program reports): that is what the
+  client asked for, so its **complete output** is transferred and printed, and the job ends with the exitcode of that
+  program.
+- **The runner itself fails** (it can not extract the transferred repository, can not start the program, or any other
+  unexpected error): the client gets the statement that the runner failed plus an **error-id**, and a request which fails
+  this way is answered with **500** without details. The details - stacktraces and paths inside the runner - are written
+  to the log of the runner only, under that same error-id, because they state something about the internals of that
+  runner which the one who waits for the build can not act on.
+
+## What an interrupted connection to a runner means
+
+A job runs on the runner independently of the connection to the client: an interrupted connection does not stop the build,
+and a runner states the result of every job it ran in its own log, also when no client is waiting for it any more.
+
+The client therefore distinguishes two things while it waits for a job:
+
+- The runner **answered** - including with an error-status. That is a defined answer and is reported immediately.
+- The runner **could not be reached** (the connection was refused, reset or its answer was cut off). Requests which
+  concern a job that already exists are then repeated for at most **five minutes**, because the build they belong to is
+  still producing a result in the meantime. Submitting a job is never repeated: that would start a second build.
+
+An interruption which lasts longer ends the build with the statement that its result is unknown here and that it may still
+be running on the runner. A runner which is restarted meanwhile does not know the job any more (a runner holds its jobs in
+memory only), which the client reports as exactly that instead of as an unspecific `404`.
+
+A connection counts as interrupted when it transports nothing for **five minutes**. The exception is fetching the result:
+the runner packs the complete build-output of the codeunit before it sends the first byte of it, so nothing is
+transported while that runs, and the client waits **an hour** for that one request. This has to stay above the
+read-timeout of a reverse-proxy in front of a runner, so that its gateway-timeout - a defined answer - arrives instead of
+the client giving up on the connection first.
+
+## Why only the result-folder comes back
+
+A build-step produces its result in a folder which the code that delegates it already knows - a flutter-windows-build in
+`build/windows/x64/runner/Release`, an android-appbundle-build in `build/app/outputs/bundle/release`, and so on; that is
+the folder the artifacts are copied from afterwards. Everything else which changed in the workspace of the runner is not
+a result:
+
+- **State of that machine**: `local.properties` pointing at the SDK-path of the runner, `.dart_tool`-files containing its
+  absolute paths, caches. Written into the repository of a developer, these are wrong there.
+- **Content the client sent itself**, unchanged - there is no point in sending it back.
+
+The earlier behaviour (replacing the whole codeunit-folder with the one of the runner) additionally **deleted** the local
+codeunit-folder first. That destroys everything of that codeunit which is not part of the answer of the runner, including
+files which are not in git and can therefore not be restored, and on Windows it can not even complete: the build-script
+of the codeunit runs in a folder below the codeunit, a folder a process runs in can not be removed there, so the deletion
+fails in the middle and leaves the codeunit incomplete.
 
 ## Why windows-, macos-, ios- and appbundle-builds always use a runner
 

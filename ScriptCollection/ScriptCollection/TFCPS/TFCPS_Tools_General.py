@@ -799,23 +799,13 @@ class TFCPS_Tools_General:
         self.__sc.assert_is_git_repository(repositoryfolder)
         return self.__sc.get_semver_version(repositoryfolder)
 
-    @GeneralUtilities.check_arguments
-    def __try_calculate_changelog_message(self, repositoryfolder: str):
-        self.__sc.assert_is_git_repository(repositoryfolder)
-        message = self.__sc.run_program("git", "log -1 --pretty=%B", repositoryfolder)[1]
-        message = message.strip()
-        if len(message) == 0:
-            raise ValueError("No commit message found.")
-        return message
+
 
     @GeneralUtilities.check_arguments
     def create_changelog_entry(self, repositoryfolder: str, message: str, commit: bool, force: bool):
         self.__sc.assert_is_git_repository(repositoryfolder)
         if message is None:
-            try:
-                message=self.__try_calculate_changelog_message(repositoryfolder)
-            except:
-                message="Update."
+            message="Update."
         random_file = os.path.join(repositoryfolder, str(uuid.uuid4()))
         try:
             if force and not self.__sc.git_repository_has_uncommitted_changes(repositoryfolder):

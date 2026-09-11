@@ -364,13 +364,14 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         return self.__use_cache
 
     @GeneralUtilities.check_arguments
-    def run_program_on_remote_runner(self, required_os: RunnerOperatingSystem, program: str, arguments: list[str], working_directory: str) -> None:
+    def run_program_on_remote_runner(self, required_os: RunnerOperatingSystem, program: str, arguments: list[str], working_directory: str, result_folder: str) -> None:
         """Runs the given program for this codeunit on a remote task-runner that provides the given operating-system (see
         TFCPS_RemoteBuild and the SCTaskRunnerWindows/SCTaskRunnerMacOS-codeunits). This is used for operating-system-bound
         build-steps (e.g. flutter-windows- or flutter-ios-builds) which can not run on the current operating-system. After
-        the runner finished, only the codeunit-folder is mirrored back into the local repository, so it looks as if the
-        runner had built locally. working_directory must be a folder inside this codeunit."""
-        TFCPS_RemoteBuild(self._protected_sc).run_program_on_runner(required_os, self.get_repository_folder(), self.get_codeunit_name(), program, arguments, working_directory)
+        the runner finished, the content of result_folder is written back into the local repository, so the build-step can
+        continue with the result as if it had been produced here; nothing else of the local repository is touched.
+        working_directory and result_folder must be folders inside this codeunit."""
+        TFCPS_RemoteBuild(self._protected_sc).run_program_on_runner(required_os, self.get_repository_folder(), self.get_codeunit_name(), program, arguments, working_directory, result_folder)
 
     @GeneralUtilities.check_arguments
     def get_codeunit_folder(self)->str:
