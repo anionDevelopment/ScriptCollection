@@ -91,14 +91,14 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                 # are produced uniformly in the same defined environment. See the remote-build-article in the reference. If
                 # no runner is configured, fall back to building locally (only possible when already running on Windows)
                 # instead of failing, so a development machine without a configured runner is not blocked.
+                windows_release_folder = os.path.join(src_folder, "build/windows/x64/runner/Release")
                 if platform.system() == "Windows" and not TFCPS_RemoteBuild(self._protected_sc).has_any_runner_configured():
                     self._protected_sc.log.log("No remote-build-runner is configured; building the windows-target locally "
                                                 "instead. This build is not guaranteed to be produced in the same uniform "
                                                 "environment as a runner-built one.", LogLevel.Warning)
                     self._protected_sc.run_with_epew("flutter", "build windows", src_folder)
                 else:
-                    self.run_program_on_remote_runner(RunnerOperatingSystem.Windows, "flutter", ["build", "windows"], src_folder)
-                windows_release_folder = os.path.join(src_folder, "build/windows/x64/runner/Release")
+                    self.run_program_on_remote_runner(RunnerOperatingSystem.Windows, "flutter", ["build", "windows"], src_folder, windows_release_folder)
                 windows_folder = os.path.join(artifacts_folder, "BuildResult_Windows")
                 GeneralUtilities.ensure_directory_does_not_exist(windows_folder)
                 GeneralUtilities.ensure_directory_exists(windows_folder)
@@ -119,8 +119,8 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                 # macOS-desktop-builds must run on macOS and therefore always run on the macOS-task-runner (uniform
                 # builds), analogous to how ios-builds always run on the iOS-task-runner. See SCTaskRunnerMacOS and
                 # the remote-build-article in the reference.
-                self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "flutter", ["build", "macos"], src_folder)
                 macos_release_folder = os.path.join(src_folder, "build/macos/Build/Products/Release")
+                self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "flutter", ["build", "macos"], src_folder, macos_release_folder)
                 macos_folder = os.path.join(artifacts_folder, "BuildResult_MacOS")
                 GeneralUtilities.ensure_directory_does_not_exist(macos_folder)
                 GeneralUtilities.ensure_directory_exists(macos_folder)
@@ -128,8 +128,8 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
             elif target == "ios":
                 # iOS-builds must run on macOS and therefore always run on the dedicated iOS-task-runner (uniform
                 # builds). See SCTaskRunnerIOS and the remote-build-article in the reference.
-                self.run_program_on_remote_runner(RunnerOperatingSystem.IOS, "flutter", ["build", "ios"], src_folder)
                 ios_release_folder = os.path.join(src_folder, "build/ios/iphoneos")
+                self.run_program_on_remote_runner(RunnerOperatingSystem.IOS, "flutter", ["build", "ios"], src_folder, ios_release_folder)
                 ios_folder = os.path.join(artifacts_folder, "BuildResult_IOS")
                 GeneralUtilities.ensure_directory_does_not_exist(ios_folder)
                 GeneralUtilities.ensure_directory_exists(ios_folder)
@@ -138,27 +138,38 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                 # Android-app-builds always run on an Android-task-runner (see SCTaskRunnerAndroid and the
                 # remote-build-article in the reference), analogous to how ios-builds always run on a macOS-task-runner:
                 # the Android-SDK/NDK-toolchain no longer lives in SCBuilder itself, it moved into SCTaskRunnerAndroid.
-                self.run_program_on_remote_runner(RunnerOperatingSystem.Android, "flutter", ["build", "appbundle"], src_folder)
-                enabled=False
-                if enabled:#TODO move to external because this is not platform indepent
-                    aab_folder = os.path.join(artifacts_folder, "BuildResult_AAB")
-                    GeneralUtilities.ensure_directory_does_not_exist(aab_folder)
-                    GeneralUtilities.ensure_directory_exists(aab_folder)
-                    aab_relase_folder = os.path.join(src_folder, "build/app/outputs/bundle/release")
-                    aab_file_original = self._protected_sc.find_file_by_extension(aab_relase_folder, "aab")
-                    aab_file = os.path.join(aab_folder, f"{codeunit_name}.aab")
-                    shutil.copyfile(aab_file_original, aab_file)
-                    
-                    bundletool = self.tfcps_Tools_General.ensure_androidappbundletool_is_available(None,self.use_cache())
-                    apk_folder = os.path.join(artifacts_folder, "BuildResult_APK")
-                    GeneralUtilities.ensure_directory_does_not_exist(apk_folder)
-                    GeneralUtilities.ensure_directory_exists(apk_folder)
-                    apks_file = f"{apk_folder}/{codeunit_name}.apks"
-                    self._protected_sc.run_program("java", f"-jar {bundletool} build-apks --bundle={aab_file} --output={apks_file} --mode=universal", aab_relase_folder)
-                    with zipfile.ZipFile(apks_file, "r") as zip_ref:
-                        zip_ref.extract("universal.apk", apk_folder)
-                    GeneralUtilities.ensure_file_does_not_exist(apks_file)
-                    os.rename(f"{apk_folder}/universal.apk", f"{apk_folder}/{codeunit_name}.apk")
+                aab_release_folder = os.path.join(src_folder, "build/app/outputs/bundle/release")
+                self.run_program_on_remote_runner(RunnerOperatingSystem.Android, "flutter", ["build", "appbundle"], src_folder, aab_release_folder)
+                # The app-bundle which came back from the runner is published as the build-result of this codeunit,
+                # analogous to the targets above: it is the artifact of an android-build, and every codeunit has to have
+                # an artifact whose name matches "BuildResult_.+" (see TFCPS_CodeUnit_BuildCodeUnit.build_codeunit).
+                aab_folder = os.path.join(artifacts_folder, "BuildResult_AAB")
+                GeneralUtilities.ensure_folder_exists_and_is_empty(aab_folder)
+                aab_file_original = self._protected_sc.find_file_by_extension(aab_release_folder, "aab")
+                aab_file = os.path.join(aab_folder, f"{codeunit_name}.aab")
+                shutil.copyfile(aab_file_original, aab_file)
+                # An app-bundle is not installable itself - it is what is uploaded to the store - so the universal apk,
+                # which can be installed directly, is generated from it with Google's bundletool.
+                bundletool = self.tfcps_Tools_General.ensure_androidappbundletool_is_available(None, not self.use_cache())
+                # The pinned JRE from the global cache is used instead of a "java" of the machine, because a
+                # java-runtime is not part of every machine which builds a codeunit. It is the same JRE ScriptCollection
+                # already uses to render the plantuml-diagrams, so this step needs nothing which a build does not need
+                # anyway.
+                java_executable = self.tfcps_Tools_General.ensure_jre_is_available(not self.use_cache(), self.get_repository_folder())
+                apk_folder = os.path.join(artifacts_folder, "BuildResult_APK")
+                GeneralUtilities.ensure_directory_does_not_exist(apk_folder)
+                GeneralUtilities.ensure_directory_exists(apk_folder)
+                apks_file = os.path.join(apk_folder, f"{codeunit_name}.apks")
+                # The arguments are passed as an array and not as one string, because they contain absolute paths and a
+                # path which contains a space would otherwise be split into several arguments (see
+                # GeneralUtilities.arguments_to_array).
+                self._protected_sc.run_program_argsasarray(java_executable, ["-jar", bundletool, "build-apks", f"--bundle={aab_file}", f"--output={apks_file}", "--mode=universal"], aab_release_folder)
+                # "--mode=universal" produces exactly one apk for all architectures, which the archive contains under
+                # this name; it is renamed to the codeunit so the artifact states which codeunit it belongs to.
+                with zipfile.ZipFile(apks_file, "r") as apks_archive:
+                    apks_archive.extract("universal.apk", apk_folder)
+                GeneralUtilities.ensure_file_does_not_exist(apks_file)
+                os.rename(os.path.join(apk_folder, "universal.apk"), os.path.join(apk_folder, f"{codeunit_name}.apk"))
             else:
                 raise ValueError(f"Not supported target: {target}")
         self.__generate_bom_for_flutter_package(package_name)

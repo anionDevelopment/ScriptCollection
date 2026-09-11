@@ -36,3 +36,7 @@ cyclonedx
 gitversion
 dockerfile
 pyOpenSSL
+exitcode
+loglevel
+stacktrace
+stacktraces

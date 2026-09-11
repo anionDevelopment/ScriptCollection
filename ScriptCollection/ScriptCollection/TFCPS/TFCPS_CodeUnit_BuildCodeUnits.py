@@ -4,7 +4,6 @@ import re
 import socket
 from datetime import datetime, timedelta,timezone
 import xmlschema
-import yaml
 from packaging.version import Version
 from ..GeneralUtilities import GeneralUtilities
 from ..ScriptCollectionCore import ScriptCollectionCore

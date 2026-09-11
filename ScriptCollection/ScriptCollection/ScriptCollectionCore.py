@@ -39,7 +39,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.20"
+version = "4.4.21"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2644,8 +2644,11 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         patch = int(splitted[2])
         if increment_major:
             major = major+1
+            minor=0
+            patch=0
         if increment_minor:
             minor = minor+1
+            patch=0
         if increment_patch:
             patch = patch+1
         return f"{major}.{minor}.{patch}"
@@ -2700,16 +2703,18 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
                             or self.is_fix_branch(current_branch_name) 
                             or self.is_other_branch(current_branch_name),
                             f"Repository '{repository_folder}' is on branch '{current_branch_name}' which is not a major-, minor-, fix- or other-branch. This is not allowed.")
-                        if self.is_major_branch(current_branch_name):
-                            incremented = self.increment_version(current_version, True, False, False)
-                            major = incremented.split(".")[0]
-                            result = f"{major}.0.0"
+                        if self.is_other_branch(current_branch_name) or self.is_fix_branch(current_branch_name):
+                            result = self.increment_version(current_version, False, False, True)
                         elif self.is_minor_branch(current_branch_name):
                             incremented = self.increment_version(current_version, False, True, False)
                             splitted = incremented.split(".")
                             result = f"{splitted[0]}.{splitted[1]}.0"
+                        elif self.is_major_branch(current_branch_name):
+                            incremented = self.increment_version(current_version, True, False, False)
+                            major = incremented.split(".")[0]
+                            result = f"{major}.0.0"
                         else:
-                            result = self.increment_version(current_version, False, False, True)
+                            raise ValueError(f"Repository '{repository_folder}' is on branch '{current_branch_name}' which is not a major-, minor-, fix- or other-branch. This is not allowed.")
             else:
                 result = "0.1.0"
         else:
@@ -4578,7 +4583,7 @@ OCR-content:
         expected_image = self.__get_scbuilder_image_from_image_definition_file(repository_folder)
         GeneralUtilities.assert_condition("scbuilder:" in expected_image, f"The SCBuilder-image '{expected_image}' defined in the image-definition-file of the repository is not a valid SCBuilder-image. It must contain 'scbuilder:'.")
         if not expected_image.endswith(":latest"):
-            minimal_required_scbuilder_version = Version("1.2.9")#the preparation-steps below require at least this SCBuilder-version
+            minimal_required_scbuilder_version = Version("1.2.11")#the preparation-steps below require at least this SCBuilder-version
             defined_scbuilder_version = self.__get_version_of_scbuilder_image(expected_image)#TODO remove this check after 2026-12-31
             GeneralUtilities.assert_condition(defined_scbuilder_version >= minimal_required_scbuilder_version, f"The SCBuilder-version {defined_scbuilder_version} defined in the image-definition-file of the repository is older than the minimal required version {minimal_required_scbuilder_version}. Please update the SCBuilder-image.")
 
