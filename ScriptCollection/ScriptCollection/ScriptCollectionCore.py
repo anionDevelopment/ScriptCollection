@@ -4585,9 +4585,18 @@ OCR-content:
         self.assert_scbuilder_image_in_github_workflow_matches_image_definition(repository_folder)
         self.__prepare_build_pipeline(repository_folder)
 
+    def __ensure_branch_is_checked_out(self,repository_folder:str) -> None:
+        current_branch_result = self.run_program_argsasarray("git", ["symbolic-ref", "--short", "HEAD"], repository_folder, throw_exception_if_exitcode_is_not_zero=False)
+        repository_is_on_any_branch:bool = current_branch_result[0] == 0
+        if not repository_is_on_any_branch:
+            timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+            branch_name:str=f"pipeline_{timestamp}"
+            self.run_program_argsasarray("git",["checkout","-b",branch_name], repository_folder)
+
     def __prepare_build_pipeline(self,repository_folder:str) -> None:
         GeneralUtilities.assert_condition(self.is_running_in_build_container(), "This function should only be run in the build container.")
-        
+        self.__ensure_branch_is_checked_out(repository_folder)
+
         expected_image = self.__get_scbuilder_image_from_image_definition_file(repository_folder)
         GeneralUtilities.assert_condition("scbuilder:" in expected_image, f"The SCBuilder-image '{expected_image}' defined in the image-definition-file of the repository is not a valid SCBuilder-image. It must contain 'scbuilder:'.")
         if not expected_image.endswith(":latest"):

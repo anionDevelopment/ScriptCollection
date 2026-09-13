@@ -263,7 +263,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.sc.format_json_file(workspace_file)
 
         #TODO add option to define exceptions (means: files which should not be normalized).
-        self.sc.normalize_invisible_characters_of_files_in_folder(self.repository, ["txt", "md", "py", "json", "xml", "svg", "csv", "yml", "yaml", "toml","gitignore", "gitattributes", "code-workspace"])
+        self.sc.normalize_invisible_characters_of_files_in_folder(self.repository, ["txt", "md", "py", "json", "xml", "svg", "csv", "yml", "yaml", "toml","gitignore", "gitattributes", "code-workspace", "plantuml"])
 
     @GeneralUtilities.check_arguments
     def is_working_branch(self)->bool:
