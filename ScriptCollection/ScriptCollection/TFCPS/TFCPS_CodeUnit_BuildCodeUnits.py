@@ -34,7 +34,7 @@ class TFCPS_UpdateDependenciesHook(TFCPS_BuildCodeUnitsHook):
         update_dependencies_script_folder: str = os.path.join(repository, "Other", "Scripts")
         if os.path.isfile(os.path.join(update_dependencies_script_folder, "UpdateDependencies.py")):
             self.__sc.log.log("Update dependencies of the repository...")
-            self.__sc.run_program(GeneralUtilities.get_python_executable(), "UpdateDependencies.py", update_dependencies_script_folder)
+            self.__sc.run_program(GeneralUtilities.get_python_executable(), "UpdateDependencies.py", update_dependencies_script_folder,print_live_output=True)
         self.__ensure_changelog_is_there(repository)
 
     @GeneralUtilities.check_arguments
@@ -54,7 +54,7 @@ class TFCPS_UpdateDependenciesHook(TFCPS_BuildCodeUnitsHook):
         if not self.__tfcps_tools_general.codeunit_has_updatable_dependencies(os.path.join(codeunit_folder, f"{codeunit_name}.codeunit.xml")):
             return
         self.__sc.log.log(f"Update dependencies of codeunit {codeunit_name}...")
-        self.__sc.run_program(GeneralUtilities.get_python_executable(), "UpdateDependencies.py", os.path.join(codeunit_folder, "Other"))
+        self.__sc.run_program(GeneralUtilities.get_python_executable(), "UpdateDependencies.py", os.path.join(codeunit_folder, "Other"),print_live_output=True)
         self.__ensure_changelog_is_there(repository)
         if self.__sc.git_repository_has_uncommitted_changes(repository):
             #the update changed something, so it has to be verified that the codeunit is still buildable with the updated dependencies.
