@@ -39,7 +39,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.21"
+version = "4.4.22"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2442,15 +2442,23 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         relative entries of 'excluded_folders' are resolved against 'base_folder'."""
         resolved_base_folder = GeneralUtilities.resolve_relative_path(base_folder, os.getcwd())
         resolved_path = GeneralUtilities.resolve_relative_path(path, resolved_base_folder)
-        normalized_base_folder = os.path.normcase(os.path.normpath(resolved_base_folder))
-        normalized_path = os.path.normcase(os.path.normpath(resolved_path))
+        # GeneralUtilities.resolve_relative_path only resolves symlinks (via Path.resolve()) for relative inputs; an
+        # already-absolute input is returned unchanged. On macOS the system temp-folder lies under "/var", which
+        # itself is a symlink to "/private/var" (Linux/Windows temp-folders normally have no such symlink-indirection).
+        # Without canonicalizing all three values the same way here, an absolute base_folder/path (unresolved, still
+        # containing "/var/...") could fail to share a prefix with a relative excluded_folder entry like ".git" (which
+        # got symlink-resolved to "/private/var/..." further above), so the exclusion-check would silently never match.
+        # Resolving symlinks consistently for all three values fixes this and is also the safer choice from a security
+        # standpoint, since it prevents a symlink from being used to bypass the excluded-folders check.
+        normalized_base_folder = os.path.normcase(os.path.normpath(os.path.realpath(resolved_base_folder)))
+        normalized_path = os.path.normcase(os.path.normpath(os.path.realpath(resolved_path)))
         # 1. path must be equal to or located inside base_folder
         if not (normalized_path == normalized_base_folder or normalized_path.startswith(normalized_base_folder + os.sep)):
             return False
         # 2. path must not be equal to or located inside any excluded folder
         for excluded_folder in excluded_folders:
             resolved_excluded_folder = GeneralUtilities.resolve_relative_path(excluded_folder, resolved_base_folder)
-            normalized_excluded_folder = os.path.normcase(os.path.normpath(resolved_excluded_folder))
+            normalized_excluded_folder = os.path.normcase(os.path.normpath(os.path.realpath(resolved_excluded_folder)))
             if normalized_path == normalized_excluded_folder or normalized_path.startswith(normalized_excluded_folder + os.sep):
                 return False
         # 3. path is inside base_folder and not inside any excluded folder
@@ -4577,9 +4585,18 @@ OCR-content:
         self.assert_scbuilder_image_in_github_workflow_matches_image_definition(repository_folder)
         self.__prepare_build_pipeline(repository_folder)
 
+    def __ensure_branch_is_checked_out(self,repository_folder:str) -> None:
+        current_branch_result = self.run_program_argsasarray("git", ["symbolic-ref", "--short", "HEAD"], repository_folder, throw_exception_if_exitcode_is_not_zero=False)
+        repository_is_on_any_branch:bool = current_branch_result[0] == 0
+        if not repository_is_on_any_branch:
+            timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+            branch_name:str=f"pipeline_{timestamp}"
+            self.run_program_argsasarray("git",["checkout","-b",branch_name], repository_folder)
+
     def __prepare_build_pipeline(self,repository_folder:str) -> None:
         GeneralUtilities.assert_condition(self.is_running_in_build_container(), "This function should only be run in the build container.")
-        
+        self.__ensure_branch_is_checked_out(repository_folder)
+
         expected_image = self.__get_scbuilder_image_from_image_definition_file(repository_folder)
         GeneralUtilities.assert_condition("scbuilder:" in expected_image, f"The SCBuilder-image '{expected_image}' defined in the image-definition-file of the repository is not a valid SCBuilder-image. It must contain 'scbuilder:'.")
         if not expected_image.endswith(":latest"):
