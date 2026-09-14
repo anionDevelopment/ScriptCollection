@@ -1,7 +1,6 @@
 import os
 import json
 import re
-import socket
 from datetime import datetime, timedelta,timezone
 import xmlschema
 from packaging.version import Version
@@ -609,7 +608,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             # The sibling betterleaks-container would then scan the wrong directory - without the
             # repository-content and without ".betterleaks.toml", which causes false positives.
             # Sharing our own volumes instead exposes the repository to betterleaks at the same path.
-            mount_arguments = ["--volumes-from", self.__get_own_container_id()]
+            mount_arguments = ["--volumes-from", self.sc.get_own_container_id()]
             repository_in_scan_container = self.repository
         else:
             # Running directly on the host: a normal bind-mount works because the path is resolved
@@ -643,33 +642,6 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             for line in GeneralUtilities.string_to_lines(result[2]):
                 self.sc.log.log(line, LogLevel.Error)
             raise ValueError(f"Found unignored secret findings (exit code {result[0]}). See {os.path.join(self.repository, '.betterleaks.toml')} to ignore known false positives.")
-
-    @GeneralUtilities.check_arguments
-    def __get_own_container_id(self) -> str:
-        # Determine the id of the container this process runs in so its volumes can be shared with
-        # sibling-containers via "docker run --volumes-from".
-        # In mountinfo the own container-id only appears reliably in the source-path of the
-        # "/etc/hostname"/"/etc/hosts"/"/etc/resolv.conf"-mounts (".../containers/<id>/..."). A plain
-        # 64-hex-match there would also hit overlay-layer-hashes (which are not containers), so the
-        # "containers/"-prefix must be matched explicitly.
-        try:
-            with open("/proc/self/mountinfo", "r", encoding="utf-8") as file_handle:
-                match = re.search(r"/containers/([0-9a-f]{64})/", file_handle.read())
-                if match is not None:
-                    return match.group(1)
-        except Exception:
-            pass
-        # cgroup (v1): the container-id is part of the cgroup-path; here a plain 64-hex-match is safe.
-        try:
-            with open("/proc/self/cgroup", "r", encoding="utf-8") as file_handle:
-                match = re.search(r"[0-9a-f]{64}", file_handle.read())
-                if match is not None:
-                    return match.group(0)
-        except Exception:
-            pass
-        # Fallback: the hostname equals the short container-id for containers started without an
-        # explicit hostname.
-        return socket.gethostname()
 
     @GeneralUtilities.check_arguments
     def use_cache(self) -> bool:

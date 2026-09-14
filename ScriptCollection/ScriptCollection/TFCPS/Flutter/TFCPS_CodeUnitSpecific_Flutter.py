@@ -152,9 +152,8 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                 # which can be installed directly, is generated from it with Google's bundletool.
                 bundletool = self.tfcps_Tools_General.ensure_androidappbundletool_is_available(None, not self.use_cache())
                 # The pinned JRE from the global cache is used instead of a "java" of the machine, because a
-                # java-runtime is not part of every machine which builds a codeunit. It is the same JRE ScriptCollection
-                # already uses to render the plantuml-diagrams, so this step needs nothing which a build does not need
-                # anyway.
+                # java-runtime is not part of every machine which builds a codeunit. Pinning it also keeps this step
+                # independent of which java-version a machine happens to have.
                 java_executable = self.tfcps_Tools_General.ensure_jre_is_available(not self.use_cache(), self.get_repository_folder())
                 apk_folder = os.path.join(artifacts_folder, "BuildResult_APK")
                 GeneralUtilities.ensure_directory_does_not_exist(apk_folder)
