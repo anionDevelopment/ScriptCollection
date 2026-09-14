@@ -1,4 +1,5 @@
 ImageName;UpstreamRegistryAddress;DefaultTag
 Betterleaks;ghcr.io/betterleaks/betterleaks;v1.4.1
 SCBuilder;aniondev/scbuilder;latest
-Java;eclipse-temurin;21.0.6_7-jre
+PlantUML;plantuml/plantuml;1.2026.8
+Java;eclipse-temurin;25.0.4_7-jdk

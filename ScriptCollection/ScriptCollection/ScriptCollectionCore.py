@@ -22,6 +22,7 @@ from pathlib import Path
 from subprocess import Popen
 import re
 import shutil
+import socket
 from typing import IO
 import fnmatch
 import uuid
@@ -39,7 +40,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.22"
+version = "4.4.23"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -4575,6 +4576,35 @@ OCR-content:
     def is_running_in_build_container(self) ->bool:
         """this function is based on a convention and does not do a real check."""
         return os.environ.get("ISRUNNINGINBUILDCONTAINER") == "true"
+
+    @GeneralUtilities.check_arguments
+    def get_own_container_id(self) -> str:
+        """Returns the id of the container this process runs in, so its volumes can be shared with sibling-containers
+        via "docker run --volumes-from". That is required whenever this process runs in a container whose docker-socket
+        is forwarded to the daemon of the host: a bind-mount of a path of this process would be resolved by that
+        daemon, where the path does not exist."""
+        # In mountinfo the own container-id only appears reliably in the source-path of the
+        # "/etc/hostname"/"/etc/hosts"/"/etc/resolv.conf"-mounts (".../containers/<id>/..."). A plain
+        # 64-hex-match there would also hit overlay-layer-hashes (which are not containers), so the
+        # "containers/"-prefix must be matched explicitly.
+        try:
+            with open("/proc/self/mountinfo", "r", encoding="utf-8") as file_handle:
+                match = re.search(r"/containers/([0-9a-f]{64})/", file_handle.read())
+                if match is not None:
+                    return match.group(1)
+        except Exception:
+            pass
+        # cgroup (v1): the container-id is part of the cgroup-path; here a plain 64-hex-match is safe.
+        try:
+            with open("/proc/self/cgroup", "r", encoding="utf-8") as file_handle:
+                match = re.search(r"[0-9a-f]{64}", file_handle.read())
+                if match is not None:
+                    return match.group(0)
+        except Exception:
+            pass
+        # Fallback: the hostname equals the short container-id for containers started without an
+        # explicit hostname.
+        return socket.gethostname()
     
     def prepare_build_pipeline_for_gitlab(self):
         repository_folder:str=os.getcwd()
