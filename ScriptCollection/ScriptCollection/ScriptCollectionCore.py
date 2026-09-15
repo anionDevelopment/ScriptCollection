@@ -2137,6 +2137,45 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         return sorted_versions[-1]
 
     @GeneralUtilities.check_arguments
+    def get_latest_apk_package_version_in_alpine(self, image: str, package: str) -> str:
+        # docker run --rm <image> sh -c "apk update && apk policy <package>"
+        # "apk policy" prints one block per package: a headline "<package> policy:", then for each available version
+        # a line "<version>:" followed by the repositories which provide that version.
+        image_address, image_tag = ScriptCollectionCore.split_image_address_and_tag(image)
+        self.docker_pull(image_address, image_tag)
+        output = self.run_with_epew("docker", f"run --rm {image} sh -c \"apk update && apk policy {package}\"", os.getcwd(), encode_argument_in_base64=True)
+        stdout = output[1]
+        lines = GeneralUtilities.string_to_lines(stdout)
+        headline = f"{package} policy:"
+        GeneralUtilities.assert_condition(headline in lines, f"No policy for package '{package}' found in image '{image}'.")
+        # After the headline of the package each available version is one line "<version>:" followed by one line per
+        # repository which provides that version. Only the version-lines end with a colon and contain no whitespace.
+        lines_of_package = lines[lines.index(headline)+1:]
+        version_matches = [re.fullmatch(r"(\S+):", line) for line in lines_of_package]
+        versions = [version_match.group(1) for version_match in version_matches if version_match is not None]
+        GeneralUtilities.assert_condition(0 < len(versions), f"No version found for package '{package}' in image '{image}'.")
+
+        def my_comparer(a: str, b: str) -> int:
+            # return:
+            #  -1 → a < b
+            #   0 → a = b
+            #   1 → a > b
+            # apk version -t <a> <b>  → prints the relation of a to b as "<", "=" or ">"
+            result = self.run_program_argsasarray("docker", ["run", "--rm", image, "apk", "version", "-t", a, b])
+            relation = result[1].strip()
+            if relation == "<":
+                return -1
+            elif relation == ">":
+                return 1
+            elif relation == "=":
+                return 0
+            else:
+                raise ValueError(f"Unexpected output of \"apk version -t {a} {b}\": \"{relation}\"")
+
+        sorted_versions = sorted(versions, key=cmp_to_key(my_comparer))
+        return sorted_versions[-1]
+
+    @GeneralUtilities.check_arguments
     def run_testcases_for_python_project(self, repository_folder: str):
         self.assert_is_git_repository(repository_folder)
         self.run_program("coverage", "run -m pytest", repository_folder)
