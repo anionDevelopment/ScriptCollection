@@ -1808,13 +1808,18 @@ class TFCPS_Tools_General:
         changed on purpose therefore needs this - it says "this is the new state" - and the changed lock-files belong to
         the commit of that change.
         No runtime is named, so the restore resolves the runtimes which the projects state and writes one lock-file per
-        project which covers all of them."""
+        project which covers all of them.
+        "--force" is required because a restore whose inputs did not change since the last restore is skipped entirely
+        (no-op restore) and then writes no lock-file at all. "--force-evaluate" is required because without it an existing
+        lock-file is taken as it is instead of being resolved again."""
         codeunit_name: str = os.path.basename(codeunit_folder)
         sln_file: str = os.path.join(codeunit_folder, f"{codeunit_name}.sln")
         if not os.path.isfile(sln_file):
             raise ValueError(f"The codeunit-folder \"{codeunit_folder}\" does not contain the solution \"{codeunit_name}.sln\", so it is no dotnet-codeunit whose lock-files could be updated.")
         self.__sc.log.log(f"Update the lock-files of codeunit \"{codeunit_name}\"...")
-        self.__sc.run_program_argsasarray("dotnet", ["restore", sln_file], codeunit_folder)
+        GeneralUtilities.ensure_file_exists(os.path.join(codeunit_folder, codeunit_name,"packages.lock.json"))
+        GeneralUtilities.ensure_file_exists(os.path.join(codeunit_folder, codeunit_name+"Tests","packages.lock.json"))
+        self.__sc.run_program_argsasarray("dotnet", ["restore", sln_file, "--force", "--force-evaluate"], codeunit_folder)
 
     @GeneralUtilities.check_arguments
     def get_dependency_version_in_resources_folder(self, resources_folder:str, dependency_name: str) ->str:
