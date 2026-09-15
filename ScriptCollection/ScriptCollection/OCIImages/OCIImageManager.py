@@ -17,11 +17,15 @@ class OCIImageManager:
 
     __sc:ScriptCollectionCore=None
     image_handler:list[AbstractImageHandler] = None
+    #image-names for which it was already logged that the fallback-registry is used. The lookup happens for every image of
+    #the repository and often several times per build, so without this the same hint would flood the log.
+    __images_with_reported_fallback_registry:set[str] = None
 
     def __init__(self,sc:ScriptCollectionCore):
         if sc is None:
             sc=ScriptCollectionCore()
         self.__sc=sc
+        self.__images_with_reported_fallback_registry=set()
         self.image_handler=[
             ImageHandlerDebian(),
             ImageHandlerDebianSlim(),
@@ -44,7 +48,18 @@ class OCIImageManager:
         return os.path.join(repository,".ScriptCollection","OCIImages","ImageDefinition.csv")
     
     @GeneralUtilities.check_arguments
-    def get_global_docker_image_registries_file(self)->str:
+    def get_image_registries_file_in_container(self)->str:
+        """Returns the file inside a build-container to which the host mounts its image-registries-file (see
+        TFCPS_CodeUnit_BuildCodeUnits.__run_scriptcollection_executable_in_container). It is an own path (and not the
+        configuration-folder of the container-user) because the home-folder inside the container depends on the user the
+        image runs as, while this path is defined by the mount and is therefore identical for both sides."""
+        return "/Workspace/ScriptCollectionConfiguration/OCIImages/ImageRegistries.csv"
+
+    @GeneralUtilities.check_arguments
+    def get_image_registries_file_in_configuration_folder(self)->str:
+        """Returns the image-registries-file in the configuration-folder of the current user, and creates it if it does not exist yet.
+        This is the file of the machine on which a command was started, so it is also the file which is mounted into a build-container
+        (in contrast to get_global_docker_image_registries_file, which inside a container resolves to that mount instead)."""
         folder=os.path.join(self.__sc.get_global_cache_folder(),"OCIImages")
         GeneralUtilities.ensure_directory_exists(folder)
         result=os.path.join(folder,"ImageRegistries.csv")
@@ -52,6 +67,17 @@ class OCIImageManager:
             GeneralUtilities.ensure_file_exists(result)
             GeneralUtilities.write_lines_to_file(result,["ImageName;RegistryAddress"])
         return result
+
+    @GeneralUtilities.check_arguments
+    def get_global_docker_image_registries_file(self)->str:
+        """Returns the machine-wide file which maps an image-name to the custom registry-address the image should be taken from.
+        The file which the host mounted into a build-container has precedence over the file in the configuration-folder of the
+        current user: in a container that configuration-folder belongs to the container-user and therefore never contains the
+        configuration of the machine on which the build was started."""
+        mounted_file=self.get_image_registries_file_in_container()
+        if os.path.isfile(mounted_file):
+            return mounted_file
+        return self.get_image_registries_file_in_configuration_folder()
     
     @GeneralUtilities.check_arguments
     def get_used_images_in_repository(self,repository:str)->list[str]:
@@ -93,8 +119,20 @@ class OCIImageManager:
             repository_image_definition_file=self.get_repository_image_definition_file(repository)
             for line in [f.split(";") for f in GeneralUtilities.read_nonempty_lines_from_file(repository_image_definition_file)[1:]]:
                 if image_name==line[0]:
+                    self.__report_usage_of_fallback_registry(image_name,line[1])
                     return line[1]
         raise ValueError(f"No registry defined for image \"{image_name}\".")
+
+    @GeneralUtilities.check_arguments
+    def __report_usage_of_fallback_registry(self,image_name:str,fallback_registry_address:str)->None:
+        """Logs that the image is taken from the upstream-registry defined in the repository because no custom registry is defined for it.
+        The fallback exists so that a freshly cloned product is buildable without further setup, but an upstream-registry is typically
+        rate-limited, so using it is worth a hint."""
+        if image_name in self.__images_with_reported_fallback_registry:
+            return
+        self.__images_with_reported_fallback_registry.add(image_name)
+        registries_file=self.get_global_docker_image_registries_file()
+        self.__sc.log.log(f"No custom registry is defined for image \"{image_name}\" in \"{registries_file}\", so the fallback-registry \"{fallback_registry_address}\" is used.",LogLevel.Warning)
 
     @GeneralUtilities.check_arguments
     def get_registry_address_for_image_with_default_tag(self,repository:str,image_name:str)->str:
