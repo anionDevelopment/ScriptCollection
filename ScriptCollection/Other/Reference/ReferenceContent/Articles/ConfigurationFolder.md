@@ -71,6 +71,10 @@ DotNet;myownregistry2.example.com/dotnetbase
 When a custom registry is defined for an image here, that registry is used. Otherwise the fallback (upstream) registry from the repository's image-definition (see [Per-repository configuration](#per-repository-configuration)) is used.
 The purpose of the fallback is that a freshly cloned project just works without further setup; a warning is shown when the fallback-registry is used.
 
+This applies to a build in a container (`scbuildcodeunitsc`, `scbuildcodeunits -c`) as well: the file of the host is mounted read-only into the build-container (to `/Workspace/ScriptCollectionConfiguration/OCIImages/ImageRegistries.csv`), so the build inside the container takes the images from the same registries as a build on the host. Only this one file is mounted, not the whole configuration-folder, so nothing which contains credentials is exposed to the container. The mount-path is an own path and not the configuration-folder of the container-user, because the home-directory inside the container depends on the user the image runs as. If the configuration-folder is mounted as a whole instead - which is the recommended setup for a self-hosted build-runner, see [Build-runner-configuration](./BuildRunnerConfiguration.md) - the file is taken from there.
+
+> Note: If the custom registry requires authentication, the credentials have to be available where the pull happens as well. They are configured in [`GlobalCache/RegistryCredentials.csv`](#globalcacheregistrycredentialscsv), which is deliberately **not** mounted into a locally started build-container; for a registry which needs a login, log in inside the container with [`TFCPS/CustomPreCodeUnitBuildScriptInContainer.py`](#custom-pre-codeunit-build-scripts) or use a registry which allows anonymous pulls.
+
 ### `GlobalCache/RegistryCredentials.csv`
 
 Optional basic-auth-credentials for registries. Columns: `RegistryName;Username;Password`.

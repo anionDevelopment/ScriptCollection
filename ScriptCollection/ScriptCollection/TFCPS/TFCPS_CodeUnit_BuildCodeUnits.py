@@ -402,6 +402,17 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if os.path.isdir(custom_scripts_folder_for_inside_the_container):
             mount_arguments += ["-v", f"{custom_scripts_folder_for_inside_the_container}:{self.tfcps_tools_general.get_folder_of_custom_scripts_in_container()}"]
 
+        #mount the machine-wide image-registries-file of this host (if it exists), so the build inside the container takes the images from the same
+        #custom registries as a build on the host. Without the mount the build in the container would find no mapping at all - the
+        #configuration-folder inside the container belongs to the container-user and is empty - and would therefore fall back to the
+        #upstream-registries defined in the repository, which are rate-limited. The mount is read-only because a build never changes the file.
+        #Only this file is mounted and not the whole configuration-folder, so nothing else of it (in particular not EnvironmentVariables.csv or
+        #RegistryCredentials.csv, which contain credentials) is exposed to the container.
+        oci_image_manager = self.tfcps_tools_general.oci_image_manager
+        image_registries_file: str = oci_image_manager.get_image_registries_file_in_configuration_folder()
+        if os.path.isfile(image_registries_file):
+            mount_arguments += ["-v", f"{image_registries_file}:{oci_image_manager.get_image_registries_file_in_container()}:ro"]
+
         #pass the environment-variables which are declared as required in <repository>/.ScriptCollection/ProductInformation.xml into the container
         #so they do not have to be specified explicitly on every call. Their values are resolved from the user-specific
         #configuration-file (see TFCPS_Tools_General.get_environment_variables_configuration_file), which only exists on the host.
