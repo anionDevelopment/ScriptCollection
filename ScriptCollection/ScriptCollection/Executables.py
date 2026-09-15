@@ -1214,7 +1214,6 @@ def ReclaimSpaceFromDocker()->int:
 
 
 def AddImageToCustomRegistry()->int:
-    sc = ScriptCollectionCore()
     parser = argparse.ArgumentParser()
     parser.add_argument('-r', '--remotehub', required=True)
     parser.add_argument('-i', '--imagenameonremotehub', required=True)
@@ -1225,7 +1224,6 @@ def AddImageToCustomRegistry()->int:
     parser.add_argument('-p', '--password', required=False,default=None)
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
-    parser.add_argument('-r', '--removeimagelocally', action='store_true', default=False)
     args = parser.parse_args()
     sc:ScriptCollectionCore=ScriptCollectionCore()
     verbosity=int(args.verbosity)
