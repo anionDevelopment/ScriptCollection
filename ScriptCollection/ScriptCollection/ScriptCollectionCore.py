@@ -4305,6 +4305,8 @@ OCR-content:
         """This function assumes that all files are valid xliff2 files and that the base file is the reference for syncing.
         This function adds new entries from the base file to the language files if they do not already exist using the value from base_file.
         This function removes entries from the language files if they do not exist in the base file anymore.
+        This function updates the source-text of an entry which exists in a language file and in the base file but whose source-texts differ,
+        see __update_outdated_source_of_unit.
         In the end the updated language files are written to the disk. The base file is not changed.
         Returns for each language (derived from the filename of the language-file) a dict which contains for each TranslationState
         the percentage (as a value between 0.0 and 1.0) of translation-units which are in that state."""
@@ -4376,6 +4378,10 @@ OCR-content:
             for unit_id in missing_ids:
                 new_unit = copy.deepcopy(base_units[unit_id])
                 lang_file_element.append(new_unit)
+
+            # Update the source of the units which exist in the base file as well as in the language file
+            for unit_id in base_ids & lang_ids:
+                self.__update_outdated_source_of_unit(base_units[unit_id], lang_units[unit_id], NSMAP)
 
             # Reorder units to match base order
             current_units = {
@@ -4511,6 +4517,29 @@ OCR-content:
         GeneralUtilities.ensure_file_exists(target_file)
         GeneralUtilities.write_text_to_file(target_file, json.dumps(spec, indent=2, ensure_ascii=False)+"\n")
 
+
+    @GeneralUtilities.check_arguments
+    def __update_outdated_source_of_unit(self,base_unit:ET.Element, language_unit:ET.Element, nsmap:dict[str,str])->None:
+        """Overwrites the source-text of every segment of language_unit by the source-text of the segment at the same position of base_unit,
+        if the two differ, and sets that segment back to the state "initial".
+        The source-text of a unit belongs to the base file: it is the text which gets translated, so a language file which still carries an
+        older source-text claims to translate a text which does not exist anymore - and the target which belongs to that older source-text
+        is not a translation of the current text either, which is why the segment goes back to the state a translation is created from (see
+        translate_xlf_file). The target itself is deliberately kept, so that a translation which was written by a human is still there as
+        long as no new translation was created for the new source-text."""
+        base_segments = base_unit.findall("x:segment", namespaces=nsmap)
+        language_segments = language_unit.findall("x:segment", namespaces=nsmap)
+        for index, language_segment in enumerate(language_segments):
+            if len(base_segments) <= index:
+                continue
+            base_source = base_segments[index].find("x:source", namespaces=nsmap)
+            language_source = language_segment.find("x:source", namespaces=nsmap)
+            if base_source is None or language_source is None:
+                continue
+            if language_source.text == base_source.text:
+                continue
+            language_source.text = base_source.text
+            language_segment.set("state", "initial")
 
     @GeneralUtilities.check_arguments
     def sync_xlf2_files(self,prefix:str, languages:list[str], folder:str)->dict[str,dict[int, float]]:
