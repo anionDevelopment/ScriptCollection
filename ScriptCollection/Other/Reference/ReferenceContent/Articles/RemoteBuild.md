@@ -36,6 +36,14 @@ build-step) rather than delegating to a permanently-running task-runner.
      example signing-certificates for windows-builds). The runner is part of the build-infrastructure and is trusted exactly
      like the machine/container on which `scbuildcodeunits` runs and from which such secrets originate; therefore there is
      **no** secret-exclude-filter.
+   - The only exception are the folders which the build-step states as `folders_which_are_not_transferred`: a folder
+     which describes the machine the build was started on describes nothing on the runner. A flutter-codeunit states
+     the `.dart_tool`-folder of its package this way, because its `package_config.json` holds the folder of every
+     package of the app as an absolute path of that machine and the flutter-tool of the runner resolves the packages
+     again only when that file is older than `pubspec.yaml` - a transferred one therefore makes the runner compile
+     against folders which do not exist there. Such a folder is left out while the archive is packed and is not
+     removed from the working-tree of the developer, which a tool of theirs (for example the dart-extension of an ide)
+     may fill again at any moment anyway.
 2. The runner answers the submit **as soon as the archive has arrived** and does everything else in the job: it extracts
    the archive into a **fresh, empty workspace** (isolation), runs the requested program on its operating-system, and
    returns **only the folder the client stated its result is in** (the client sends it as `X-Result-Folder`).

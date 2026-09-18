@@ -182,6 +182,25 @@ class TasksForCommonProjectStructureTests(unittest.TestCase):
         # assert
         assert expected_result == actual_result
 
+    def test_write_version_to_codeunit_file_writes_lf_line_separators(self) -> None:
+        # arrange
+        t = TFCPS_Tools_General(ScriptCollectionCore())
+        namespace = "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure"
+        # the file is written with crlf, which is the state a build on windows produced before the line-separators were written independently of the operating-system.
+        codeunit_file_content = f'<?xml version="1.0" encoding="UTF-8"?>\r\n<codeunit xmlns="{namespace}">\r\n  <version>1.0.0</version>\r\n</codeunit>\r\n'
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            codeunit_file = os.path.join(temporary_folder, "TestCodeUnit.codeunit.xml")
+            GeneralUtilities.write_binary_to_file(codeunit_file, codeunit_file_content.encode("utf-8"))
+
+            # act
+            t.write_version_to_codeunit_file(codeunit_file, "1.2.3")
+
+            # assert
+            written_content: bytes = GeneralUtilities.read_binary_from_file(codeunit_file)
+            assert b"\r" not in written_content
+            assert b"<version>1.2.3</version>" in written_content
+            assert written_content.endswith(b"\n")
+
     def test_sort_reference_folder(self) -> None:
         assert TFCPS_Tools_General.sort_reference_folder("/folder/Latest", "/folder/Latest") == 0
         assert TFCPS_Tools_General.sort_reference_folder("/folder/v1.1.1", "/folder/Latest") > 0

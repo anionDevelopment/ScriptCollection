@@ -76,7 +76,11 @@ class TFCPS_RemoteBuild:
     over HTTPS to the runner, the runner runs the given program on its (correct) operating-system, and afterwards only the
     folder in which that build-step produces its result is written back into the local repository. Everything else which
     changed in the workspace of the runner stays there: it is state of that machine (its toolchain-paths, its caches) and
-    not a result, and a local repository is something a developer works in and which therefore must not be replaced."""
+    not a result, and a local repository is something a developer works in and which therefore must not be replaced.
+
+    The only part of the working-tree which is not sent are the folders the caller states as
+    'folders_which_are_not_transferred' (see run_program_on_runner): a folder which describes the machine it was
+    generated on is state of this machine and not state of the repository, so on the runner it describes nothing."""
 
     __sc: ScriptCollectionCore = None
 
@@ -89,7 +93,14 @@ class TFCPS_RemoteBuild:
         return len(self.__load_runner_endpoints()) > 0
 
     @GeneralUtilities.check_arguments
-    def run_program_on_runner(self, required_os: RunnerOperatingSystem, repository_folder: str, codeunit_name: str, program: str, arguments: list[str], working_directory: str, result_folder: str, poll_interval_in_seconds: int = 3, timeout_in_seconds: int = 60*60) -> None:
+    def run_program_on_runner(self, required_os: RunnerOperatingSystem, repository_folder: str, codeunit_name: str, program: str, arguments: list[str], working_directory: str, result_folder: str, folders_which_are_not_transferred: list[str], poll_interval_in_seconds: int = 3, timeout_in_seconds: int = 60*60) -> None:
+        """Runs the given program on a runner which provides the given operating-system, see the docstring of this class.
+
+        'folders_which_are_not_transferred' are folders (as paths inside the repository) which are left out of the
+        archive which is sent to the runner, because their content only applies to this machine (for example the
+        '.dart_tool'-folder of a flutter-package, whose 'package_config.json' states the folder of every package of
+        the app as an absolute path of this machine). Such a folder is generated again by the toolchain of the
+        runner while it builds; transferring it makes the runner use the paths of this machine instead."""
         endpoints = self.__load_runner_endpoints()
         if len(endpoints) == 0:
             raise ValueError("No remote-build-runner is configured. Define runners either in "
@@ -100,7 +111,8 @@ class TFCPS_RemoteBuild:
         working_directory_relative = os.path.relpath(working_directory, repository_folder).replace("\\", "/")
         result_folder_relative = os.path.relpath(result_folder, repository_folder).replace("\\", "/")
         self.__sc.log.log(f"Delegate '{program} {' '.join(arguments)}' (codeunit '{codeunit_name}', folder '{working_directory_relative}', result-folder '{result_folder_relative}') to the {required_os.value}-runner at {endpoint.url}...")
-        archive_file = self.__create_repository_archive(repository_folder)
+        folders_which_are_not_transferred_relative = [os.path.relpath(folder, repository_folder).replace("\\", "/") for folder in folders_which_are_not_transferred]
+        archive_file = self.__create_repository_archive(repository_folder, folders_which_are_not_transferred_relative)
         job_id: str = None
         try:
             metadata_headers = {
@@ -189,14 +201,32 @@ class TFCPS_RemoteBuild:
                 time.sleep(retry_interval_in_seconds)
 
     @GeneralUtilities.check_arguments
-    def __create_repository_archive(self, repository_folder: str) -> str:
+    def __create_repository_archive(self, repository_folder: str, folders_which_are_not_transferred_relative: list[str]) -> str:
         # Pack the entire repository-working-tree (including .git, uncommitted changes and git-ignored files) so the runner
         # has the exact same state - including secrets that are required e.g. for signing windows-builds. Uses tarfile so
         # it works identically on Windows and Linux (scbuildcodeunits runs on both) and preserves symlinks/permissions.
+        # The folders which describe this machine (see run_program_on_runner) are left out while the archive is packed
+        # and not removed from the working-tree before: the working-tree belongs to the developer, and a tool of theirs
+        # (for example the dart-extension of an ide, which resolves the packages of a flutter-package whenever its
+        # "pubspec.yaml" changes - which a build does) can generate such a folder again at any moment, so removing it
+        # would only be a race against that tool.
         archive_file = os.path.join(GeneralUtilities.get_temp_folder(), f"sc-remotebuild-payload-{uuid.uuid4()}.tar.gz")
         with tarfile.open(archive_file, "w:gz") as tar:
-            tar.add(repository_folder, arcname=".")
+            tar.add(repository_folder, arcname=".", filter=lambda entry: None if self.__entry_belongs_to_a_folder_which_is_not_transferred(entry.name, folders_which_are_not_transferred_relative) else entry)
         return archive_file
+
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def __entry_belongs_to_a_folder_which_is_not_transferred(entry_name: str, folders_which_are_not_transferred_relative: list[str]) -> bool:
+        """Whether the entry with the given name inside the archive (which is named relative to the repository-folder,
+        prefixed with './' because the repository is added under that name) is one of the given folders or lies inside
+        one of them."""
+        entry_path = entry_name.replace("\\", "/").removeprefix("./")
+        for folder in folders_which_are_not_transferred_relative:
+            folder_path = folder.replace("\\", "/").strip("/")
+            if entry_path == folder_path or entry_path.startswith(f"{folder_path}/"):
+                return True
+        return False
 
     @GeneralUtilities.check_arguments
     def __write_result_into_the_repository(self, result_bytes: bytes, result_folder: str) -> None:

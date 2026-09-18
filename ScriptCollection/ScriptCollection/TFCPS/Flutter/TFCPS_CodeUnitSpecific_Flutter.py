@@ -68,6 +68,14 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
         else:
             src_folder = GeneralUtilities.resolve_relative_path(package_name, codeunit_folder) # TODO replace packagename
         artifacts_folder = os.path.join(codeunit_folder, "Other", "Artifacts")
+        # The targets below which are built on a remote task-runner send the whole working-tree of the repository to
+        # it, and this folder is the one part of it which only applies to the machine the build was started on: its
+        # "package_config.json" states the folder of every package of the app as an absolute path of this machine,
+        # and the flutter-tool of the runner resolves the packages again only when that file is older than
+        # "pubspec.yaml". A transferred one therefore makes the runner compile against folders which do not exist
+        # there ("Error when reading '/C:/tools/flutter/packages/flutter/lib/material.dart'"), so it is left out of
+        # the archive; the runner generates the one of its own machine while it builds.
+        folders_which_are_not_transferred: list[str] = [os.path.join(src_folder, ".dart_tool")]
         
         target_names: dict[str, str] = {
             "web": "WebApplication",
@@ -98,7 +106,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                                                 "environment as a runner-built one.", LogLevel.Warning)
                     self._protected_sc.run_with_epew("flutter", "build windows", src_folder)
                 else:
-                    self.run_program_on_remote_runner(RunnerOperatingSystem.Windows, "flutter", ["build", "windows"], src_folder, windows_release_folder)
+                    self.run_program_on_remote_runner(RunnerOperatingSystem.Windows, "flutter", ["build", "windows"], src_folder, windows_release_folder, folders_which_are_not_transferred)
                 windows_folder = os.path.join(artifacts_folder, "BuildResult_Windows")
                 GeneralUtilities.ensure_directory_does_not_exist(windows_folder)
                 GeneralUtilities.ensure_directory_exists(windows_folder)
@@ -120,7 +128,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                 # builds), analogous to how ios-builds always run on the iOS-task-runner. See SCTaskRunnerMacOS and
                 # the remote-build-article in the reference.
                 macos_release_folder = os.path.join(src_folder, "build/macos/Build/Products/Release")
-                self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "flutter", ["build", "macos"], src_folder, macos_release_folder)
+                self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "flutter", ["build", "macos"], src_folder, macos_release_folder, folders_which_are_not_transferred)
                 macos_folder = os.path.join(artifacts_folder, "BuildResult_MacOS")
                 GeneralUtilities.ensure_directory_does_not_exist(macos_folder)
                 GeneralUtilities.ensure_directory_exists(macos_folder)
@@ -129,7 +137,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                 # iOS-builds must run on macOS and therefore always run on the dedicated iOS-task-runner (uniform
                 # builds). See SCTaskRunnerIOS and the remote-build-article in the reference.
                 ios_release_folder = os.path.join(src_folder, "build/ios/iphoneos")
-                self.run_program_on_remote_runner(RunnerOperatingSystem.IOS, "flutter", ["build", "ios"], src_folder, ios_release_folder)
+                self.run_program_on_remote_runner(RunnerOperatingSystem.IOS, "flutter", ["build", "ios"], src_folder, ios_release_folder, folders_which_are_not_transferred)
                 ios_folder = os.path.join(artifacts_folder, "BuildResult_IOS")
                 GeneralUtilities.ensure_directory_does_not_exist(ios_folder)
                 GeneralUtilities.ensure_directory_exists(ios_folder)
@@ -139,7 +147,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                 # remote-build-article in the reference), analogous to how ios-builds always run on a macOS-task-runner:
                 # the Android-SDK/NDK-toolchain no longer lives in SCBuilder itself, it moved into SCTaskRunnerAndroid.
                 aab_release_folder = os.path.join(src_folder, "build/app/outputs/bundle/release")
-                self.run_program_on_remote_runner(RunnerOperatingSystem.Android, "flutter", ["build", "appbundle"], src_folder, aab_release_folder)
+                self.run_program_on_remote_runner(RunnerOperatingSystem.Android, "flutter", ["build", "appbundle"], src_folder, aab_release_folder, folders_which_are_not_transferred)
                 # The app-bundle which came back from the runner is published as the build-result of this codeunit,
                 # analogous to the targets above: it is the artifact of an android-build, and every codeunit has to have
                 # an artifact whose name matches "BuildResult_.+" (see TFCPS_CodeUnit_BuildCodeUnit.build_codeunit).
@@ -168,7 +176,8 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                 with zipfile.ZipFile(apks_file, "r") as apks_archive:
                     apks_archive.extract("universal.apk", apk_folder)
                 GeneralUtilities.ensure_file_does_not_exist(apks_file)
-                os.rename(os.path.join(apk_folder, "universal.apk"), os.path.join(apk_folder, f"{codeunit_name}.apk"))
+                codeunit_version: str = self.tfcps_Tools_General.get_version_of_codeunit(self.get_codeunit_file())
+                os.rename(os.path.join(apk_folder, "universal.apk"), os.path.join(apk_folder, f"{codeunit_name}_v{codeunit_version}.apk"))
             else:
                 raise ValueError(f"Not supported target: {target}")
         self.__generate_bom_for_flutter_package(package_name)

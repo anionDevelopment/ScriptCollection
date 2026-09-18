@@ -167,7 +167,9 @@ class TFCPS_CodeUnitSpecific_CPP_Functions(TFCPS_CodeUnitSpecific_Base):
             #The result-folder is the sourcecode-folder itself: where a build-command of a C/C++-codeunit puts its
             #output is defined by that command, so the only folder which is known to contain it is the one the commands
             #run in - which is also the folder __collect_output_files searches afterwards.
-            self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "/bin/sh", ["-c", " && ".join(self.macos_build_commands)], source_folder, source_folder)
+            #Nothing of a C/C++-codeunit is left out of the archive the runner gets: where a build-command puts its
+            #output is defined by that command, so there is no folder which is known to contain state of this machine.
+            self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "/bin/sh", ["-c", " && ".join(self.macos_build_commands)], source_folder, source_folder, [])
         self.__collect_output_files(source_folder, self.macos_output_file_patterns, "BuildResult_MacOS")
 
     @GeneralUtilities.check_arguments

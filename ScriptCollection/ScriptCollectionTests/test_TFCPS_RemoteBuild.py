@@ -1,5 +1,9 @@
+import os
+import tarfile
+import tempfile
 import unittest
 from unittest.mock import patch
+from ..ScriptCollection.GeneralUtilities import GeneralUtilities
 from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
 from ..ScriptCollection.SCLog import LogLevel
 from ..ScriptCollection.TFCPS import TFCPS_RemoteBuild as remote_build_module
@@ -67,6 +71,43 @@ def http(remote_build: TFCPS_RemoteBuild, method: str, path: str) -> tuple:
 def create_endpoint() -> RunnerEndpoint:
     """Returns a runner-endpoint which is never really contacted by these tests."""
     return RunnerEndpoint("https://runner.example.com", "TestUser", "TestPassword")
+
+
+#The folder of a flutter-package which is generated for the machine it was generated on (see
+#TFCPS_RemoteBuild.run_program_on_runner), stated relative to the repository like the caller states it.
+_generated_folder_of_the_machine: str = "Codeunit/package/.dart_tool"
+
+
+def create_file(repository: str, file_relative: str, content: str) -> None:
+    """Creates the file with the given content inside the given repository, including the folder it lies in."""
+    file = os.path.join(repository, file_relative.replace("/", os.sep))
+    GeneralUtilities.ensure_directory_exists(os.path.dirname(file))
+    GeneralUtilities.write_text_to_file(file, content)
+
+
+def create_repository(folder: str) -> str:
+    """Creates a working-tree which contains the files a codeunit consists of as well as a file inside the folder which
+    is generated for the machine the build is started on, and returns the folder of that repository."""
+    repository = os.path.join(folder, "Repository")
+    create_file(repository, "Codeunit/package/pubspec.yaml", "name: package")
+    create_file(repository, "Codeunit/package/lib/main.dart", "void main() {}")
+    create_file(repository, f"{_generated_folder_of_the_machine}/package_config.json", '{"configVersion": 2}')
+    return repository
+
+
+def create_archive(repository: str, folders_which_are_not_transferred_relative: list[str]) -> set[str]:
+    """Returns the names of the files of the archive which is created of the given repository, relative to that
+    repository. Calls the private TFCPS_RemoteBuild.__create_repository_archive, the same way the helpers above access
+    a private method: creating the archive is one step of running a program on a runner, and everything else of that
+    step needs a runner, which a testcase must not need."""
+    remote_build = TFCPS_RemoteBuild(ScriptCollectionCore())
+    # pylint:disable=protected-access
+    archive_file = remote_build._TFCPS_RemoteBuild__create_repository_archive(repository, folders_which_are_not_transferred_relative)
+    try:
+        with tarfile.open(archive_file, "r:gz") as archive:
+            return {member.name.removeprefix("./") for member in archive.getmembers() if member.isfile()}
+    finally:
+        GeneralUtilities.ensure_file_does_not_exist(archive_file)
 
 
 class TFCPS_RemoteBuildTests(unittest.TestCase):
@@ -155,3 +196,42 @@ class TFCPS_RemoteBuildTests(unittest.TestCase):
         # assert
         self.assertIn("https://runner.example.com", str(raised.exception))
         self.assertIn("GET /jobs/job1/logs", str(raised.exception))
+
+    def test_the_archive_of_the_repository_contains_the_working_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            repository = create_repository(folder)
+
+            # act
+            actual_files = create_archive(repository, [])
+
+            # assert
+            self.assertIn("Codeunit/package/pubspec.yaml", actual_files)
+            self.assertIn("Codeunit/package/lib/main.dart", actual_files)
+            self.assertIn(f"{_generated_folder_of_the_machine}/package_config.json", actual_files)
+
+    def test_a_folder_which_is_not_transferred_is_not_part_of_the_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            repository = create_repository(folder)
+
+            # act
+            actual_files = create_archive(repository, [_generated_folder_of_the_machine])
+
+            # assert
+            self.assertNotIn(f"{_generated_folder_of_the_machine}/package_config.json", actual_files)
+            self.assertIn("Codeunit/package/pubspec.yaml", actual_files)
+            self.assertIn("Codeunit/package/lib/main.dart", actual_files)
+
+    def test_a_folder_which_is_not_transferred_does_not_exclude_a_folder_whose_name_starts_with_the_same_characters(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            repository = create_repository(folder)
+            file_of_a_similarly_named_folder = "Codeunit/package/.dart_tool_of_something_else/file.txt"
+            create_file(repository, file_of_a_similarly_named_folder, "content")
+
+            # act
+            actual_files = create_archive(repository, [_generated_folder_of_the_machine])
+
+            # assert
+            self.assertIn(file_of_a_similarly_named_folder, actual_files)
