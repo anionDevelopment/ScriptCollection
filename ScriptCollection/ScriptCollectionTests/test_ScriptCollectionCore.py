@@ -1,7 +1,11 @@
 import os
+import sys
+import time
 from typing import NoReturn
 import unittest
+from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 import tempfile
 import uuid
 import xml.etree.ElementTree as ET
@@ -14,6 +18,54 @@ class ScriptCollectionCoreTests(unittest.TestCase):
     encoding = "utf-8"
     testfileprefix = "testfile_"
     svg_namespace = "http://www.w3.org/2000/svg"
+
+    def test_get_docker_registry_credentials_from_environment_variables_returns_empty_list_when_nothing_is_declared(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        #cleared so that registries which are declared in the real environment (for example inside a build-container which declares
+        #the registries of its own build) do not leak into this test and make it non-deterministic.
+        with patch.dict(os.environ, {}, clear=True):
+
+            # act
+            actual_result = sc.get_docker_registry_credentials_from_environment_variables()
+
+            # assert
+            assert not actual_result
+
+    def test_get_docker_registry_credentials_from_environment_variables_returns_declared_credentials(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        declarations = {
+            "OCIRegistry_MyRegistry_Address": "https://myregistry.example.com",
+            "OCIRegistry_MyRegistry_Username": "MyUser",
+            "OCIRegistry_MyRegistry_Password": "MyPassword",
+            "OCIRegistry_MyOtherRegistry_Address": "myotherregistry.example.com",
+            "OCIRegistry_MyOtherRegistry_Username": "MyOtherUser",
+            "OCIRegistry_MyOtherRegistry_Password": "MyOtherPassword",
+        }
+        with patch.dict(os.environ, declarations, clear=True):
+
+            # act
+            actual_result = sc.get_docker_registry_credentials_from_environment_variables()
+
+            # assert
+            #the scheme is removed because docker expects the address of a registry without it.
+            assert actual_result == [("myotherregistry.example.com", "MyOtherUser", "MyOtherPassword"), ("myregistry.example.com", "MyUser", "MyPassword")]
+
+    def test_get_docker_registry_credentials_from_environment_variables_throws_exception_when_the_password_is_not_declared(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        declarations = {
+            "OCIRegistry_MyRegistry_Address": "myregistry.example.com",
+            "OCIRegistry_MyRegistry_Username": "MyUser",
+        }
+        with patch.dict(os.environ, declarations, clear=True):
+
+            # act & assert
+            #a registry which is declared without credentials is a misconfiguration and not a registry which allows anonymous
+            #pulls: such a registry does not have to be declared at all.
+            with self.assertRaises(ValueError):
+                sc.get_docker_registry_credentials_from_environment_variables()
 
     def test_export_filemetadata(self) -> None:
         # arrange
@@ -485,6 +537,50 @@ class ScriptCollectionCoreTests(unittest.TestCase):
 
         GeneralUtilities.ensure_directory_does_not_exist(tests_folder)
 
+    def test_program_call_returns_output_although_the_reading_starts_after_the_process_terminated(self) -> None:
+        # arrange
+        # The reader-threads which transfer the output of a process from its pipes into the internal queues can be
+        # scheduled after the process already terminated. This happens in practice with short-running processes on
+        # fast systems. The delay below simulates this scheduling-latency deterministically. The output of the
+        # process must not get lost in this situation.
+        sc = ScriptCollectionCore()
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        original_enqueue_output = ScriptCollectionCore._ScriptCollectionCore__enqueue_output
+
+        def delayed_enqueue_output(file, queue) -> None:
+            time.sleep(0.3)
+            original_enqueue_output(file, queue)
+
+        # act
+        with patch.object(ScriptCollectionCore, "_ScriptCollectionCore__enqueue_output", staticmethod(delayed_enqueue_output)):
+            (exit_code, stdout, stderr, _3) = sc.run_program("git", "rev-parse HEAD", dir_path)
+
+        # assert
+        assert exit_code == 0
+        assert len(stdout) == 40
+        assert stderr == GeneralUtilities.empty_string
+
+    def test_program_call_with_timeout_raises_timeout_error_if_the_program_does_not_terminate(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+
+        # act & assert
+        with self.assertRaises(TimeoutError):
+            sc.run_program_argsasarray(sys.executable, ["-c", "import time; time.sleep(60)"], dir_path, timeoutInSeconds=1)
+
+    def test_program_call_with_timeout_returns_the_output_if_the_program_terminates_in_time(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+
+        # act
+        (exit_code, stdout, _2, _3) = sc.run_program_argsasarray(sys.executable, ["-c", "print('expected-output')"], dir_path, timeoutInSeconds=60)
+
+        # assert
+        assert exit_code == 0
+        assert stdout == "expected-output"
+
     def test_simple_program_call_argsasarray(self) -> None:
         # arrange
         sc = ScriptCollectionCore()
@@ -747,6 +843,71 @@ class ScriptCollectionCoreTests(unittest.TestCase):
             assert len(ET.XML(GeneralUtilities.read_text_from_file(file, self.encoding)).findall(f".//{{{self.svg_namespace}}}title")) == 0
         finally:
             GeneralUtilities.ensure_file_does_not_exist(file)
+
+    xliff2_namespace = "urn:oasis:names:tc:xliff:document:2.0"
+
+    def __write_xliff2_file(self, file: str, target_language: str, source: str, target: str) -> None:
+        """An xliff2-file containing the single unit "greeting" with the given source-text, and - if target_language and target are
+        given - with the given target-text in the state "translated". Used by the sync_xlf2_files-testcases below."""
+        target_language_attribute = GeneralUtilities.empty_string if target_language is None else f' trgLang="{target_language}"'
+        segment_content = f"<source>{source}</source>" if target is None else f'<source>{source}</source><target>{target}</target>'
+        state_attribute = GeneralUtilities.empty_string if target is None else ' state="translated"'
+        content = (
+            '<?xml version="1.0" encoding="UTF-8" ?>'
+            f'<xliff xmlns="{self.xliff2_namespace}" version="2.0" srcLang="en"{target_language_attribute}>'
+            '<file id="flutterl10n" original="app_en.arb">'
+            '<unit id="greeting">'
+            f'<segment{state_attribute}>{segment_content}</segment>'
+            '</unit></file></xliff>'
+        )
+        GeneralUtilities.write_text_to_file(file, content, self.encoding)
+
+    def __read_segment_of_the_only_unit(self, file: str) -> ET.Element:
+        return ET.XML(GeneralUtilities.read_text_from_file(file, self.encoding)).find(f".//{{{self.xliff2_namespace}}}segment")
+
+    def test_sync_xlf2_files_updates_the_source_of_a_translated_unit_whose_source_changed(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        GeneralUtilities.ensure_directory_exists(folder)
+        try:
+            self.__write_xliff2_file(os.path.join(folder, "messages.xlf"), None, "Hello again", None)
+            language_file = os.path.join(folder, "messages.de.xlf")
+            self.__write_xliff2_file(language_file, "de", "Hello", "Hallo")
+
+            # act
+            sc.sync_xlf2_files("messages", ["de"], folder)
+
+            # assert
+            segment = self.__read_segment_of_the_only_unit(language_file)
+            assert segment.find(f"{{{self.xliff2_namespace}}}source").text == "Hello again"
+            #the translation which was written for the old source-text is not a translation of the new one, so the segment has to be
+            #translated again; its target is kept until that happened.
+            assert segment.get("state") == "initial"
+            assert segment.find(f"{{{self.xliff2_namespace}}}target").text == "Hallo"
+        finally:
+            GeneralUtilities.ensure_directory_does_not_exist(folder)
+
+    def test_sync_xlf2_files_keeps_a_translated_unit_whose_source_did_not_change(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        GeneralUtilities.ensure_directory_exists(folder)
+        try:
+            self.__write_xliff2_file(os.path.join(folder, "messages.xlf"), None, "Hello", None)
+            language_file = os.path.join(folder, "messages.de.xlf")
+            self.__write_xliff2_file(language_file, "de", "Hello", "Hallo")
+
+            # act
+            sc.sync_xlf2_files("messages", ["de"], folder)
+
+            # assert
+            segment = self.__read_segment_of_the_only_unit(language_file)
+            assert segment.find(f"{{{self.xliff2_namespace}}}source").text == "Hello"
+            assert segment.get("state") == "translated"
+            assert segment.find(f"{{{self.xliff2_namespace}}}target").text == "Hallo"
+        finally:
+            GeneralUtilities.ensure_directory_does_not_exist(folder)
 
     def test_split_image_address_and_tag_with_tag(self) -> None:
         # act
