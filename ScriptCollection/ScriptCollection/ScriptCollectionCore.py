@@ -15,7 +15,7 @@ import math
 import base64
 import os
 from html.parser import HTMLParser
-from queue import Queue, Empty
+from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -211,6 +211,10 @@ class ScriptCollectionCore:
     __utf8_byte_order_mark: bytes = b"\xef\xbb\xbf"
     # Base-url of the GitHub-REST-API. This is an internal constant on purpose and deliberately not exposed as a parameter of the GitHub-functions.
     __github_api_base_url: str = "https://api.github.com"
+    # The maximal amount of seconds the reader-threads get to transfer the remaining pipe-content into their queue after
+    # the process itself terminated. This is only relevant if a grandchild-process inherited the pipes and keeps them
+    # open, because in that case the reader-threads never reach the end of their pipe. See __read_popen_pipes.
+    __pipe_drain_grace_period_in_seconds: float = 10
 
 
     def __init__(self):
@@ -2282,20 +2286,54 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         file.close()
 
     @staticmethod
-    def __continue_process_reading(pid: int, p: Popen, q_stdout: Queue, q_stderr: Queue, reading_stdout_last_time_resulted_in_exception: bool, reading_stderr_last_time_resulted_in_exception: bool):
-        if p.poll() is None:
-            return True
+    def __dequeue_lines(queue: Queue) -> list[str]:
+        """Removes all lines which are currently available in "queue" and returns them without their line-breaks.
+        Lines without content are discarded."""
+        lines: list[str] = []
+        while not queue.empty():
+            line: str = queue.get_nowait()
+            line = line.replace("\r", GeneralUtilities.empty_string).replace("\n", GeneralUtilities.empty_string)
+            if GeneralUtilities.string_has_content(line):
+                lines.append(line)
+        return lines
 
-        # if reading_stdout_last_time_resulted_in_exception and reading_stderr_last_time_resulted_in_exception:
-        #    return False
+    @staticmethod
+    def __process_stdout_lines(queue: Queue, stdout_result: list[str], print_live_output: bool, log: SCLog) -> None:
+        for out_line in ScriptCollectionCore.__dequeue_lines(queue):
+            stdout_result.append(out_line)
+            if print_live_output:
+                loglevel = LogLevel.Information
+                if out_line.startswith("Debug: "):
+                    loglevel = LogLevel.Debug
+                    out_line = out_line[len("Debug: "):]
+                if out_line.startswith("Diagnostic: "):
+                    loglevel = LogLevel.Diagnostic
+                    out_line = out_line[len("Diagnostic: "):]
+                log.log(out_line, loglevel)
 
-        if not q_stdout.empty():
-            return True
+    @staticmethod
+    def __process_stderr_lines(queue: Queue, stderr_result: list[str], print_live_output: bool, print_errors_as_information: bool, log: SCLog) -> None:
+        for err_line in ScriptCollectionCore.__dequeue_lines(queue):
+            stderr_result.append(err_line)
+            if print_live_output:
+                loglevel = LogLevel.Error
+                if err_line.startswith("Warning: "):
+                    loglevel = LogLevel.Warning
+                    err_line = err_line[len("Warning: "):]
+                if print_errors_as_information:  # "errors" in "print_errors_as_information" means: all what is written to std-err
+                    loglevel = LogLevel.Information
+                log.log(err_line, loglevel)
 
-        if not q_stderr.empty():
-            return True
-
-        return False
+    @staticmethod
+    def __reading_is_finished(readers: list, q_stdout: Queue, q_stderr: Queue, process_end_time: float) -> bool:
+        """Decides whether all output of an already terminated process was read.
+        Checking the queues alone is not sufficient: a queue can be empty although the according reader-thread did
+        not transfer the content of its pipe into the queue yet, which would silently discard the whole output of
+        short-running processes. Therefore the state of the reader-threads is checked first."""
+        readers_are_finished: bool = all(reader.done() for reader in readers)
+        if not readers_are_finished and (time.monotonic() - process_end_time) < ScriptCollectionCore.__pipe_drain_grace_period_in_seconds:
+            return False
+        return q_stdout.empty() and q_stderr.empty()
 
     @staticmethod
     def __read_popen_pipes(p: Popen, print_live_output: bool, print_errors_as_information: bool, log: SCLog, timeoutInSeconds: int = None) -> tuple[list[str], list[str]]:
@@ -2305,62 +2343,40 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         timeout_enabled: bool = timeoutInSeconds is not None and 0 < timeoutInSeconds
         start_time: float = time.monotonic()
         timed_out: bool = False
+        process_end_time: float = None  # the moment the process terminated; None as long as it is still running.
         with ThreadPoolExecutor(2) as pool:
             q_stdout = Queue()
             q_stderr = Queue()
 
-            pool.submit(ScriptCollectionCore.__enqueue_output, p.stdout, q_stdout)
-            pool.submit(ScriptCollectionCore.__enqueue_output, p.stderr, q_stderr)
-            reading_stdout_last_time_resulted_in_exception: bool = False
-            reading_stderr_last_time_resulted_in_exception: bool = False
+            readers: list = [
+                pool.submit(ScriptCollectionCore.__enqueue_output, p.stdout, q_stdout),
+                pool.submit(ScriptCollectionCore.__enqueue_output, p.stderr, q_stderr),
+            ]
 
             stdout_result: list[str] = []
             stderr_result: list[str] = []
 
-            while (ScriptCollectionCore.__continue_process_reading(p_id, p, q_stdout, q_stderr, reading_stdout_last_time_resulted_in_exception, reading_stderr_last_time_resulted_in_exception)):
-                try:
-                    while not q_stdout.empty():
-                        out_line: str = q_stdout.get_nowait()
-                        out_line = out_line.replace("\r", GeneralUtilities.empty_string).replace("\n", GeneralUtilities.empty_string)
-                        if GeneralUtilities.string_has_content(out_line):
-                            stdout_result.append(out_line)
-                            reading_stdout_last_time_resulted_in_exception = False
-                            if print_live_output:
-                                loglevel = LogLevel.Information
-                                if out_line.startswith("Debug: "):
-                                    loglevel = LogLevel.Debug
-                                    out_line = out_line[len("Debug: "):]
-                                if out_line.startswith("Diagnostic: "):
-                                    loglevel = LogLevel.Diagnostic
-                                    out_line = out_line[len("Diagnostic: "):]
-                                log.log(out_line, loglevel)
-                except Empty:
-                    reading_stdout_last_time_resulted_in_exception = True
+            while True:
+                ScriptCollectionCore.__process_stdout_lines(q_stdout, stdout_result, print_live_output, log)
+                ScriptCollectionCore.__process_stderr_lines(q_stderr, stderr_result, print_live_output, print_errors_as_information, log)
 
-                try:
-                    while not q_stderr.empty():
-                        err_line: str = q_stderr.get_nowait()
-                        err_line = err_line.replace("\r", GeneralUtilities.empty_string).replace("\n", GeneralUtilities.empty_string)
-                        if GeneralUtilities.string_has_content(err_line):
-                            stderr_result.append(err_line)
-                            reading_stderr_last_time_resulted_in_exception = False
-                            if print_live_output:
-                                loglevel = LogLevel.Error
-                                if err_line.startswith("Warning: "):
-                                    loglevel = LogLevel.Warning
-                                    err_line = err_line[len("Warning: "):]
-                                if print_errors_as_information:  # "errors" in "print_errors_as_information" means: all what is written to std-err
-                                    loglevel = LogLevel.Information
-                                log.log(err_line, loglevel)
-                except Empty:
-                    reading_stderr_last_time_resulted_in_exception = True
+                if process_end_time is None and p.poll() is not None:
+                    process_end_time = time.monotonic()
+
+                if process_end_time is not None and ScriptCollectionCore.__reading_is_finished(readers, q_stdout, q_stderr, process_end_time):
+                    break
 
                 if timeout_enabled and timeoutInSeconds < (time.monotonic() - start_time):
                     timed_out = True
                     p.kill()  # the process exceeded its timeout; kill it so the reader-threads get EOF and this loop ends.
                     break
 
-                time.sleep(0.01)  # this is required to not finish too early
+                time.sleep(0.01)  # this is the poll-interval; without it the loop would consume a whole cpu-core
+
+            # The reader-threads can have enqueued further lines between the last processing above and the end of the
+            # loop. Without processing them here this output would be lost.
+            ScriptCollectionCore.__process_stdout_lines(q_stdout, stdout_result, print_live_output, log)
+            ScriptCollectionCore.__process_stderr_lines(q_stderr, stderr_result, print_live_output, print_errors_as_information, log)
 
             if timed_out:
                 raise TimeoutError(f"The process with process-id {p_id} did not finish within the configured timeout of {timeoutInSeconds} second(s) and was killed.")

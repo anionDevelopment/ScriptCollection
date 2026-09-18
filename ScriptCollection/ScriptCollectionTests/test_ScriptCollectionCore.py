@@ -1,7 +1,10 @@
 import os
+import sys
+import time
 from typing import NoReturn
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 import tempfile
 import uuid
 import xml.etree.ElementTree as ET
@@ -484,6 +487,50 @@ class ScriptCollectionCoreTests(unittest.TestCase):
         assert sc.file_is_git_ignored(ignored_logfolder_name+os.path.sep+"logfile.log", tests_folder)
 
         GeneralUtilities.ensure_directory_does_not_exist(tests_folder)
+
+    def test_program_call_returns_output_although_the_reading_starts_after_the_process_terminated(self) -> None:
+        # arrange
+        # The reader-threads which transfer the output of a process from its pipes into the internal queues can be
+        # scheduled after the process already terminated. This happens in practice with short-running processes on
+        # fast systems. The delay below simulates this scheduling-latency deterministically. The output of the
+        # process must not get lost in this situation.
+        sc = ScriptCollectionCore()
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        original_enqueue_output = ScriptCollectionCore._ScriptCollectionCore__enqueue_output
+
+        def delayed_enqueue_output(file, queue) -> None:
+            time.sleep(0.3)
+            original_enqueue_output(file, queue)
+
+        # act
+        with patch.object(ScriptCollectionCore, "_ScriptCollectionCore__enqueue_output", staticmethod(delayed_enqueue_output)):
+            (exit_code, stdout, stderr, _3) = sc.run_program("git", "rev-parse HEAD", dir_path)
+
+        # assert
+        assert exit_code == 0
+        assert len(stdout) == 40
+        assert stderr == GeneralUtilities.empty_string
+
+    def test_program_call_with_timeout_raises_timeout_error_if_the_program_does_not_terminate(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+
+        # act & assert
+        with self.assertRaises(TimeoutError):
+            sc.run_program_argsasarray(sys.executable, ["-c", "import time; time.sleep(60)"], dir_path, timeoutInSeconds=1)
+
+    def test_program_call_with_timeout_returns_the_output_if_the_program_terminates_in_time(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+
+        # act
+        (exit_code, stdout, _2, _3) = sc.run_program_argsasarray(sys.executable, ["-c", "print('expected-output')"], dir_path, timeoutInSeconds=60)
+
+        # assert
+        assert exit_code == 0
+        assert stdout == "expected-output"
 
     def test_simple_program_call_argsasarray(self) -> None:
         # arrange
