@@ -20,12 +20,16 @@ class OCIImageManager:
     #image-names for which it was already logged that the fallback-registry is used. The lookup happens for every image of
     #the repository and often several times per build, so without this the same hint would flood the log.
     __images_with_reported_fallback_registry:set[str] = None
+    #availability of an image-address with tag in its registry. The address of an image is resolved several times per build and
+    #the check costs a request to the registry, so its result is remembered for the runtime of this process.
+    __availability_of_image:dict[str,bool] = None
 
     def __init__(self,sc:ScriptCollectionCore):
         if sc is None:
             sc=ScriptCollectionCore()
         self.__sc=sc
         self.__images_with_reported_fallback_registry=set()
+        self.__availability_of_image=dict()
         self.image_handler=[
             ImageHandlerDebian(),
             ImageHandlerDebianSlim(),
@@ -106,33 +110,69 @@ class OCIImageManager:
         raise ValueError(f"No tag defined for image \"{image_name}\".")
 
     @GeneralUtilities.check_arguments
-    def get_registry_address_for_image(self,repository:str,image_name:str)->str:
-        """Example: if image_name==Debian this function returns something like "myregistry.example.com/debian", always without tag."""
-        if self.custom_registry_is_defined(image_name):
-            #return image from custom registry-address
-            global_docker_image_registries_file=self.get_global_docker_image_registries_file()
-            for line in [f.split(";") for f in GeneralUtilities.read_nonempty_lines_from_file(global_docker_image_registries_file)[1:]]:
-                if image_name==line[0]:
-                    return line[1]
-        else:
-            #return fallback-registry-address
-            repository_image_definition_file=self.get_repository_image_definition_file(repository)
-            for line in [f.split(";") for f in GeneralUtilities.read_nonempty_lines_from_file(repository_image_definition_file)[1:]]:
-                if image_name==line[0]:
-                    self.__report_usage_of_fallback_registry(image_name,line[1])
-                    return line[1]
-        raise ValueError(f"No registry defined for image \"{image_name}\".")
+    def get_custom_registry_address_for_image(self,image_name:str)->str:
+        """Returns the registry-address which is defined for the image in the machine-wide image-registries-file, always without tag.
+        Use custom_registry_is_defined to check whether such an address is defined for the image at all."""
+        global_docker_image_registries_file=self.get_global_docker_image_registries_file()
+        for line in [f.split(";") for f in GeneralUtilities.read_nonempty_lines_from_file(global_docker_image_registries_file)[1:]]:
+            if image_name==line[0]:
+                return line[1]
+        raise ValueError(f"No custom registry is defined for image \"{image_name}\" in \"{global_docker_image_registries_file}\".")
 
     @GeneralUtilities.check_arguments
-    def __report_usage_of_fallback_registry(self,image_name:str,fallback_registry_address:str)->None:
-        """Logs that the image is taken from the upstream-registry defined in the repository because no custom registry is defined for it.
-        The fallback exists so that a freshly cloned product is buildable without further setup, but an upstream-registry is typically
-        rate-limited, so using it is worth a hint."""
+    def get_fallback_registry_address_for_image(self,repository:str,image_name:str)->str:
+        """Returns the upstream-registry-address which the repository defines for the image, always without tag."""
+        repository_image_definition_file=self.get_repository_image_definition_file(repository)
+        for line in [f.split(";") for f in GeneralUtilities.read_nonempty_lines_from_file(repository_image_definition_file)[1:]]:
+            if image_name==line[0]:
+                return line[1]
+        raise ValueError(f"No registry defined for image \"{image_name}\" in \"{repository_image_definition_file}\".")
+
+    @GeneralUtilities.check_arguments
+    def get_registry_address_for_image(self,repository:str,image_name:str)->str:
+        """Returns the registry-address the image has to be taken from, always without tag.
+        Example: if image_name==Debian this function returns something like "myregistry.example.com/debian".
+        This is the custom registry-address which is defined for this machine if the image is really available there, and the
+        upstream-registry-address which the repository defines otherwise."""
+        fallback_registry_address=self.get_fallback_registry_address_for_image(repository,image_name)
+        if self.custom_registry_is_defined(image_name):
+            custom_registry_address=self.get_custom_registry_address_for_image(image_name)
+            if self.__custom_registry_provides_image(custom_registry_address,self.get_tag_for_image(repository,image_name)):
+                return custom_registry_address
+            self.__report_usage_of_fallback_registry(image_name,fallback_registry_address,f"the image is not available in the custom registry \"{custom_registry_address}\"")
+        else:
+            self.__report_usage_of_fallback_registry(image_name,fallback_registry_address,f"no custom registry is defined for the image in \"{self.get_global_docker_image_registries_file()}\"")
+        return fallback_registry_address
+
+    @GeneralUtilities.check_arguments
+    def __custom_registry_provides_image(self,custom_registry_address:str,tag:str)->bool:
+        """Returns whether the image can be used with this tag from the custom registry-address, which is the case when it is already
+        available in the local image-store of the docker-daemon or when the custom registry provides it.
+        The local image-store is checked first because an image which is already available there is not downloaded at all (see
+        ScriptCollectionCore.docker_pull), so asking the registry would only cost a request - and would make a build which does not need
+        any download depend on a reachable registry.
+        A custom registry is typically not publicly readable, so the login to the registries which are defined for this machine is done
+        before the registry is asked; without it the answer would be that the image is not available although it only is not readable
+        without credentials."""
+        image_with_tag=f"{custom_registry_address}:{tag}"
+        if image_with_tag not in self.__availability_of_image:
+            if self.__sc.local_docker_image_exists(custom_registry_address,tag):
+                self.__availability_of_image[image_with_tag]=True
+            else:
+                self.__sc.login_to_defined_docker_registries()
+                self.__availability_of_image[image_with_tag]=self.__sc.image_is_available_in_registry(custom_registry_address,tag)
+        return self.__availability_of_image[image_with_tag]
+
+    @GeneralUtilities.check_arguments
+    def __report_usage_of_fallback_registry(self,image_name:str,fallback_registry_address:str,reason:str)->None:
+        """Logs that the image is taken from the upstream-registry which the repository defines, together with the reason why the custom
+        registry is not used. The fallback exists so that a freshly cloned product is buildable without further setup and so that a custom
+        registry which does not provide the image does not break a build, but an upstream-registry is typically rate-limited, so using it
+        is worth a hint."""
         if image_name in self.__images_with_reported_fallback_registry:
             return
         self.__images_with_reported_fallback_registry.add(image_name)
-        registries_file=self.get_global_docker_image_registries_file()
-        self.__sc.log.log(f"No custom registry is defined for image \"{image_name}\" in \"{registries_file}\", so the fallback-registry \"{fallback_registry_address}\" is used.",LogLevel.Warning)
+        self.__sc.log.log(f"The fallback-registry \"{fallback_registry_address}\" is used for image \"{image_name}\" because {reason}.",LogLevel.Warning)
 
     @GeneralUtilities.check_arguments
     def get_registry_address_for_image_with_default_tag(self,repository:str,image_name:str)->str:
@@ -159,7 +199,10 @@ class OCIImageManager:
             try:
                 addresses_to_check=[]
                 if self.custom_registry_is_defined(image_name):
-                    addresses_to_check.append(self.get_registry_address_for_image(repository,image_name))
+                    #the custom registry-address is used directly (and not get_registry_address_for_image) because this function does not
+                    #pull an image but asks the registry which tags it has, so it does not matter whether that registry currently provides
+                    #the image with the tag which is defined at the moment.
+                    addresses_to_check.append(self.get_custom_registry_address_for_image(image_name))
                 else:
                     if search_in_custom_registry_only_if_available:
                         raise ValueError(f"No custom registry defined for image {image_name}.")

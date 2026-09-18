@@ -1,6 +1,7 @@
 import os
 from typing import NoReturn
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 import tempfile
 import uuid
@@ -14,6 +15,54 @@ class ScriptCollectionCoreTests(unittest.TestCase):
     encoding = "utf-8"
     testfileprefix = "testfile_"
     svg_namespace = "http://www.w3.org/2000/svg"
+
+    def test_get_docker_registry_credentials_from_environment_variables_returns_empty_list_when_nothing_is_declared(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        #cleared so that registries which are declared in the real environment (for example inside a build-container which declares
+        #the registries of its own build) do not leak into this test and make it non-deterministic.
+        with patch.dict(os.environ, {}, clear=True):
+
+            # act
+            actual_result = sc.get_docker_registry_credentials_from_environment_variables()
+
+            # assert
+            assert not actual_result
+
+    def test_get_docker_registry_credentials_from_environment_variables_returns_declared_credentials(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        declarations = {
+            "OCIRegistry_MyRegistry_Address": "https://myregistry.example.com",
+            "OCIRegistry_MyRegistry_Username": "MyUser",
+            "OCIRegistry_MyRegistry_Password": "MyPassword",
+            "OCIRegistry_MyOtherRegistry_Address": "myotherregistry.example.com",
+            "OCIRegistry_MyOtherRegistry_Username": "MyOtherUser",
+            "OCIRegistry_MyOtherRegistry_Password": "MyOtherPassword",
+        }
+        with patch.dict(os.environ, declarations, clear=True):
+
+            # act
+            actual_result = sc.get_docker_registry_credentials_from_environment_variables()
+
+            # assert
+            #the scheme is removed because docker expects the address of a registry without it.
+            assert actual_result == [("myotherregistry.example.com", "MyOtherUser", "MyOtherPassword"), ("myregistry.example.com", "MyUser", "MyPassword")]
+
+    def test_get_docker_registry_credentials_from_environment_variables_throws_exception_when_the_password_is_not_declared(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        declarations = {
+            "OCIRegistry_MyRegistry_Address": "myregistry.example.com",
+            "OCIRegistry_MyRegistry_Username": "MyUser",
+        }
+        with patch.dict(os.environ, declarations, clear=True):
+
+            # act & assert
+            #a registry which is declared without credentials is a misconfiguration and not a registry which allows anonymous
+            #pulls: such a registry does not have to be declared at all.
+            with self.assertRaises(ValueError):
+                sc.get_docker_registry_credentials_from_environment_variables()
 
     def test_export_filemetadata(self) -> None:
         # arrange

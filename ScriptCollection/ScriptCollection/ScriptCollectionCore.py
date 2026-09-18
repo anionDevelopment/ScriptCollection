@@ -40,7 +40,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.27"
+version = "4.4.28"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -211,6 +211,8 @@ class ScriptCollectionCore:
     __utf8_byte_order_mark: bytes = b"\xef\xbb\xbf"
     # Base-url of the GitHub-REST-API. This is an internal constant on purpose and deliberately not exposed as a parameter of the GitHub-functions.
     __github_api_base_url: str = "https://api.github.com"
+    # Whether the login to the registries which are defined for this machine was already done. See login_to_defined_docker_registries.
+    __already_logged_in_to_defined_docker_registries: bool = None
 
 
     def __init__(self):
@@ -218,6 +220,7 @@ class ScriptCollectionCore:
         self.call_program_runner_directly = None
         self.__mocked_program_calls = list[ScriptCollectionCore.__MockProgramCall]()
         self.log = SCLog(None, LogLevel.Warning, False)
+        self.__already_logged_in_to_defined_docker_registries = False
 
     @staticmethod
     @GeneralUtilities.check_arguments
@@ -242,25 +245,26 @@ class ScriptCollectionCore:
         return result
 
     def __load_credentials_if_required_and_available(self,registry_url:str,registry_username:str,registry_password:str)->tuple[str,str]:
+        """Returns the credentials for the given registry: the ones which were passed by the caller, or - if the caller passed none - the
+        ones which are available for this registry on this machine (see __get_docker_registry_credentials). The last matching entry is
+        used, because the entries are ordered by increasing precedence."""
         if registry_url.startswith("https://"):
             registry_url=registry_url[len("https://"):]
         if registry_password is None:
-            credential_file=self.__get_docker_registry_credentials_file()
-            lines=GeneralUtilities.read_nonempty_lines_from_file(credential_file)[1:]
-            for line in lines:
-                splitted=line.split(";")
-                registry=splitted[0]
-                username=splitted[1]
-                password=splitted[2]
+            for registry,username,password in self.__get_docker_registry_credentials():
                 if registry_url==registry and (registry_username is None or username==registry_username):
                     registry_username=username
                     registry_password=password
-                    break
         else:
             GeneralUtilities.assert_not_null(registry_username)
         return (registry_username,registry_password)
 
     def __get_docker_registry_credentials(self)->list[tuple[str,str,str]]:
+        """Returns all registry-credentials which are available for the current process: the ones of the credentials-file of the
+        configuration-folder followed by the ones which are declared in the environment (see
+        get_docker_registry_credentials_from_environment_variables). The entries are ordered by increasing precedence: a registry which is
+        declared in both places is contained twice and the declaration of the environment is the last one, so it is the one which a login
+        executes last and which a lookup of credentials uses."""
         result=[]
         credential_file=self.__get_docker_registry_credentials_file()
         if os.path.isfile(credential_file):
@@ -271,6 +275,40 @@ class ScriptCollectionCore:
                 username=splitted[1]
                 password=splitted[2]
                 result.append((registry,username,password))
+        result=result+self.get_docker_registry_credentials_from_environment_variables()
+        return result
+
+    @GeneralUtilities.check_arguments
+    def get_docker_registry_credentials_from_environment_variables(self)->list[tuple[str,str,str]]:
+        """Returns the registry-credentials which are declared in the environment of the current process, as tuples of registry-address,
+        username and password. The credentials of a registry named '<registryname>' are declared by the environment-variables
+        'OCIRegistry_<registryname>_Address', 'OCIRegistry_<registryname>_Username' and 'OCIRegistry_<registryname>_Password'.
+        The environment is used in addition to the credentials-file of the configuration-folder because that folder belongs to the user of
+        the machine on which a command was started and is therefore not available inside a build-container, while an environment-variable is
+        passed into the container (see TFCPS_Tools_General.get_required_environment_variables). It is the same mechanism which makes a
+        private package-source available inside a container (see TFCPS_Tools_General.get_declared_package_sources).
+        The names of the environment-variables are treated case-insensitively because they are not case-sensitive on all operating-systems.
+        A registry-address may be declared with or without the scheme 'https://'; the scheme is removed because docker expects the address
+        of a registry without it."""
+        address_variable_pattern = re.compile(r"^OCIRegistry_(.+)_Address$", re.IGNORECASE)
+        environment_variables: dict[str, str] = {name.lower(): value for name, value in os.environ.items()}
+        result: list[tuple[str,str,str]] = []
+        for environment_variable_name, environment_variable_value in os.environ.items():
+            match = address_variable_pattern.match(environment_variable_name)
+            if match is None:
+                continue
+            registry_name: str = match.group(1).lower()
+            if not GeneralUtilities.string_has_content(environment_variable_value):
+                continue
+            address: str = environment_variable_value.strip()
+            if address.startswith("https://"):
+                address = address[len("https://"):]
+            username: str = environment_variables.get(f"ociregistry_{registry_name}_username")
+            password: str = environment_variables.get(f"ociregistry_{registry_name}_password")
+            GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(username), f"No username is declared for the registry \"{registry_name}\" whose address is declared in the environment.")
+            GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(password), f"No password is declared for the registry \"{registry_name}\" whose address is declared in the environment.")
+            result.append((address, username, password))
+        result.sort()#sorted so the order (and therefore the log-output) is deterministic
         return result
 
     def registry_contains_image(self,registry_url:str,image:str,registry_username:str,registry_password:str)->bool:
@@ -348,6 +386,12 @@ class ScriptCollectionCore:
             return result
     
     def login_to_defined_docker_registries(self)->None:
+        """Logs in to every registry for which credentials are available on this machine (see __get_docker_registry_credentials).
+        The login is only executed once per instance: the credentials do not change while a process runs, and the login has to be
+        ensured by everything which accesses a registry, so without this the same logins would be executed over and over again."""
+        if self.__already_logged_in_to_defined_docker_registries:
+            return
+        self.__already_logged_in_to_defined_docker_registries=True
         registries=self.__get_docker_registry_credentials()
         if len(registries)==0:
             self.log.log("No docker registry credentials defined. Skipping docker login.",LogLevel.Debug)
@@ -374,6 +418,18 @@ class ScriptCollectionCore:
     def local_docker_image_exists(self, image: str, tag: str) -> bool:
         """Returns True if and only if the image is already available with this tag in the local image-store of the docker-daemon."""
         program_result = self.run_program("docker", f"image inspect {image}:{tag}", throw_exception_if_exitcode_is_not_zero=False)
+        return program_result[0] == 0
+
+    @GeneralUtilities.check_arguments
+    def image_is_available_in_registry(self, image: str, tag: str) -> bool:
+        """Returns True if and only if the image is available with this tag in the registry it addresses, using the credentials the
+        docker-client of the current process has (see login_to_defined_docker_registries).
+        'image' must be the image-address without tag, for example "myregistry.example.com/debian".
+        Only the manifest of the image is inspected, so the check costs one request to the registry and does not download the image.
+        The possible reasons why an image is not available (the registry is not reachable, the image does not exist there, the
+        credentials are missing or do not permit the access) are not distinguished: in all of these cases the image can not be pulled
+        from this address, which is what the caller has to know."""
+        program_result = self.run_program("docker", f"buildx imagetools inspect {image}:{tag}", throw_exception_if_exitcode_is_not_zero=False, print_errors_as_information=True, print_live_output=self.log.loglevel == LogLevel.Debug)
         return program_result[0] == 0
 
     @GeneralUtilities.check_arguments
