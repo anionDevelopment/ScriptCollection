@@ -5,7 +5,6 @@ from typing import NoReturn
 import unittest
 from unittest.mock import patch
 from pathlib import Path
-from unittest.mock import patch
 import tempfile
 import uuid
 import xml.etree.ElementTree as ET

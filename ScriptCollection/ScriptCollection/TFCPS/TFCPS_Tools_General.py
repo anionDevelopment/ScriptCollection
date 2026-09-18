@@ -389,10 +389,14 @@ class TFCPS_Tools_General:
             return
         version_element.text = current_version
         file_ended_with_newline: bool = GeneralUtilities.read_binary_from_file(codeunit_file).endswith(b"\n")
-        tree.write(codeunit_file, xml_declaration=True, encoding="utf-8")
-        if file_ended_with_newline:
-            #the serializer does not terminate the last line, so without this the trailing newline of the file would get lost on every write.
-            with open(codeunit_file, "ab") as file_object:
+        #the file is written through a binary file-object instead of by its name because the serializer opens a file which is given by its name in text-mode, which
+        #translates every line-separator it writes to the one of the current operating-system: on windows that converted the codeunit-files to crlf on every build,
+        #while the trailing newline below (which was always written in binary-mode) stayed lf, so the files ended up with mixed line-separators. The parser normalizes
+        #the line-separators of the file it reads to lf anyway (this is defined by the xml-specification), so a codeunit-file is written with lf on every operating-system.
+        with open(codeunit_file, "wb") as file_object:
+            tree.write(file_object, xml_declaration=True, encoding="utf-8")
+            if file_ended_with_newline:
+                #the serializer does not terminate the last line, so without this the trailing newline of the file would get lost on every write.
                 file_object.write(b"\n")
 
     @GeneralUtilities.check_arguments
