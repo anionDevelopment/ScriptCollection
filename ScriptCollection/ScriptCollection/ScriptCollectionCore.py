@@ -40,7 +40,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.29"
+version = "4.4.30"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -242,12 +242,34 @@ class ScriptCollectionCore:
         GeneralUtilities.ensure_directory_exists(result)
         return result
 
-    def __get_docker_registry_credentials_file(self)->str:
+    @GeneralUtilities.check_arguments
+    def get_registry_credentials_file_in_container(self)->str:
+        """Returns the file inside a build-container to which the host mounts its registry-credentials-file (see
+        TFCPS_CodeUnit_BuildCodeUnits.__run_scriptcollection_executable_in_container). It is an own path (and not the
+        configuration-folder of the container-user) because the home-folder inside the container depends on the user the
+        image runs as, while this path is defined by the mount and is therefore identical for both sides."""
+        return "/Workspace/ScriptCollectionConfiguration/RegistryCredentials.csv"
+
+    @GeneralUtilities.check_arguments
+    def get_registry_credentials_file_in_configuration_folder(self)->str:
+        """Returns the registry-credentials-file in the configuration-folder of the current user, and creates it if it does not exist yet.
+        This is the file of the machine on which a command was started, so it is also the file which is mounted into a build-container
+        (in contrast to __get_docker_registry_credentials_file, which inside a container resolves to that mount instead)."""
         result=os.path.join(self.get_global_cache_folder(),"RegistryCredentials.csv")
         if not os.path.isfile(result):
             GeneralUtilities.ensure_file_exists(result)
             GeneralUtilities.write_lines_to_file(result,["RegistryName;Username;Password"])
         return result
+
+    def __get_docker_registry_credentials_file(self)->str:
+        """Returns the file which maps a registry to the credentials which are used for it. The file which the host mounted into a
+        build-container has precedence over the file in the configuration-folder of the current user: in a container that
+        configuration-folder belongs to the container-user and therefore never contains the configuration of the machine on which the
+        build was started."""
+        mounted_file=self.get_registry_credentials_file_in_container()
+        if os.path.isfile(mounted_file):
+            return mounted_file
+        return self.get_registry_credentials_file_in_configuration_folder()
 
     def __load_credentials_if_required_and_available(self,registry_url:str,registry_username:str,registry_password:str)->tuple[str,str]:
         """Returns the credentials for the given registry: the ones which were passed by the caller, or - if the caller passed none - the
@@ -455,6 +477,10 @@ class ScriptCollectionCore:
         if not force and self.local_docker_image_exists(image, tag):
             self.log.log(f"Image \"{image_with_tag}\" is already available locally and therefore does not have to be pulled.", LogLevel.Debug)
             return
+        #the image can be located in a registry which is not publicly readable, so the login to the registries which are defined for this
+        #machine is done before the pull. Without it the pull of such an image fails with "no basic auth credentials" respectively "401
+        #Unauthorized", even though the credentials are configured.
+        self.login_to_defined_docker_registries()
         self.log.log(f"Pull image \"{image_with_tag}\"...")
         self.run_program_with_retry("docker", f"pull {image_with_tag}", print_errors_as_information=True, print_live_output=self.log.loglevel == LogLevel.Debug)
 
@@ -4750,24 +4776,23 @@ OCR-content:
     
     def prepare_build_pipeline_for_gitlab(self):
         repository_folder:str=os.getcwd()
-        self.__prepare_build_pipeline(repository_folder)
+        self.__prepare_build_pipeline(repository_folder,"CI_COMMIT_REF_NAME")
 
     def prepare_build_pipeline_for_github(self):
         repository_folder:str=os.getcwd()
         self.assert_scbuilder_image_in_github_workflow_matches_image_definition(repository_folder)
-        self.__prepare_build_pipeline(repository_folder)
+        self.__prepare_build_pipeline(repository_folder,"GITHUB_REF_NAME")
 
-    def __ensure_branch_is_checked_out(self,repository_folder:str) -> None:
-        current_branch_result = self.run_program_argsasarray("git", ["symbolic-ref", "--short", "HEAD"], repository_folder, throw_exception_if_exitcode_is_not_zero=False)
-        repository_is_on_any_branch:bool = current_branch_result[0] == 0
-        if not repository_is_on_any_branch:
-            timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-            branch_name:str=f"pipeline_{timestamp}"
-            self.run_program_argsasarray("git",["checkout","-b",branch_name], repository_folder)
+    def __ensure_branch_is_checked_out(self,repository_folder:str,branchname_environment_variable_name:str) -> None:
+        """Checks out the branch the pipeline was triggered for, because the runner checks out the commit in a detached-head-state while the versioning requires the real branch-name.
+        "checkout -B" is used and not "checkout -b", because the branch already exists when the runner reuses the build-directory of a previous pipeline-run of the same branch."""
+        branch_name:str=os.environ.get(branchname_environment_variable_name)
+        GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(branch_name), f"The environment-variable \"{branchname_environment_variable_name}\", which contains the name of the branch the pipeline runs for, is not set.")
+        self.run_program_argsasarray("git",["checkout","-B",branch_name], repository_folder)
 
-    def __prepare_build_pipeline(self,repository_folder:str) -> None:
+    def __prepare_build_pipeline(self,repository_folder:str,branchname_environment_variable_name:str) -> None:
         GeneralUtilities.assert_condition(self.is_running_in_build_container(), "This function should only be run in the build container.")
-        self.__ensure_branch_is_checked_out(repository_folder)
+        self.__ensure_branch_is_checked_out(repository_folder,branchname_environment_variable_name)
 
         expected_image = self.__get_scbuilder_image_from_image_definition_file(repository_folder)
         GeneralUtilities.assert_condition("scbuilder:" in expected_image, f"The SCBuilder-image '{expected_image}' defined in the image-definition-file of the repository is not a valid SCBuilder-image. It must contain 'scbuilder:'.")

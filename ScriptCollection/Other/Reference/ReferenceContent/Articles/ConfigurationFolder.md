@@ -71,9 +71,9 @@ DotNet;myownregistry2.example.com/dotnetbase
 When a custom registry is defined for an image here, that registry is used - but only if the image is really available there with the tag the repository defines. Before the address is used, the manifest of the image is requested from the custom registry once per image and process (after the login described below). If that request fails - because the registry is not reachable, because it does not contain the image, or because the available credentials do not permit the access - the fallback (upstream) registry from the repository's image-definition (see [Per-repository configuration](#per-repository-configuration)) is used instead. The fallback is used as well when no custom registry is defined for the image at all.
 The purpose of the fallback is that a freshly cloned project just works without further setup and that an unavailable custom registry does not break a build; a warning which names the reason is shown when the fallback-registry is used.
 
-This applies to a build in a container (`scbuildcodeunitsc`, `scbuildcodeunits -c`) as well: the file of the host is mounted read-only into the build-container (to `/Workspace/ScriptCollectionConfiguration/OCIImages/ImageRegistries.csv`), so the build inside the container takes the images from the same registries as a build on the host. Only this one file is mounted, not the whole configuration-folder, so nothing which contains credentials is exposed to the container. The mount-path is an own path and not the configuration-folder of the container-user, because the home-directory inside the container depends on the user the image runs as. If the configuration-folder is mounted as a whole instead - which is the recommended setup for a self-hosted build-runner, see [Build-runner-configuration](./BuildRunnerConfiguration.md) - the file is taken from there.
+This applies to a build in a container (`scbuildcodeunitsc`, `scbuildcodeunits -c`) as well: the file of the host is mounted read-only into the build-container (to `/Workspace/ScriptCollectionConfiguration/OCIImages/ImageRegistries.csv`), so the build inside the container takes the images from the same registries as a build on the host. Only this file and [`GlobalCache/RegistryCredentials.csv`](#globalcacheregistrycredentialscsv) are mounted, not the whole configuration-folder, so nothing else of it is exposed to the container. The mount-path is an own path and not the configuration-folder of the container-user, because the home-directory inside the container depends on the user the image runs as. If the configuration-folder is mounted as a whole instead - which is the recommended setup for a self-hosted build-runner, see [Build-runner-configuration](./BuildRunnerConfiguration.md) - the file is taken from there.
 
-> Note: If the custom registry requires authentication, the credentials have to be available where the pull happens as well. On the host they are configured in [`GlobalCache/RegistryCredentials.csv`](#globalcacheregistrycredentialscsv). That file is deliberately **not** mounted into a locally started build-container, so for a build in a container the credentials are declared as [environment-variables](#oci-registries) instead. Without credentials the images of that registry are taken from the fallback-registry.
+> Note: If the custom registry requires authentication, the credentials have to be available where the pull happens as well. They are configured in [`GlobalCache/RegistryCredentials.csv`](#globalcacheregistrycredentialscsv), which is mounted read-only into a locally started build-container, or declared as [environment-variables](#oci-registries), which is how a build-pipeline provides them from its own secret-store. Without credentials the images of that registry are taken from the fallback-registry.
 
 ### `GlobalCache/RegistryCredentials.csv`
 
@@ -86,7 +86,9 @@ myregistry2.example.com;user1;pa$$w0rD2
 myregistry2.example.com;user2;pa$$w0rD3
 ```
 
-Credentials for a registry can also be declared as [environment-variables](#oci-registries), which is what a build inside a container uses because this file is not available there. Credentials of both sources are used together; the declaration in the environment has precedence over an entry of this file for the same registry.
+Credentials for a registry can also be declared as [environment-variables](#oci-registries), which is how a build-pipeline provides them from its own secret-store. Credentials of both sources are used together; the declaration in the environment has precedence over an entry of this file for the same registry.
+
+For a build in a container (`scbuildcodeunitsc`, `scbuildcodeunits -c`) this file is mounted read-only into the build-container (to `/Workspace/ScriptCollectionConfiguration/RegistryCredentials.csv`), so the build inside the container logs in to the same registries as a build on the host. As with the image-registries-file the mount-path is an own path, and if the configuration-folder is mounted as a whole (the recommended setup for a self-hosted build-runner) the file is taken from there.
 
 ### `GlobalCache/TranslationServiceProperties.txt`
 
@@ -154,7 +156,7 @@ A repository which needs such a source declares these variable-names as [require
 
 #### OCI-registries
 
-The credentials of an OCI-registry are configured with the same mechanism, for the same reason: the credentials-file [`GlobalCache/RegistryCredentials.csv`](#globalcacheregistrycredentialscsv) is part of the configuration-folder of the user and is therefore not available inside a locally started build-container, while an environment-variable is passed into the container. A registry named `<registryname>` is defined by these environment-variables:
+The credentials of an OCI-registry can be configured with the same mechanism, for the same reason: the credentials-file [`GlobalCache/RegistryCredentials.csv`](#globalcacheregistrycredentialscsv) is part of the configuration-folder of the user, which a build-pipeline does not have, while an environment-variable can be provided from its secret-store. A registry named `<registryname>` is defined by these environment-variables:
 
 | Environment-variable | Meaning |
 |---|---|
@@ -171,7 +173,7 @@ OCIRegistry_MyRegistry_Password;file;~/.secrets/MyRegistryToken.txt
 
 `<registryname>` is only the name of the declaration (it does not have to match the address), and the name is treated case-insensitively. Username and password are mandatory for a declared registry: a registry which allows anonymous pulls does not have to be declared at all.
 
-A repository which uses images of such a registry declares these variable-names as [required environment-variables](#required-environment-variables); they are then available on the host as well as inside the build-container. Everything which accesses a registry (pulling an image, pulling the images of the local test-services, checking whether a custom registry provides an image) logs in to all registries for which credentials are available before it does so. Without the credentials the affected images are taken from the fallback-registry (see [`GlobalCache/OCIImages/ImageRegistries.csv`](#globalcacheociimagesimageregistriescsv)).
+A repository which uses images of such a registry declares these variable-names as [required environment-variables](#required-environment-variables); they are then available on the host as well as inside the build-container. Everything which accesses a registry logs in to all registries for which credentials are available before it does so: pulling an image, pulling the images of the local test-services, checking whether a custom registry provides an image and building the image of a docker-codeunit. Without the credentials the affected images are taken from the fallback-registry (see [`GlobalCache/OCIImages/ImageRegistries.csv`](#globalcacheociimagesimageregistriescsv)) - except for the base-image of a Dockerfile, for which the build fails instead, because that image is resolved by buildkit (see [Per-repository configuration](#per-repository-configuration)).
 
 ### Custom pre-codeunit-build-scripts
 
@@ -230,6 +232,19 @@ Debian;docker.io/library/debian;13.4-slim
 ```
 
 This file (per repository) defines the fallback-registry and tag, while `~/.ScriptCollection/GlobalCache/OCIImages/ImageRegistries.csv` (machine-wide) defines the custom registry to prefer. The fallback-registry is used whenever the preferred registry does not provide the image - also when it is defined but not available (see there).
+
+#### Base-image of a docker-codeunit
+
+The `FROM`-lines of the `Dockerfile` of a docker-codeunit must not contain a registry-address, because that address is resolved by buildkit and not by ScriptCollection: neither the preferred custom registry nor the fallback-registry would apply to it, and a build would fail with `401 Unauthorized` or run into the rate-limit of the upstream-registry depending on which address was written there.
+
+Instead, the build passes every image of `ImageDefinition.csv` as the build-argument `image_<imagename in lowercase>`, whose value is the address with tag the image has to be taken from on this machine. It is the same name under which an image is available to the local test-services. A `Dockerfile` declares the arguments it needs and uses them in its `FROM`-lines:
+
+```dockerfile
+ARG image_debian
+FROM ${image_debian}
+```
+
+All declared images are passed, so a multi-stage-build can use several of them. An argument which a `Dockerfile` does not declare is simply unused.
 
 ### `<repository>/.betterleaks.toml`
 

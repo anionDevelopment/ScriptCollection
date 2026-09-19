@@ -1,14 +1,18 @@
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 from ..ScriptCollection.GeneralUtilities import GeneralUtilities
+from ..ScriptCollection.OCIImages.OCIImageManager import OCIImageManager
 from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
 from ..ScriptCollection.SCLog import LogLevel
 from ..ScriptCollection.TFCPS.TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base
 from ..ScriptCollection.TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
 from ..ScriptCollection.TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
+from ..ScriptCollection.TFCPS.Docker.TFCPS_CodeUnitSpecific_Docker import TFCPS_CodeUnitSpecific_Docker_Functions
 from ..ScriptCollection.TFCPS.Flutter.TFCPS_CodeUnitSpecific_Flutter import TFCPS_CodeUnitSpecific_Flutter_Functions
+from .test_OCIImageManager import create_oci_image_manager, create_repository
 
 
 def rewrite_flutter_coverage_package_names(cobertura_xml_content: str, codeunit_name: str) -> str:
@@ -25,6 +29,17 @@ def rewrite_vendored_pubspec_path_dependencies(codeunit_folder: str) -> None:
     # pylint:disable=protected-access
     rewrite = TFCPS_CodeUnitSpecific_Flutter_Functions._TFCPS_CodeUnitSpecific_Flutter_Functions__rewrite_vendored_pubspec_path_dependencies
     rewrite(codeunit_folder)
+
+
+def get_build_arguments_for_images_of_repository(repository: str, oci_image_manager: OCIImageManager) -> list[str]:
+    """Calls the private TFCPS_CodeUnitSpecific_Docker_Functions.__get_build_arguments_for_images_of_repository for a test,
+    the same way rewrite_flutter_coverage_package_names above accesses another private method.
+    The method only needs the repository-folder and the image-manager of its instance, so it is called with a stand-in which
+    provides exactly these two instead of with a real codeunit, which would require a whole codeunit-folder on disk."""
+    # pylint:disable=protected-access
+    get_arguments = TFCPS_CodeUnitSpecific_Docker_Functions._TFCPS_CodeUnitSpecific_Docker_Functions__get_build_arguments_for_images_of_repository
+    tfcps_tools_general = SimpleNamespace(oci_image_manager=oci_image_manager)
+    return get_arguments(SimpleNamespace(get_repository_folder=lambda: repository, tfcps_Tools_General=tfcps_tools_general))
 
 
 def write_vendored_pubspec(dependent_codeunits_folder: str, codeunit_name: str, flavor: str, package_name: str, pubspec_content: str) -> str:
@@ -875,3 +890,45 @@ items:
         # assert
         self.assertIn("<name>MatDarkmodeToggleButton</name>", actual_result)
         self.assertIn("<version>0.1.1</version>", actual_result)
+
+    def test_get_build_arguments_for_images_of_repository_passes_every_declared_image_under_its_lowercase_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            repository = create_repository(temporary_folder, ["Debian;docker.io/library/debian;13.4-slim", "PlantUML;plantuml/plantuml;1.2026.8"])
+            oci_image_manager = create_oci_image_manager(temporary_folder, os.path.join(temporary_folder, "NotMounted.csv"), False, True)[0]
+
+            # act
+            actual_result = get_build_arguments_for_images_of_repository(repository, oci_image_manager)
+
+            # assert
+            #every declared image is passed and not only the one a Dockerfile uses, because which of them it needs is only known
+            #to the Dockerfile itself.
+            self.assertEqual(["--build-arg", "image_debian=docker.io/library/debian:13.4-slim", "--build-arg", "image_plantuml=plantuml/plantuml:1.2026.8"], actual_result)
+
+    def test_get_build_arguments_for_images_of_repository_uses_the_custom_registry_of_this_machine(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            repository = create_repository(temporary_folder, ["Debian;docker.io/library/debian;13.4-slim"])
+            oci_image_manager = create_oci_image_manager(temporary_folder, os.path.join(temporary_folder, "NotMounted.csv"), False, True)[0]
+            GeneralUtilities.write_lines_to_file(oci_image_manager.get_image_registries_file_in_configuration_folder(), ["ImageName;RegistryAddress", "Debian;myregistry.example.com/debian"])
+
+            # act
+            actual_result = get_build_arguments_for_images_of_repository(repository, oci_image_manager)
+
+            # assert
+            #this is the whole purpose of the build-argument: the address inside a Dockerfile would be resolved by buildkit, so
+            #neither the custom registry nor the fallback-registry would apply to it.
+            self.assertEqual(["--build-arg", "image_debian=myregistry.example.com/debian:13.4-slim"], actual_result)
+
+    def test_get_build_arguments_for_images_of_repository_uses_the_fallback_registry_when_the_custom_registry_does_not_provide_the_image(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            repository = create_repository(temporary_folder, ["Debian;docker.io/library/debian;13.4-slim"])
+            oci_image_manager = create_oci_image_manager(temporary_folder, os.path.join(temporary_folder, "NotMounted.csv"), False, False)[0]
+            GeneralUtilities.write_lines_to_file(oci_image_manager.get_image_registries_file_in_configuration_folder(), ["ImageName;RegistryAddress", "Debian;myregistry.example.com/debian"])
+
+            # act
+            actual_result = get_build_arguments_for_images_of_repository(repository, oci_image_manager)
+
+            # assert
+            self.assertEqual(["--build-arg", "image_debian=docker.io/library/debian:13.4-slim"], actual_result)
