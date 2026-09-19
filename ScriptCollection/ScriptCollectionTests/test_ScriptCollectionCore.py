@@ -66,6 +66,90 @@ class ScriptCollectionCoreTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 sc.get_docker_registry_credentials_from_environment_variables()
 
+    @staticmethod
+    def __create_scriptcollectioncore_for_registry_login(configuration_folder: str, mounted_credentials_file: str) -> tuple[ScriptCollectionCore, list[str]]:
+        """Returns a ScriptCollectionCore which reads its machine-wide configuration from the given folder instead of from the
+        configuration-folder of the user who runs the test, and which looks for the file mounted by the host at the given path instead
+        of at the path a real build-container has.
+        The program-calls are collected instead of being executed, because a testcase must not depend on an installed docker.
+        Returns the instance and the list of the collected calls (as the arguments the docker-client was called with)."""
+        result = ScriptCollectionCore()
+        setattr(result, "get_global_cache_folder", lambda: configuration_folder)
+        setattr(result, "get_registry_credentials_file_in_container", lambda: mounted_credentials_file)
+        executed_calls: list[str] = []
+
+        def run_program(program: str, arguments: str, *args, **kwargs) -> tuple[int, str, str, int]:
+            executed_calls.append(f"{program} {arguments}")
+            return (0, GeneralUtilities.empty_string, GeneralUtilities.empty_string, 0)
+        setattr(result, "run_program", run_program)
+        return (result, executed_calls)
+
+    def test_login_uses_the_registry_credentials_file_of_the_configuration_folder_when_nothing_is_mounted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            sc, executed_calls = ScriptCollectionCoreTests.__create_scriptcollectioncore_for_registry_login(temporary_folder, os.path.join(temporary_folder, "NotMounted.csv"))
+            GeneralUtilities.write_lines_to_file(os.path.join(temporary_folder, "RegistryCredentials.csv"), ["RegistryName;Username;Password", "myregistry.example.com;MyUser;MyPassword"])
+            #cleared so that registries which are declared in the real environment do not leak into this test.
+            with patch.dict(os.environ, {}, clear=True):
+
+                # act
+                sc.login_to_defined_docker_registries()
+
+                # assert
+                assert executed_calls == ["docker login myregistry.example.com -u MyUser -p MyPassword"]
+
+    def test_login_uses_the_registry_credentials_file_which_was_mounted_into_the_container(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            mounted_credentials_file = os.path.join(temporary_folder, "Mounted.csv")
+            GeneralUtilities.write_lines_to_file(mounted_credentials_file, ["RegistryName;Username;Password", "mountedregistry.example.com;MountedUser;MountedPassword"])
+            sc, executed_calls = ScriptCollectionCoreTests.__create_scriptcollectioncore_for_registry_login(temporary_folder, mounted_credentials_file)
+            GeneralUtilities.write_lines_to_file(os.path.join(temporary_folder, "RegistryCredentials.csv"), ["RegistryName;Username;Password", "myregistry.example.com;MyUser;MyPassword"])
+            with patch.dict(os.environ, {}, clear=True):
+
+                # act
+                sc.login_to_defined_docker_registries()
+
+                # assert
+                #the file of the configuration-folder is not used in addition: inside a container that folder belongs to the
+                #container-user and therefore never contains the configuration of the machine on which the build was started.
+                assert executed_calls == ["docker login mountedregistry.example.com -u MountedUser -p MountedPassword"]
+
+    def test_login_uses_the_credentials_of_the_file_and_of_the_environment_together(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            sc, executed_calls = ScriptCollectionCoreTests.__create_scriptcollectioncore_for_registry_login(temporary_folder, os.path.join(temporary_folder, "NotMounted.csv"))
+            GeneralUtilities.write_lines_to_file(os.path.join(temporary_folder, "RegistryCredentials.csv"), ["RegistryName;Username;Password", "myregistry.example.com;MyUser;MyPassword"])
+            declarations = {
+                "OCIRegistry_MyOtherRegistry_Address": "myotherregistry.example.com",
+                "OCIRegistry_MyOtherRegistry_Username": "MyOtherUser",
+                "OCIRegistry_MyOtherRegistry_Password": "MyOtherPassword",
+            }
+            with patch.dict(os.environ, declarations, clear=True):
+
+                # act
+                sc.login_to_defined_docker_registries()
+
+                # assert
+                #the declaration of the environment is the last one, because it has precedence over an entry of the file.
+                assert executed_calls == ["docker login myregistry.example.com -u MyUser -p MyPassword", "docker login myotherregistry.example.com -u MyOtherUser -p MyOtherPassword"]
+
+    def test_login_is_only_executed_once_per_instance(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            sc, executed_calls = ScriptCollectionCoreTests.__create_scriptcollectioncore_for_registry_login(temporary_folder, os.path.join(temporary_folder, "NotMounted.csv"))
+            GeneralUtilities.write_lines_to_file(os.path.join(temporary_folder, "RegistryCredentials.csv"), ["RegistryName;Username;Password", "myregistry.example.com;MyUser;MyPassword"])
+            with patch.dict(os.environ, {}, clear=True):
+
+                # act
+                sc.login_to_defined_docker_registries()
+                sc.login_to_defined_docker_registries()
+
+                # assert
+                #the credentials do not change while a process runs and everything which accesses a registry ensures the login, so
+                #without this the same login would be executed over and over again.
+                assert executed_calls == ["docker login myregistry.example.com -u MyUser -p MyPassword"]
+
     def test_export_filemetadata(self) -> None:
         # arrange
         sc = ScriptCollectionCore()
@@ -314,6 +398,70 @@ class ScriptCollectionCoreTests(unittest.TestCase):
 
         finally:
             GeneralUtilities.ensure_directory_exists(folder)
+
+    def __create_git_repository_with_one_commit(self, folder: str) -> str:
+        sc = ScriptCollectionCore()
+        GeneralUtilities.ensure_directory_exists(folder)
+        sc.run_program_argsasarray("git", ["init", "--initial-branch", "main"], folder)
+        sc.run_program_argsasarray("git", ["config", "user.name", "Testuser"], folder)
+        sc.run_program_argsasarray("git", ["config", "user.email", "testuser@example.com"], folder)
+        GeneralUtilities.ensure_file_exists(os.path.join(folder, "File.txt"))
+        sc.run_program_argsasarray("git", ["add", "."], folder)
+        sc.run_program_argsasarray("git", ["commit", "-m", "Initial commit"], folder)
+        return sc.run_program_argsasarray("git", ["rev-parse", "HEAD"], folder)[1].strip()
+
+    def test_ensure_branch_is_checked_out_checks_out_the_branch_of_the_pipeline_when_the_repository_is_in_a_detached_head_state(self) -> None:
+        # arrange
+        folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        try:
+            sc = ScriptCollectionCore()
+            commit_id = self.__create_git_repository_with_one_commit(folder)
+            sc.run_program_argsasarray("git", ["checkout", "--detach", commit_id], folder)
+            #the environment is not cleared because the called git-commands require the environment of the testrunner.
+            with patch.dict(os.environ, {"CI_COMMIT_REF_NAME": "other/maintenance"}):
+
+                # act
+                sc._ScriptCollectionCore__ensure_branch_is_checked_out(folder, "CI_COMMIT_REF_NAME")
+
+                # assert
+                assert "other/maintenance" == sc.run_program_argsasarray("git", ["symbolic-ref", "--short", "HEAD"], folder)[1].strip()
+                assert commit_id == sc.run_program_argsasarray("git", ["rev-parse", "HEAD"], folder)[1].strip()
+        finally:
+            GeneralUtilities.ensure_directory_does_not_exist(folder)
+
+    def test_ensure_branch_is_checked_out_checks_out_the_branch_of_the_pipeline_when_that_branch_already_exists(self) -> None:
+        # arrange
+        folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        try:
+            sc = ScriptCollectionCore()
+            #this is the situation in which the runner reuses the build-directory of a previous pipeline-run of the same branch.
+            commit_id = self.__create_git_repository_with_one_commit(folder)
+            sc.run_program_argsasarray("git", ["checkout", "--detach", commit_id], folder)
+            with patch.dict(os.environ, {"CI_COMMIT_REF_NAME": "main"}):
+
+                # act
+                sc._ScriptCollectionCore__ensure_branch_is_checked_out(folder, "CI_COMMIT_REF_NAME")
+
+                # assert
+                assert "main" == sc.run_program_argsasarray("git", ["symbolic-ref", "--short", "HEAD"], folder)[1].strip()
+                assert commit_id == sc.run_program_argsasarray("git", ["rev-parse", "HEAD"], folder)[1].strip()
+        finally:
+            GeneralUtilities.ensure_directory_does_not_exist(folder)
+
+    def test_ensure_branch_is_checked_out_throws_exception_when_the_branchname_is_not_available_in_the_environment(self) -> None:
+        # arrange
+        folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        try:
+            sc = ScriptCollectionCore()
+            self.__create_git_repository_with_one_commit(folder)
+            with patch.dict(os.environ, {}):
+                os.environ.pop("CI_COMMIT_REF_NAME", None)
+
+                # act and assert
+                with self.assertRaises(ValueError):
+                    sc._ScriptCollectionCore__ensure_branch_is_checked_out(folder, "CI_COMMIT_REF_NAME")
+        finally:
+            GeneralUtilities.ensure_directory_does_not_exist(folder)
 
     def test_to_list_none(self):
         # arrange

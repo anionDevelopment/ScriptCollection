@@ -25,9 +25,16 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
         artifacts_folder = GeneralUtilities.resolve_relative_path("Other/Artifacts", codeunit_folder)
         app_artifacts_folder = os.path.join(artifacts_folder, "BuildResult_OCIImage")
         GeneralUtilities.ensure_folder_exists_and_is_empty(app_artifacts_folder)
+        image_build_arguments = self.__get_build_arguments_for_images_of_repository()
+        #the base-image of the Dockerfile is resolved by buildkit and not by this process, so the login to the registries which are
+        #defined for this machine has to be done before the build. Without it buildkit requests the manifest of the base-image
+        #anonymously and the build fails with "401 Unauthorized" as soon as the base-image comes from a registry which is not
+        #publicly readable.
+        self._protected_sc.login_to_defined_docker_registries()
         for platform in platforms:
             #builder must be created once before with "docker buildx create --use"
             args = ["buildx","build", "--platform",GeneralUtilities.platform_to_docker_platform_str(platform), "--pull", "--force-rm", "--progress=plain", "--build-arg", f"TargetEnvironmentType={self.get_target_environment_type()}", "--build-arg", f"CodeUnitName={codeunitname}", "--build-arg", f"CodeUnitVersion={codeunitversion}", "--build-arg", f"CodeUnitOwnerName={self.tfcps_Tools_General.get_codeunit_owner_name(self.get_codeunit_file())}", "--build-arg", f"CodeUnitOwnerEMailAddress={self.tfcps_Tools_General.get_codeunit_owner_emailaddress(self.get_codeunit_file())}", "--build-arg", f"Platform={GeneralUtilities.platform_to_dash_str(platform)}", "--build-arg", f"DotNetRuntime={GeneralUtilities.platform_to_dotnet_runtime_identifier(platform)}", "--build-arg", f"PlatformForGoVersion={GeneralUtilities.platform_to_go_runtime_identifier(platform)}"]
+            args = args+image_build_arguments
             for custom_argument_key, custom_argument_value in custom_arguments.items():
                 args.append("--build-arg")
                 args.append(f"{custom_argument_key}={custom_argument_value}")
@@ -47,6 +54,27 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
         self.__generate_sbom_for_docker_image()
         self.copy_source_files_to_output_directory()
 
+
+    @GeneralUtilities.check_arguments
+    def __get_build_arguments_for_images_of_repository(self) -> list[str]:
+        """Returns a '--build-arg'-pair for every image which the repository declares in
+        '.ScriptCollection/OCIImages/ImageDefinition.csv': the argument 'image_<imagename in lowercase>' contains the address with tag
+        from which that image has to be taken on this machine.
+        A Dockerfile has to declare its base-image through such an argument ('ARG image_debian' followed by 'FROM ${image_debian}')
+        instead of writing a registry-address into its 'FROM'-line: the address inside the Dockerfile is resolved by buildkit, so
+        neither the custom registry which is preferred on this machine nor the fallback-registry of the repository would apply to it
+        (see OCIImageManager.get_registry_address_for_image).
+        The arguments are named like the environment-variables which the local test-services get for the same purpose (see
+        TFCPS_Tools_General.pull_images_of_test_services), so an image is addressed by the same name everywhere.
+        Every declared image is passed and not only the one a Dockerfile uses, because which of them it needs is only known to the
+        Dockerfile itself - a multi-stage-build uses several of them."""
+        repository_folder = self.get_repository_folder()
+        oci_image_manager = self.tfcps_Tools_General.oci_image_manager
+        result: list[str] = []
+        for image_name in oci_image_manager.get_used_images_in_repository(repository_folder):
+            image_address_with_tag = oci_image_manager.get_registry_address_for_image_with_default_tag(repository_folder, image_name)
+            result = result+["--build-arg", f"image_{image_name.lower()}={image_address_with_tag}"]
+        return result
 
     @GeneralUtilities.check_arguments
     def __generate_sbom_for_docker_image(self) -> None:
