@@ -86,7 +86,7 @@ Some tools are handled differently and are therefore not downloaded by `scdownlo
 
 - **FFMPEG** (`ensure_ffmpeg_is_available`): This is not stored in the global cache but downloaded directly into a specific codeunit's `Other/Resources/FFMPEG`-folder. It is therefore codeunit-specific and cannot be pre-warmed independent of a codeunit. (In a build-image, ffmpeg is usually installed as a system-package instead.)
 - **PlantUML**: This is used as an OCI-image (see [Rendering of PlantUML-diagrams](#rendering-of-plantuml-diagrams) above), not as a cached jar. An image is not pre-warmed by this command at all: which registry it is pulled from is decided by the image-manager (see below).
-- **Syft**: This is used as an OCI-image (pulled via the image-manager / custom registry, see [UsingCustomImageRegistry.md](./UsingCustomImageRegistry.md)), not as a cached binary in the tools-cache.
+- **Syft**: This is used as an OCI-image (pulled via the image-manager / custom registry, see [Custom OCI-registries](./CustomOCIRegistries.md)), not as a cached binary in the tools-cache.
 
 ## Cleaning the cache
 

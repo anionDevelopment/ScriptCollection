@@ -21,14 +21,17 @@ The build of a pipeline runs in a container (usually the SCBuilder-image). Mount
 
 ### Folder on the runner-host
 
-Create the folder once per runner-host, for example `/srv/ScriptCollectionConfiguration`:
+Create the folder once per runner-host, for example `/srv/ScriptCollectionConfiguration`. It is a copy of the parts of a developer's `~/.ScriptCollection` which a build needs:
 
 ```text
 /srv/ScriptCollectionConfiguration/
-└── TFCPS/
-    ├── EnvironmentVariables.csv
-    └── Secrets/
-        └── MyToken.txt
+├── TFCPS/
+│   ├── EnvironmentVariables.csv
+│   └── Secrets/
+│       └── MyToken.txt
+└── GlobalCache/
+    └── OCIImages/
+        └── ImageRegistries.csv
 ```
 
 ```csv
@@ -40,11 +43,28 @@ Dependency_CSharp_MyPrivateFeed_Password;file;Secrets/MyToken.txt
 
 Use a **relative** path for a secret-file (it is resolved against `<configuration-folder>/TFCPS`). An absolute path or a `~`-path of the developer-machine does not exist inside the container.
 
+> **Create `GlobalCache/OCIImages/ImageRegistries.csv` even if it is empty** (a file containing only the header-line `ImageName;RegistryAddress` is enough). The mount is read-only, but ScriptCollection creates that file - and the folders above it - when it does not exist yet. On a read-only mount that creation fails and the build aborts, so a folder which only contains `TFCPS` breaks every build on this runner. See [Custom OCI-registries](./CustomOCIRegistries.md) for what to put into that file.
+
 Restrict the access-rights of the folder to the user which runs the runner (for example `chmod 600` for the files below `Secrets`).
 
-### GitLab
+> **The path on the left side is always a path on the runner-host**, in every setup below - never a path inside the runner-container. A self-hosted runner which itself runs as a container creates the job-container through the docker-socket it has mounted, so that mount-source is resolved by the docker-daemon on the host. The configuration-folder therefore does **not** have to be mounted into the runner-container itself; the runner only passes the path on. (Mounting it there as well does no harm and can help to verify the setup, for example with `docker compose exec <runner> ls /srv/ScriptCollectionConfiguration`.)
 
-The official GitLab-runner-image is used with the docker-executor, so the mount is configured once in the `config.toml` of the runner and applies to every project which is built by that runner - no repository has to be changed:
+### GitLab (official runner-image, docker-executor)
+
+The runner itself only needs its own configuration and the docker-socket:
+
+```yaml
+services:
+  gitlab-runner:
+    image: gitlab/gitlab-runner:latest
+    container_name: gitlab-runner
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/gitlab-runner/config:/etc/gitlab-runner
+```
+
+The mount into the **job**-containers is configured once in the `config.toml` of that runner (here: `/srv/gitlab-runner/config/config.toml`) and then applies to every project this runner builds - no repository has to be changed:
 
 ```toml
 [[runners]]
@@ -52,9 +72,36 @@ The official GitLab-runner-image is used with the docker-executor, so the mount 
     volumes = ["/var/run/docker.sock:/var/run/docker.sock", "/srv/ScriptCollectionConfiguration:/root/.ScriptCollection:ro"]
 ```
 
-### GitHub
+Afterwards restart the runner (`docker compose restart gitlab-runner`) so the changed configuration takes effect.
 
-The workflow defines the job-container, so the mount is added to `.github/workflows/buildpipeline.yml` of the repository:
+### GitHub (SCGitHubRunner)
+
+`SCGitHubRunner` (a codeunit of the `SCBuilder`-repository) adds this mount to every job-container it starts, configured once per runner with `SCRIPTCOLLECTION_CONFIGURATION_FOLDER` - so no repository-workflow has to be changed:
+
+```yaml
+services:
+  myrunner:
+    image: aniondev/scgithubrunner:latest
+    container_name: myrunner
+    restart: unless-stopped
+    environment:
+      ORG_NAME: myorganization
+      ACCESS_TOKEN: <github-personal-access-token>
+      RUNNER_NAME: myrunner
+      LABELS: self-hosted,scriptcollection
+      RUNNER_HOME: /Workspace/Other/Runner/MyRunner
+      SCRIPTCOLLECTION_CONFIGURATION_FOLDER: /srv/ScriptCollectionConfiguration
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # host-identical and unique per runner (see SCGitHubRunner's own documentation):
+      - /Workspace/Other/Runner/MyRunner:/Workspace/Other/Runner/MyRunner
+```
+
+This requires an `SCGitHubRunner`-image which contains the container-hook (see the "Container-hooks" section of its usage-documentation); after updating the image, `docker compose pull && docker compose up -d` on the runner-host.
+
+### GitHub (any other runner-image)
+
+With a runner-image which can not be extended that way, the job-container is defined by the workflow, so the mount is added to `.github/workflows/buildpipeline.yml` of every repository which needs it:
 
 ```yaml
 jobs:
@@ -67,9 +114,11 @@ jobs:
         - /srv/ScriptCollectionConfiguration:/root/.ScriptCollection:ro
 ```
 
+### Target-path of the mount
+
 `/root/.ScriptCollection` is the configuration-folder of the user the job-container runs as. The SCBuilder-image runs as `root`; for an image which runs as another user the target-path is the `.ScriptCollection`-folder in the home-directory of that user.
 
-The mount is only needed for repositories which actually declare required environment-variables.
+The mount is needed for a repository which declares required environment-variables, and it is also what makes a custom OCI-registry (and its credentials) available to every build on this runner - see [Custom OCI-registries](./CustomOCIRegistries.md).
 
 ## Alternative: the secret-store of the forge
 

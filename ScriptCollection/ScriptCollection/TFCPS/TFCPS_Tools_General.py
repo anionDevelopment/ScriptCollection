@@ -29,9 +29,6 @@ class TFCPS_Tools_General:
 
     __sc:ScriptCollectionCore=None
     oci_image_manager:OCIImageManager=None
-    # Kinds which are allowed in the configuration-file that defines where the values of the required environment-variables come from
-    # (see get_environment_variables_configuration_file).
-    __allowed_environment_variable_kinds:list[str]=["literal","hostenvvariable","file"]
     # Relative path (inside the source-repository and inside the ScriptCollection.Resources-package) of the
     # file that pins the OpenAPIGenerator-version used as default when no repository-specific version is given.
     __openapigenerator_version_resource_relative_path:str="Dependencies/OpenAPIGenerator/Version.txt"
@@ -536,8 +533,11 @@ class TFCPS_Tools_General:
     def get_environment_variables_configuration_file(self) -> str:
         """Returns the path of the user-specific file which defines where the values of the required environment-variables come from.
         The file is looked up in the configuration-folder, so a build-container which gets that folder mounted (which is the recommended
-        setup for a self-hosted build-runner) resolves the values exactly like a build on a host does."""
-        return os.path.join(GeneralUtilities.get_scriptcollection_configuration_folder(), "TFCPS", "EnvironmentVariables.csv")
+        setup for a self-hosted build-runner) resolves the values exactly like a build on a host does.
+        This only returns the path of the file in the configuration-folder of the current user (used to know what to mount into a
+        locally-started build-container); resolving a value (resolve_environment_variables) also considers the file mounted into this
+        container, if there is one (see ScriptCollectionCore.get_environment_variables_file_in_container)."""
+        return self.__sc.get_environment_variables_configuration_file()
 
     @GeneralUtilities.check_arguments
     def get_required_environment_variables(self, repository: str) -> dict[str, str]:
@@ -559,57 +559,16 @@ class TFCPS_Tools_General:
         """Resolves the values of the given environment-variables (see get_required_environment_variables for the sources and their
         precedence). This is the same mechanism a codeunit-build uses for the variables a repository declares as required; it is available
         separately so a tool which needs a value without having such a declaration (for example something which runs inside the
-        build-container) does not have to read the configuration or the environment on its own.
+        build-container) does not have to read the configuration or the environment on its own. Delegates to
+        ScriptCollectionCore.resolve_environment_variables, which is also used for the OCI-registry-credentials
+        (see ScriptCollectionCore.get_docker_registry_credentials_from_environment_variables), so both use identical resolution-logic.
         'required_by' names the thing which needs the values and is used in the error-message when a value can not be determined."""
-        result: dict[str, str] = {}
-        configuration_file: str = self.get_environment_variables_configuration_file()
-        entries: dict[str, tuple[str, str]] = self.__read_environment_variables_configuration_file(configuration_file)
-        for environment_variable_name in environment_variable_names:
-            if environment_variable_name in entries:
-                result[environment_variable_name] = self.__resolve_environment_variable_value(environment_variable_name, entries[environment_variable_name], configuration_file)
-            else:
-                value_from_environment: str = os.environ.get(environment_variable_name)
-                GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(value_from_environment), f"The value of the environment-variable '{environment_variable_name}' which is required by {required_by} is unknown: it is not defined in '{configuration_file}' and it is not set in the environment. Add a line '{environment_variable_name};<kind>;<value>' to that file (allowed kinds are: {', '.join(TFCPS_Tools_General.__allowed_environment_variable_kinds)}) or provide the value as an environment-variable, which is how a build-pipeline usually provides it.")
-                result[environment_variable_name] = value_from_environment
-        return result
+        return self.__sc.resolve_environment_variables(environment_variable_names, required_by)
 
     @GeneralUtilities.check_arguments
     def resolve_environment_variable(self, environment_variable_name: str, required_by: str) -> str:
         """Resolves the value of a single environment-variable, see resolve_environment_variables."""
-        return self.resolve_environment_variables([environment_variable_name], required_by)[environment_variable_name]
-
-    @GeneralUtilities.check_arguments
-    def __read_environment_variables_configuration_file(self, configuration_file: str) -> dict[str, tuple[str, str]]:
-        """Reads the configuration-file which defines where the values of environment-variables come from (columns
-        'EnvVariableName;Kind;Value') and returns a mapping of the name of the variable to its kind and its value.
-        The file is optional: if it does not exist, nothing is defined by it and all values have to come from the environment."""
-        result: dict[str, tuple[str, str]] = {}
-        if not os.path.isfile(configuration_file):
-            return result
-        for entry in GeneralUtilities.read_csv_file(configuration_file, True):
-            GeneralUtilities.assert_condition(2 < len(entry), f"Invalid line in '{configuration_file}': every line must have the 3 columns 'EnvVariableName;Kind;Value' but '{';'.join(entry)}' has {len(entry)}.")
-            #the value itself may contain the separator-character (for example in a literal value), so everything behind the second column belongs to the value.
-            result[entry[0]] = (entry[1], ";".join(entry[2:]))
-        return result
-
-    @GeneralUtilities.check_arguments
-    def __resolve_environment_variable_value(self, env_variable_name: str, entry: tuple[str, str], configuration_file: str) -> str:
-        """Resolves the value of an entry of the configuration-file. 'Kind' is one of 'literal' (the value is used as-is),
-        'hostenvvariable' (the value is the name of an environment-variable which must be set on the current system) or 'file' (the value
-        is a path - '~' is expanded, a relative path is resolved against the configuration-folder - to a text-file whose content, without
-        surrounding whitespace, is used). A relative path is the recommended form for a secret-file, because it also resolves correctly
-        when the configuration-folder is mounted into a build-container."""
-        kind, value = entry
-        GeneralUtilities.assert_condition(kind in TFCPS_Tools_General.__allowed_environment_variable_kinds, f"Unknown kind '{kind}' for environment-variable '{env_variable_name}' defined in '{configuration_file}'. Allowed values are: {', '.join(TFCPS_Tools_General.__allowed_environment_variable_kinds)}.")
-        if kind == "literal":
-            return value
-        if kind == "hostenvvariable":
-            resolved_value = os.environ.get(value)
-            GeneralUtilities.assert_condition(resolved_value is not None, f"The environment-variable '{env_variable_name}' defined in '{configuration_file}' is supposed to be taken from the environment-variable '{value}', but that environment-variable is not set.")
-            return resolved_value
-        value_file = GeneralUtilities.resolve_relative_path(os.path.expanduser(value), os.path.dirname(configuration_file))
-        GeneralUtilities.assert_file_exists(value_file, f"The environment-variable '{env_variable_name}' defined in '{configuration_file}' is supposed to be taken from the file '{value_file}', but that file does not exist.")
-        return GeneralUtilities.read_text_from_file(value_file).strip()
+        return self.__sc.resolve_environment_variable(environment_variable_name, required_by)
 
     @GeneralUtilities.check_arguments
     def ensure_required_environment_variables_are_set(self, repository: str) -> None:
