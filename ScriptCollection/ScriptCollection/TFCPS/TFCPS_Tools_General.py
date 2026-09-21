@@ -1783,6 +1783,12 @@ class TFCPS_Tools_General:
         GeneralUtilities.ensure_file_exists(os.path.join(codeunit_folder, codeunit_name,"packages.lock.json"))
         GeneralUtilities.ensure_file_exists(os.path.join(codeunit_folder, codeunit_name+"Tests","packages.lock.json"))
         self.__sc.run_program_argsasarray("dotnet", ["restore", sln_file, "--force", "--force-evaluate"], codeunit_folder)
+        #dotnet writes the lock-files with the line-endings of the operating-system it runs on, so the same dependencies produce a
+        #different file on windows than on linux. The lock-files are committed, so that difference would show up as a change of the whole
+        #file in every commit which was created on the other operating-system. They are therefore normalized to LF here, independent of
+        #where the update ran.
+        for lock_file in Path(codeunit_folder).rglob("packages.lock.json"):
+            self.__sc.normalize_invisible_characters(str(lock_file))
 
     @GeneralUtilities.check_arguments
     def get_dependency_version_in_resources_folder(self, resources_folder:str, dependency_name: str) ->str:

@@ -78,6 +78,40 @@ class ScriptCollectionCoreTests(unittest.TestCase):
                 #a build which does not even need that registry; it is skipped with a warning and its images fall back to the upstream-registry.
                 assert actual_result == [("usableregistry.example.com", "MyOtherUser", "MyOtherPassword")]
 
+    def test_resolve_environment_variables_falls_back_to_the_environment_when_the_configured_source_is_not_available(self) -> None:
+        with tempfile.TemporaryDirectory() as configuration_folder:
+            # arrange
+            #this is the situation inside a build-container: it gets the configuration-file of the host mounted, but not the secret-file
+            #which an entry of that file points to (that file only exists on the host). The host resolved the value before it started the
+            #container and forwarded it by name, so the environment is the remaining source.
+            sc = ScriptCollectionCore()
+            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(configuration_folder, "TFCPS", "EnvironmentVariables.csv"), [
+                "MyVariable;file;~/.pp/ASecretFileWhichOnlyExistsOnTheHost.txt",
+            ])
+            with patch.dict(os.environ, {"MyVariable": "TheValueForwardedByTheHost"}, clear=True):
+
+                # act
+                actual_result = sc.resolve_environment_variables(["MyVariable"], "a test")
+
+                # assert
+                assert actual_result == {"MyVariable": "TheValueForwardedByTheHost"}
+
+    def test_resolve_environment_variables_throws_exception_when_neither_the_configured_source_nor_the_environment_is_available(self) -> None:
+        with tempfile.TemporaryDirectory() as configuration_folder:
+            # arrange
+            sc = ScriptCollectionCore()
+            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(configuration_folder, "TFCPS", "EnvironmentVariables.csv"), [
+                "MyVariable;file;~/.pp/ASecretFileWhichDoesNotExistAnywhere.txt",
+            ])
+            with patch.dict(os.environ, {}, clear=True):
+
+                # act & assert
+                #the fallback must not hide a value which is really unavailable: then the resolution still fails.
+                with self.assertRaises(ValueError):
+                    sc.resolve_environment_variables(["MyVariable"], "a test")
+
     def test_get_docker_registry_credentials_from_environment_variables_resolves_a_secret_file_relative_to_the_configuration_file(self) -> None:
         with tempfile.TemporaryDirectory() as configuration_folder:
             # arrange
