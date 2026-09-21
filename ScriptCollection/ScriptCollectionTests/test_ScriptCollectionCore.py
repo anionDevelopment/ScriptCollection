@@ -19,63 +19,70 @@ class ScriptCollectionCoreTests(unittest.TestCase):
     svg_namespace = "http://www.w3.org/2000/svg"
 
     def test_get_docker_registry_credentials_from_environment_variables_returns_empty_list_when_nothing_is_declared(self) -> None:
-        # arrange
-        sc = ScriptCollectionCore()
-        #cleared so that registries which are declared in the real environment (for example inside a build-container which declares
-        #the registries of its own build) do not leak into this test and make it non-deterministic.
-        with patch.dict(os.environ, {}, clear=True):
+        with tempfile.TemporaryDirectory() as configuration_folder:
+            # arrange
+            sc = ScriptCollectionCore()
+            #the configuration-folder is isolated from the real one of the machine which runs this test, and the environment is
+            #cleared, so that registries which are declared for real on this machine (for example the ones of the developer who runs
+            #this test) do not leak into this test and make it non-deterministic.
+            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            with patch.dict(os.environ, {}, clear=True):
 
-            # act
-            actual_result = sc.get_docker_registry_credentials_from_environment_variables()
+                # act
+                actual_result = sc.get_docker_registry_credentials_from_environment_variables()
 
-            # assert
-            assert not actual_result
+                # assert
+                assert not actual_result
 
     def test_get_docker_registry_credentials_from_environment_variables_returns_declared_credentials(self) -> None:
-        # arrange
-        sc = ScriptCollectionCore()
-        declarations = {
-            "OCIRegistry_MyRegistry_Address": "https://myregistry.example.com",
-            "OCIRegistry_MyRegistry_Username": "MyUser",
-            "OCIRegistry_MyRegistry_Password": "MyPassword",
-            "OCIRegistry_MyOtherRegistry_Address": "myotherregistry.example.com",
-            "OCIRegistry_MyOtherRegistry_Username": "MyOtherUser",
-            "OCIRegistry_MyOtherRegistry_Password": "MyOtherPassword",
-        }
-        with patch.dict(os.environ, declarations, clear=True):
+        with tempfile.TemporaryDirectory() as configuration_folder:
+            # arrange
+            sc = ScriptCollectionCore()
+            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            declarations = {
+                "OCIRegistry_MyRegistry_Address": "https://myregistry.example.com",
+                "OCIRegistry_MyRegistry_Username": "MyUser",
+                "OCIRegistry_MyRegistry_Password": "MyPassword",
+                "OCIRegistry_MyOtherRegistry_Address": "myotherregistry.example.com",
+                "OCIRegistry_MyOtherRegistry_Username": "MyOtherUser",
+                "OCIRegistry_MyOtherRegistry_Password": "MyOtherPassword",
+            }
+            with patch.dict(os.environ, declarations, clear=True):
 
-            # act
-            actual_result = sc.get_docker_registry_credentials_from_environment_variables()
+                # act
+                actual_result = sc.get_docker_registry_credentials_from_environment_variables()
 
-            # assert
-            #the scheme is removed because docker expects the address of a registry without it.
-            assert actual_result == [("myotherregistry.example.com", "MyOtherUser", "MyOtherPassword"), ("myregistry.example.com", "MyUser", "MyPassword")]
+                # assert
+                #the scheme is removed because docker expects the address of a registry without it.
+                assert actual_result == [("myotherregistry.example.com", "MyOtherUser", "MyOtherPassword"), ("myregistry.example.com", "MyUser", "MyPassword")]
 
     def test_get_docker_registry_credentials_from_environment_variables_throws_exception_when_the_password_is_not_declared(self) -> None:
-        # arrange
-        sc = ScriptCollectionCore()
-        declarations = {
-            "OCIRegistry_MyRegistry_Address": "myregistry.example.com",
-            "OCIRegistry_MyRegistry_Username": "MyUser",
-        }
-        with patch.dict(os.environ, declarations, clear=True):
+        with tempfile.TemporaryDirectory() as configuration_folder:
+            # arrange
+            sc = ScriptCollectionCore()
+            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            declarations = {
+                "OCIRegistry_MyRegistry_Address": "myregistry.example.com",
+                "OCIRegistry_MyRegistry_Username": "MyUser",
+            }
+            with patch.dict(os.environ, declarations, clear=True):
 
-            # act & assert
-            #a registry which is declared without credentials is a misconfiguration and not a registry which allows anonymous
-            #pulls: such a registry does not have to be declared at all.
-            with self.assertRaises(ValueError):
-                sc.get_docker_registry_credentials_from_environment_variables()
+                # act & assert
+                #a registry which is declared without credentials is a misconfiguration and not a registry which allows anonymous
+                #pulls: such a registry does not have to be declared at all.
+                with self.assertRaises(ValueError):
+                    sc.get_docker_registry_credentials_from_environment_variables()
 
     @staticmethod
-    def __create_scriptcollectioncore_for_registry_login(configuration_folder: str, mounted_credentials_file: str) -> tuple[ScriptCollectionCore, list[str]]:
+    def __create_scriptcollectioncore_for_registry_login(configuration_folder: str, mounted_environment_variables_file: str) -> tuple[ScriptCollectionCore, list[str]]:
         """Returns a ScriptCollectionCore which reads its machine-wide configuration from the given folder instead of from the
-        configuration-folder of the user who runs the test, and which looks for the file mounted by the host at the given path instead
-        of at the path a real build-container has.
+        configuration-folder of the user who runs the test, and which looks for the environment-variables-configuration-file mounted by
+        the host at the given path instead of at the path a real build-container has.
         The program-calls are collected instead of being executed, because a testcase must not depend on an installed docker.
         Returns the instance and the list of the collected calls (as the arguments the docker-client was called with)."""
         result = ScriptCollectionCore()
-        setattr(result, "get_global_cache_folder", lambda: configuration_folder)
-        setattr(result, "get_registry_credentials_file_in_container", lambda: mounted_credentials_file)
+        setattr(result, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+        setattr(result, "get_environment_variables_file_in_container", lambda: mounted_environment_variables_file)
         executed_calls: list[str] = []
 
         def run_program(program: str, arguments: str, *args, **kwargs) -> tuple[int, str, str, int]:
@@ -84,11 +91,20 @@ class ScriptCollectionCoreTests(unittest.TestCase):
         setattr(result, "run_program", run_program)
         return (result, executed_calls)
 
-    def test_login_uses_the_registry_credentials_file_of_the_configuration_folder_when_nothing_is_mounted(self) -> None:
+    @staticmethod
+    def __write_environment_variables_configuration_file(file: str, lines: list[str]) -> None:
+        GeneralUtilities.ensure_directory_exists(os.path.dirname(file))
+        GeneralUtilities.write_lines_to_file(file, ["EnvVariableName;Kind;Value"]+lines)
+
+    def test_login_uses_the_environment_variables_configuration_file_of_the_configuration_folder_when_nothing_is_mounted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_folder:
             # arrange
             sc, executed_calls = ScriptCollectionCoreTests.__create_scriptcollectioncore_for_registry_login(temporary_folder, os.path.join(temporary_folder, "NotMounted.csv"))
-            GeneralUtilities.write_lines_to_file(os.path.join(temporary_folder, "RegistryCredentials.csv"), ["RegistryName;Username;Password", "myregistry.example.com;MyUser;MyPassword"])
+            ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(temporary_folder, "TFCPS", "EnvironmentVariables.csv"), [
+                "OCIRegistry_MyRegistry_Address;literal;myregistry.example.com",
+                "OCIRegistry_MyRegistry_Username;literal;MyUser",
+                "OCIRegistry_MyRegistry_Password;literal;MyPassword",
+            ])
             #cleared so that registries which are declared in the real environment do not leak into this test.
             with patch.dict(os.environ, {}, clear=True):
 
@@ -98,13 +114,21 @@ class ScriptCollectionCoreTests(unittest.TestCase):
                 # assert
                 assert executed_calls == ["docker login myregistry.example.com -u MyUser -p MyPassword"]
 
-    def test_login_uses_the_registry_credentials_file_which_was_mounted_into_the_container(self) -> None:
+    def test_login_uses_the_environment_variables_configuration_file_which_was_mounted_into_the_container(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_folder:
             # arrange
-            mounted_credentials_file = os.path.join(temporary_folder, "Mounted.csv")
-            GeneralUtilities.write_lines_to_file(mounted_credentials_file, ["RegistryName;Username;Password", "mountedregistry.example.com;MountedUser;MountedPassword"])
-            sc, executed_calls = ScriptCollectionCoreTests.__create_scriptcollectioncore_for_registry_login(temporary_folder, mounted_credentials_file)
-            GeneralUtilities.write_lines_to_file(os.path.join(temporary_folder, "RegistryCredentials.csv"), ["RegistryName;Username;Password", "myregistry.example.com;MyUser;MyPassword"])
+            mounted_file = os.path.join(temporary_folder, "Mounted.csv")
+            ScriptCollectionCoreTests.__write_environment_variables_configuration_file(mounted_file, [
+                "OCIRegistry_MountedRegistry_Address;literal;mountedregistry.example.com",
+                "OCIRegistry_MountedRegistry_Username;literal;MountedUser",
+                "OCIRegistry_MountedRegistry_Password;literal;MountedPassword",
+            ])
+            sc, executed_calls = ScriptCollectionCoreTests.__create_scriptcollectioncore_for_registry_login(temporary_folder, mounted_file)
+            ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(temporary_folder, "TFCPS", "EnvironmentVariables.csv"), [
+                "OCIRegistry_MyRegistry_Address;literal;myregistry.example.com",
+                "OCIRegistry_MyRegistry_Username;literal;MyUser",
+                "OCIRegistry_MyRegistry_Password;literal;MyPassword",
+            ])
             with patch.dict(os.environ, {}, clear=True):
 
                 # act
@@ -119,7 +143,11 @@ class ScriptCollectionCoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_folder:
             # arrange
             sc, executed_calls = ScriptCollectionCoreTests.__create_scriptcollectioncore_for_registry_login(temporary_folder, os.path.join(temporary_folder, "NotMounted.csv"))
-            GeneralUtilities.write_lines_to_file(os.path.join(temporary_folder, "RegistryCredentials.csv"), ["RegistryName;Username;Password", "myregistry.example.com;MyUser;MyPassword"])
+            ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(temporary_folder, "TFCPS", "EnvironmentVariables.csv"), [
+                "OCIRegistry_MyRegistry_Address;literal;myregistry.example.com",
+                "OCIRegistry_MyRegistry_Username;literal;MyUser",
+                "OCIRegistry_MyRegistry_Password;literal;MyPassword",
+            ])
             declarations = {
                 "OCIRegistry_MyOtherRegistry_Address": "myotherregistry.example.com",
                 "OCIRegistry_MyOtherRegistry_Username": "MyOtherUser",
@@ -131,14 +159,42 @@ class ScriptCollectionCoreTests(unittest.TestCase):
                 sc.login_to_defined_docker_registries()
 
                 # assert
-                #the declaration of the environment is the last one, because it has precedence over an entry of the file.
-                assert executed_calls == ["docker login myregistry.example.com -u MyUser -p MyPassword", "docker login myotherregistry.example.com -u MyOtherUser -p MyOtherPassword"]
+                #a registry which is declared only in the file and a registry which is declared only in the environment are both used;
+                #sorted alphabetically by address, which is what makes the log-output deterministic.
+                assert executed_calls == ["docker login myotherregistry.example.com -u MyOtherUser -p MyOtherPassword", "docker login myregistry.example.com -u MyUser -p MyPassword"]
+
+    def test_login_prefers_the_file_over_the_environment_for_the_same_registry(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            sc, executed_calls = ScriptCollectionCoreTests.__create_scriptcollectioncore_for_registry_login(temporary_folder, os.path.join(temporary_folder, "NotMounted.csv"))
+            ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(temporary_folder, "TFCPS", "EnvironmentVariables.csv"), [
+                "OCIRegistry_MyRegistry_Address;literal;myregistry.example.com",
+                "OCIRegistry_MyRegistry_Username;literal;FileUser",
+                "OCIRegistry_MyRegistry_Password;literal;FilePassword",
+            ])
+            declarations = {
+                "OCIRegistry_MyRegistry_Address": "myregistry.example.com",
+                "OCIRegistry_MyRegistry_Username": "EnvironmentUser",
+                "OCIRegistry_MyRegistry_Password": "EnvironmentPassword",
+            }
+            with patch.dict(os.environ, declarations, clear=True):
+
+                # act
+                sc.login_to_defined_docker_registries()
+
+                # assert
+                #the configuration-file has precedence, consistent with every other value resolved through resolve_environment_variables.
+                assert executed_calls == ["docker login myregistry.example.com -u FileUser -p FilePassword"]
 
     def test_login_is_only_executed_once_per_instance(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_folder:
             # arrange
             sc, executed_calls = ScriptCollectionCoreTests.__create_scriptcollectioncore_for_registry_login(temporary_folder, os.path.join(temporary_folder, "NotMounted.csv"))
-            GeneralUtilities.write_lines_to_file(os.path.join(temporary_folder, "RegistryCredentials.csv"), ["RegistryName;Username;Password", "myregistry.example.com;MyUser;MyPassword"])
+            ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(temporary_folder, "TFCPS", "EnvironmentVariables.csv"), [
+                "OCIRegistry_MyRegistry_Address;literal;myregistry.example.com",
+                "OCIRegistry_MyRegistry_Username;literal;MyUser",
+                "OCIRegistry_MyRegistry_Password;literal;MyPassword",
+            ])
             with patch.dict(os.environ, {}, clear=True):
 
                 # act

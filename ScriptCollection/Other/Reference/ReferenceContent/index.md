@@ -4,6 +4,7 @@ The following articles are available in the documentation
 
 - [Configuration-folder](./Articles/ConfigurationFolder.md)
 - [Build-runner-configuration](./Articles/BuildRunnerConfiguration.md)
+- [Custom OCI-registries](./Articles/CustomOCIRegistries.md)
 - [Downloadable tools](./Articles/DownloadableTools.md)
 - [Platform-independent CLI-commands](./Articles/PlatformIndependentCLICommands.md)
 - [Required tools for CommonProjectStructure](./Articles/RequirementsForCommonProjectStructure.md)

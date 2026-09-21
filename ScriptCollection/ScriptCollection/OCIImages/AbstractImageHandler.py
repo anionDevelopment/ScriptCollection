@@ -10,8 +10,8 @@ class AbstractImageHandler(ABC):
     
     def _protected_get_credentials_for_registry(self,registry_address:str,username_str:str)->tuple[str,str]:
         """return (username, password) for basic auth.
-        Data will be taken from "~/.ScriptCollection/GlobalCache/RegistryCredentials.csv" or from the registries which are declared in the
-        environment (see ScriptCollectionCore.get_docker_registry_credentials_from_environment_variables) if available.
+        Data will be taken from the registries which are declared in the environment-variables-configuration-file or in the environment
+        (see ScriptCollectionCore.get_docker_registry_credentials_from_environment_variables) if available.
         If no credentials are available then None will be returned for the missing values."""
         raise NotImplementedError()
     

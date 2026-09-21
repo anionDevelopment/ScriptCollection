@@ -69,7 +69,9 @@ jobs:
 
 `/root/.ScriptCollection` is the configuration-folder of the user the job-container runs as. The SCBuilder-image runs as `root`; for an image which runs as another user the target-path is the `.ScriptCollection`-folder in the home-directory of that user.
 
-The mount is only needed for repositories which actually declare required environment-variables.
+The mount is needed for a repository which declares required environment-variables, and it is also what makes a custom OCI-registry (and its credentials) available to every build on this runner - see [Custom OCI-registries](./CustomOCIRegistries.md).
+
+> If the self-hosted runner is the `SCGitHubRunner`-codeunit (part of the `SCBuilder`-repository), this mount can instead be configured once per runner (`SCRIPTCOLLECTION_CONFIGURATION_FOLDER` in the runner's `docker-compose.yml`) and is then added automatically to every job-container the runner starts - no repository-workflow has to be changed. See the "Container-hooks" section of `SCGitHubRunner`'s usage-documentation.
 
 ## Alternative: the secret-store of the forge
 

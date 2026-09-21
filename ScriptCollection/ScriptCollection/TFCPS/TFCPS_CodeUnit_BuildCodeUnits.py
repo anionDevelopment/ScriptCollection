@@ -411,17 +411,18 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if os.path.isfile(image_registries_file):
             mount_arguments += ["-v", f"{image_registries_file}:{oci_image_manager.get_image_registries_file_in_container()}:ro"]
 
-        #mount the machine-wide registry-credentials-file of this host (if it exists), so the build inside the container can log in to the
-        #registries which the images come from. Without the mount a custom registry which is not publicly readable can not be used inside the
-        #container at all, because the configuration-folder of the container-user does not contain the credentials of this host. The mount is
-        #read-only because a build never changes the file. The alternative way to provide the credentials are the environment-variables
-        #'OCIRegistry_<registryname>_*' (see ScriptCollectionCore.get_docker_registry_credentials_from_environment_variables), which is the
-        #way a build-pipeline provides them from its own secret-store; both sources are used together.
-        #Only the two image-related files are mounted and not the whole configuration-folder, so nothing else of it (in particular not
-        #EnvironmentVariables.csv) is exposed to the container.
-        registry_credentials_file: str = self.sc.get_registry_credentials_file_in_configuration_folder()
-        if os.path.isfile(registry_credentials_file):
-            mount_arguments += ["-v", f"{registry_credentials_file}:{self.sc.get_registry_credentials_file_in_container()}:ro"]
+        #mount the machine-wide environment-variables-configuration-file of this host (if it exists), so the build inside the container
+        #resolves the required environment-variables of the product (see TFCPS_Tools_General.get_required_environment_variables) and the
+        #OCI-registry-credentials (see ScriptCollectionCore.get_docker_registry_credentials_from_environment_variables) exactly like a
+        #build on the host does - including a registry which is not publicly readable, which without this mount could not be used inside
+        #the container at all, because the configuration-folder of the container-user does not contain the credentials of this host. The
+        #mount is read-only because a build never changes the file. The alternative way to provide a value is an environment-variable of
+        #the build-pipeline itself (the pipeline's own secret-store); both sources are used together, the file taking precedence.
+        #Only this one file (and not the whole configuration-folder) is mounted, so nothing else of it (in particular no per-repository
+        #secret which happens to be configured for a different product on this machine) is exposed to the container.
+        environment_variables_file: str = self.sc.get_environment_variables_configuration_file()
+        if os.path.isfile(environment_variables_file):
+            mount_arguments += ["-v", f"{environment_variables_file}:{self.sc.get_environment_variables_file_in_container()}:ro"]
 
         #pass the environment-variables which are declared as required in <repository>/.ScriptCollection/ProductInformation.xml into the container
         #so they do not have to be specified explicitly on every call. Their values are resolved from the user-specific

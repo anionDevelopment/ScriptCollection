@@ -220,6 +220,9 @@ class ScriptCollectionCore:
     # Whether the login to the registries which are defined for this machine was already done. See login_to_defined_docker_registries.
     __already_logged_in_to_defined_docker_registries: bool = None
 
+    # Kinds which are allowed in the environment-variables-configuration-file (see get_environment_variables_configuration_file).
+    __allowed_environment_variable_kinds: list[str] = ["literal", "hostenvvariable", "file"]
+
     def __init__(self):
         self.program_runner = ProgramRunnerPopen()
         self.call_program_runner_directly = None
@@ -243,42 +246,124 @@ class ScriptCollectionCore:
         return result
 
     @GeneralUtilities.check_arguments
-    def get_registry_credentials_file_in_container(self)->str:
-        """Returns the file inside a build-container to which the host mounts its registry-credentials-file (see
+    def get_environment_variables_file_in_container(self)->str:
+        """Returns the file inside a build-container to which the host mounts its environment-variables-configuration-file (see
         TFCPS_CodeUnit_BuildCodeUnits.__run_scriptcollection_executable_in_container). It is an own path (and not the
         configuration-folder of the container-user) because the home-folder inside the container depends on the user the
         image runs as, while this path is defined by the mount and is therefore identical for both sides."""
-        return "/Workspace/ScriptCollectionConfiguration/RegistryCredentials.csv"
+        return "/Workspace/ScriptCollectionConfiguration/TFCPS/EnvironmentVariables.csv"
 
     @GeneralUtilities.check_arguments
-    def get_registry_credentials_file_in_configuration_folder(self)->str:
-        """Returns the registry-credentials-file in the configuration-folder of the current user, and creates it if it does not exist yet.
-        This is the file of the machine on which a command was started, so it is also the file which is mounted into a build-container
-        (in contrast to __get_docker_registry_credentials_file, which inside a container resolves to that mount instead)."""
-        result=os.path.join(self.get_global_cache_folder(),"RegistryCredentials.csv")
-        if not os.path.isfile(result):
-            GeneralUtilities.ensure_file_exists(result)
-            GeneralUtilities.write_lines_to_file(result,["RegistryName;Username;Password"])
-        return result
+    def get_environment_variables_configuration_file(self)->str:
+        """Returns the environment-variables-configuration-file in the configuration-folder of the current user. This is the file of the
+        machine on which a command was started, so it is also the file which is mounted into a build-container (in contrast to
+        get_global_environment_variables_configuration_file, which inside a container resolves to that mount instead). The file defines
+        where the values of the required environment-variables of a product (see TFCPS_Tools_General.get_required_environment_variables)
+        and of the OCI-registry-credentials (see get_docker_registry_credentials_from_environment_variables) come from."""
+        return os.path.join(self.get_scriptcollection_configuration_folder(),"TFCPS","EnvironmentVariables.csv")
 
-    def __get_docker_registry_credentials_file(self)->str:
-        """Returns the file which maps a registry to the credentials which are used for it. The file which the host mounted into a
-        build-container has precedence over the file in the configuration-folder of the current user: in a container that
-        configuration-folder belongs to the container-user and therefore never contains the configuration of the machine on which the
-        build was started."""
-        mounted_file=self.get_registry_credentials_file_in_container()
+    def __get_global_environment_variables_configuration_file(self)->str:
+        """Returns the machine-wide environment-variables-configuration-file. The file which the host mounted into a build-container has
+        precedence over the file in the configuration-folder of the current user: in a container that configuration-folder belongs to the
+        container-user and therefore never contains the configuration of the machine on which the build was started."""
+        mounted_file=self.get_environment_variables_file_in_container()
         if os.path.isfile(mounted_file):
             return mounted_file
-        return self.get_registry_credentials_file_in_configuration_folder()
+        return self.get_environment_variables_configuration_file()
+
+    def __read_environment_variables_configuration_file(self,configuration_file:str)->dict[str,tuple[str,str]]:
+        """Reads the environment-variables-configuration-file (columns 'EnvVariableName;Kind;Value') and returns a mapping of the name of
+        the variable to its kind and its value. The file is optional: if it does not exist, nothing is defined by it and all values have
+        to come from the environment."""
+        result: dict[str, tuple[str, str]] = {}
+        if not os.path.isfile(configuration_file):
+            return result
+        for entry in GeneralUtilities.read_csv_file(configuration_file, True):
+            GeneralUtilities.assert_condition(2 < len(entry), f"Invalid line in '{configuration_file}': every line must have the 3 columns 'EnvVariableName;Kind;Value' but '{';'.join(entry)}' has {len(entry)}.")
+            #the value itself may contain the separator-character (for example in a literal value), so everything behind the second column belongs to the value.
+            result[entry[0]] = (entry[1], ";".join(entry[2:]))
+        return result
+
+    def __resolve_environment_variable_value(self,env_variable_name:str,entry:tuple[str,str],configuration_file:str)->str:
+        """Resolves the value of an entry of the environment-variables-configuration-file. 'Kind' is one of 'literal' (the value is used
+        as-is), 'hostenvvariable' (the value is the name of an environment-variable which must be set on the current system) or 'file'
+        (the value is a path - '~' is expanded, a relative path is resolved against the configuration-folder - to a text-file whose
+        content, without surrounding whitespace, is used). A relative path is the recommended form for a secret-file, because it also
+        resolves correctly when the configuration-folder is mounted into a build-container."""
+        kind, value = entry
+        GeneralUtilities.assert_condition(kind in ScriptCollectionCore.__allowed_environment_variable_kinds, f"Unknown kind '{kind}' for environment-variable '{env_variable_name}' defined in '{configuration_file}'. Allowed values are: {', '.join(ScriptCollectionCore.__allowed_environment_variable_kinds)}.")
+        if kind == "literal":
+            return value
+        if kind == "hostenvvariable":
+            resolved_value = os.environ.get(value)
+            GeneralUtilities.assert_condition(resolved_value is not None, f"The environment-variable '{env_variable_name}' defined in '{configuration_file}' is supposed to be taken from the environment-variable '{value}', but that environment-variable is not set.")
+            return resolved_value
+        value_file = GeneralUtilities.resolve_relative_path(os.path.expanduser(value), os.path.dirname(configuration_file))
+        GeneralUtilities.assert_file_exists(value_file, f"The environment-variable '{env_variable_name}' defined in '{configuration_file}' is supposed to be taken from the file '{value_file}', but that file does not exist.")
+        return GeneralUtilities.read_text_from_file(value_file).strip()
+
+    @GeneralUtilities.check_arguments
+    def resolve_environment_variables(self,environment_variable_names:list[str],required_by:str)->dict[str,str]:
+        """Resolves the value of every given environment-variable. A value comes from one of two sources:
+        - the machine-wide environment-variables-configuration-file (see get_environment_variables_configuration_file /
+          get_environment_variables_file_in_container), if the variable is defined there.
+        - the environment of the current process otherwise. This is how a build-pipeline provides a value from its own secret-store.
+        The configuration-file has precedence, so a resolved value does not depend on what happens to be set in the environment of the
+        caller. If a value can not be determined in either way the resolution fails with a message which names both possibilities.
+        This function centralizes the resolution so every caller (the required environment-variables of a product as well as the
+        OCI-registry-credentials, see get_docker_registry_credentials_from_environment_variables) obtains identical values instead of
+        re-implementing the resolution-logic. 'required_by' names the thing which needs the values and is used in the error-message when a
+        value can not be determined."""
+        result: dict[str, str] = {}
+        configuration_file: str = self.__get_global_environment_variables_configuration_file()
+        entries: dict[str, tuple[str, str]] = self.__read_environment_variables_configuration_file(configuration_file)
+        for environment_variable_name in environment_variable_names:
+            if environment_variable_name in entries:
+                result[environment_variable_name] = self.__resolve_environment_variable_value(environment_variable_name, entries[environment_variable_name], configuration_file)
+            else:
+                value_from_environment: str = os.environ.get(environment_variable_name)
+                GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(value_from_environment), f"The value of the environment-variable '{environment_variable_name}' which is required by {required_by} is unknown: it is not defined in '{configuration_file}' and it is not set in the environment. Add a line '{environment_variable_name};<kind>;<value>' to that file (allowed kinds are: {', '.join(ScriptCollectionCore.__allowed_environment_variable_kinds)}) or provide the value as an environment-variable, which is how a build-pipeline usually provides it.")
+                result[environment_variable_name] = value_from_environment
+        return result
+
+    @GeneralUtilities.check_arguments
+    def resolve_environment_variable(self,environment_variable_name:str,required_by:str)->str:
+        """Resolves the value of a single environment-variable, see resolve_environment_variables."""
+        return self.resolve_environment_variables([environment_variable_name], required_by)[environment_variable_name]
+
+    def __get_defined_oci_registry_names(self)->list[str]:
+        """Returns the names of the OCI-registries for which an 'OCIRegistry_<name>_Address' is declared, either in the
+        environment-variables-configuration-file or in the environment of the current process (which is how a build-pipeline typically
+        provides it). '<name>' is chosen freely when the registry is declared; it only groups its Address/Username/Password together. Only
+        the names are collected here (cheaply, without resolving any value), so that resolving them further down does not read a secret
+        which is unrelated to an actually declared registry.
+        The configuration-file is scanned before the environment and a name found in both is kept with the casing of the
+        configuration-file: on Windows, os.environ normalizes a variable-name to uppercase as soon as it is set, so without this the same
+        registry declared in both places would be treated as two different registries (its 'OCIRegistry_<name>_Username/_Password' would
+        then be looked up with the mismatching, uppercased name and therefore be resolved from the environment instead of the file, which
+        would silently contradict the configuration-file's precedence)."""
+        address_variable_pattern = re.compile(r"^OCIRegistry_(.+)_Address$", re.IGNORECASE)
+        names_by_lowercase_name: dict[str,str] = {}
+        configuration_file = self.__get_global_environment_variables_configuration_file()
+        if os.path.isfile(configuration_file):
+            for entry in GeneralUtilities.read_csv_file(configuration_file, True):
+                match = address_variable_pattern.match(entry[0])
+                if match is not None:
+                    names_by_lowercase_name.setdefault(match.group(1).lower(), match.group(1))
+        for environment_variable_name in os.environ.keys():
+            match = address_variable_pattern.match(environment_variable_name)
+            if match is not None:
+                names_by_lowercase_name.setdefault(match.group(1).lower(), match.group(1))
+        return sorted(names_by_lowercase_name.values(), key=str.lower)
 
     def __load_credentials_if_required_and_available(self,registry_url:str,registry_username:str,registry_password:str)->tuple[str,str]:
         """Returns the credentials for the given registry: the ones which were passed by the caller, or - if the caller passed none - the
-        ones which are available for this registry on this machine (see __get_docker_registry_credentials). The last matching entry is
-        used, because the entries are ordered by increasing precedence."""
+        ones which are declared for this registry on this machine (see get_docker_registry_credentials_from_environment_variables). The
+        last matching entry is used, because the entries are ordered by increasing precedence."""
         if registry_url.startswith("https://"):
             registry_url=registry_url[len("https://"):]
         if registry_password is None:
-            for registry,username,password in self.__get_docker_registry_credentials():
+            for registry,username,password in self.get_docker_registry_credentials_from_environment_variables():
                 if registry_url==registry and (registry_username is None or username==registry_username):
                     registry_username=username
                     registry_password=password
@@ -286,54 +371,27 @@ class ScriptCollectionCore:
             GeneralUtilities.assert_not_null(registry_username)
         return (registry_username,registry_password)
 
-    def __get_docker_registry_credentials(self)->list[tuple[str,str,str]]:
-        """Returns all registry-credentials which are available for the current process: the ones of the credentials-file of the
-        configuration-folder followed by the ones which are declared in the environment (see
-        get_docker_registry_credentials_from_environment_variables). The entries are ordered by increasing precedence: a registry which is
-        declared in both places is contained twice and the declaration of the environment is the last one, so it is the one which a login
-        executes last and which a lookup of credentials uses."""
-        result=[]
-        credential_file=self.__get_docker_registry_credentials_file()
-        if os.path.isfile(credential_file):
-            lines=GeneralUtilities.read_nonempty_lines_from_file(credential_file)[1:]
-            for line in lines:
-                splitted=line.split(";")
-                registry=splitted[0]
-                username=splitted[1]
-                password=splitted[2]
-                result.append((registry,username,password))
-        result=result+self.get_docker_registry_credentials_from_environment_variables()
-        return result
-
     @GeneralUtilities.check_arguments
     def get_docker_registry_credentials_from_environment_variables(self)->list[tuple[str,str,str]]:
-        """Returns the registry-credentials which are declared in the environment of the current process, as tuples of registry-address,
-        username and password. The credentials of a registry named '<registryname>' are declared by the environment-variables
-        'OCIRegistry_<registryname>_Address', 'OCIRegistry_<registryname>_Username' and 'OCIRegistry_<registryname>_Password'.
-        The environment is used in addition to the credentials-file of the configuration-folder because that folder belongs to the user of
-        the machine on which a command was started and is therefore not available inside a build-container, while an environment-variable is
-        passed into the container (see TFCPS_Tools_General.get_required_environment_variables). It is the same mechanism which makes a
-        private package-source available inside a container (see TFCPS_Tools_General.get_declared_package_sources).
+        """Returns the credentials of every OCI-registry which is declared on this machine, as tuples of registry-address, username and
+        password. A registry named '<name>' is declared by the three values 'OCIRegistry_<name>_Address',
+        'OCIRegistry_<name>_Username' and 'OCIRegistry_<name>_Password'; '<name>' is chosen freely and only groups the three values
+        together. Every value is resolved the same way as a required environment-variable of a product (see
+        resolve_environment_variable): from the environment-variables-configuration-file if it is defined there, from the environment of
+        the current process otherwise. This is the only place where OCI-registry-credentials are configured - there is deliberately no
+        separate credentials-file, so that a build-pipeline which makes the configuration-folder available to the build (see
+        BuildRunnerConfiguration.md) does not need a second, registry-specific mount.
         The names of the environment-variables are treated case-insensitively because they are not case-sensitive on all operating-systems.
         A registry-address may be declared with or without the scheme 'https://'; the scheme is removed because docker expects the address
         of a registry without it."""
-        address_variable_pattern = re.compile(r"^OCIRegistry_(.+)_Address$", re.IGNORECASE)
-        environment_variables: dict[str, str] = {name.lower(): value for name, value in os.environ.items()}
         result: list[tuple[str,str,str]] = []
-        for environment_variable_name, environment_variable_value in os.environ.items():
-            match = address_variable_pattern.match(environment_variable_name)
-            if match is None:
-                continue
-            registry_name: str = match.group(1).lower()
-            if not GeneralUtilities.string_has_content(environment_variable_value):
-                continue
-            address: str = environment_variable_value.strip()
+        for registry_name in self.__get_defined_oci_registry_names():
+            required_by = f"the OCI-registry \"{registry_name}\""
+            address: str = self.resolve_environment_variable(f"OCIRegistry_{registry_name}_Address", required_by).strip()
             if address.startswith("https://"):
                 address = address[len("https://"):]
-            username: str = environment_variables.get(f"ociregistry_{registry_name}_username")
-            password: str = environment_variables.get(f"ociregistry_{registry_name}_password")
-            GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(username), f"No username is declared for the registry \"{registry_name}\" whose address is declared in the environment.")
-            GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(password), f"No password is declared for the registry \"{registry_name}\" whose address is declared in the environment.")
+            username: str = self.resolve_environment_variable(f"OCIRegistry_{registry_name}_Username", required_by)
+            password: str = self.resolve_environment_variable(f"OCIRegistry_{registry_name}_Password", required_by)
             result.append((address, username, password))
         result.sort()#sorted so the order (and therefore the log-output) is deterministic
         return result
@@ -413,13 +471,13 @@ class ScriptCollectionCore:
             return result
     
     def login_to_defined_docker_registries(self)->None:
-        """Logs in to every registry for which credentials are available on this machine (see __get_docker_registry_credentials).
+        """Logs in to every registry for which credentials are available on this machine (see get_docker_registry_credentials_from_environment_variables).
         The login is only executed once per instance: the credentials do not change while a process runs, and the login has to be
         ensured by everything which accesses a registry, so without this the same logins would be executed over and over again."""
         if self.__already_logged_in_to_defined_docker_registries:
             return
         self.__already_logged_in_to_defined_docker_registries=True
-        registries=self.__get_docker_registry_credentials()
+        registries=self.get_docker_registry_credentials_from_environment_variables()
         if len(registries)==0:
             self.log.log("No docker registry credentials defined. Skipping docker login.",LogLevel.Debug)
         else:
