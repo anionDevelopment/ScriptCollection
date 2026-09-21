@@ -54,15 +54,26 @@ Create the two files under `~/.ScriptCollection/`. Same as Windows, `scbuildcode
 
 ### Local container-build (`scbuildcodeunits -c`)
 
-Nothing to configure beyond the host-setup above: if the two files exist in the configuration-folder of the user who starts the build, they are mounted read-only into the build-container automatically (to `/Workspace/ScriptCollectionConfiguration/OCIImages/ImageRegistries.csv` and `/Workspace/ScriptCollectionConfiguration/TFCPS/EnvironmentVariables.csv`), so the build inside the container resolves both exactly like a build on the host does.
+Nothing to configure beyond the host-setup above: `ImageRegistries.csv` and the whole `TFCPS`-folder of the configuration-folder of the user who starts the build are mounted read-only into the build-container automatically (to `/Workspace/ScriptCollectionConfiguration/OCIImages/ImageRegistries.csv` and `/Workspace/ScriptCollectionConfiguration/TFCPS`), so the build inside the container resolves both exactly like a build on the host does. The whole `TFCPS`-folder is mounted (and not only `EnvironmentVariables.csv` in it) so that a `file`-value with a relative path - the recommended form for a secret - also resolves inside the container.
+
+> A value of the kind `hostenvvariable` is the one exception: it names an environment-variable of the machine the command was started on, which by definition does not exist inside the job-container. A registry declared that way is skipped there (with a warning naming the reason) and its images are taken from the fallback-registry. Use `literal` or `file` for a registry which has to work inside a container as well.
 
 ### GitLab-pipeline
 
-Put the two files (or the whole configuration-folder) on the runner-host and mount it into every job-container once, in the runner's `config.toml` - see [Build-runner-configuration](./BuildRunnerConfiguration.md#gitlab) for the exact `volumes`-entry. No repository has to change its `.gitlab-ci.yml` for this.
+Put both files on the runner-host (in one folder which has the same structure as `~/.ScriptCollection`, see above) and mount that folder into every job-container once, in the `config.toml` of the runner. [Build-runner-configuration](./BuildRunnerConfiguration.md#gitlab-official-runner-image-docker-executor) shows the `docker-compose.yml` of the runner and the exact `volumes`-entry. No repository has to change its `.gitlab-ci.yml` for this.
 
 ### GitHub-pipeline
 
-If the self-hosted runner is the `SCGitHubRunner`-codeunit (see [Build-runner-configuration](./BuildRunnerConfiguration.md#github)), set `SCRIPTCOLLECTION_CONFIGURATION_FOLDER` (the absolute path of the configuration-folder **on the runner-host**) once in the runner's `docker-compose.yml`; SCGitHubRunner then mounts it into every job-container it starts. See the "Container-hooks" section of `SCGitHubRunner`'s own usage-documentation. Otherwise (a runner-image you can not extend this way), mount the configuration-folder in `.github/workflows/buildpipeline.yml` as described in [Build-runner-configuration](./BuildRunnerConfiguration.md#github).
+If the self-hosted runner is the `SCGitHubRunner`-codeunit, set `SCRIPTCOLLECTION_CONFIGURATION_FOLDER` (the absolute path of that folder **on the runner-host**) once in the `docker-compose.yml` of the runner; it then mounts the folder into every job-container it starts, so no repository-workflow has to be changed. With any other runner-image the mount is added to the workflow of the repository instead. [Build-runner-configuration](./BuildRunnerConfiguration.md#github-scgithubrunner) shows both variants.
+
+## If the custom registry is not used
+
+The fallback to the upstream-registry never breaks a build, so an incomplete setup shows up as rate-limits instead of as an error. Every fallback is logged with its reason, so the build-log is the place to look. The usual causes:
+
+- The folder on the runner-host does not contain `GlobalCache/OCIImages/ImageRegistries.csv` - then no image has a custom registry at all. Note that this file has to exist even when it is empty, see [Build-runner-configuration](./BuildRunnerConfiguration.md#folder-on-the-runner-host).
+- The credentials can not be resolved in this environment: the registry is then skipped with a warning which names the reason (a secret-file which does not exist there, a `hostenvvariable` which is not set there).
+- The image does not exist in the custom registry with the tag the repository declares (`.ScriptCollection/OCIImages/ImageDefinition.csv`) - the mirror does not have that tag yet.
+- The build runs with a ScriptCollection-version which does not have this mechanism yet. In a pipeline that version is the one the pipeline installs (`pip3 install scriptcollection --upgrade` as a step of the workflow respectively of `.gitlab-ci.yml`) - without such a step it is the version which is pinned in the job-image.
 
 ## Migration note
 

@@ -40,7 +40,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.30"
+version = "4.4.31"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -246,12 +246,28 @@ class ScriptCollectionCore:
         return result
 
     @GeneralUtilities.check_arguments
-    def get_environment_variables_file_in_container(self)->str:
-        """Returns the file inside a build-container to which the host mounts its environment-variables-configuration-file (see
+    def get_tfcps_configuration_folder_in_container(self)->str:
+        """Returns the folder inside a build-container to which the host mounts the 'TFCPS'-folder of its configuration-folder (see
         TFCPS_CodeUnit_BuildCodeUnits.__run_scriptcollection_executable_in_container). It is an own path (and not the
         configuration-folder of the container-user) because the home-folder inside the container depends on the user the
-        image runs as, while this path is defined by the mount and is therefore identical for both sides."""
-        return "/Workspace/ScriptCollectionConfiguration/TFCPS/EnvironmentVariables.csv"
+        image runs as, while this path is defined by the mount and is therefore identical for both sides.
+        The whole folder (and not only EnvironmentVariables.csv in it) is the unit which is mounted, because a value of that file can
+        point to a secret-file next to it ('file'-kind with a relative path, which is the recommended form): without the surrounding
+        folder such a value could not be resolved inside the container."""
+        return "/Workspace/ScriptCollectionConfiguration/TFCPS"
+
+    @GeneralUtilities.check_arguments
+    def get_environment_variables_file_in_container(self)->str:
+        """Returns the environment-variables-configuration-file inside the folder the host mounts into a build-container
+        (see get_tfcps_configuration_folder_in_container)."""
+        return os.path.join(self.get_tfcps_configuration_folder_in_container(),"EnvironmentVariables.csv")
+
+    @GeneralUtilities.check_arguments
+    def get_tfcps_configuration_folder(self)->str:
+        """Returns the 'TFCPS'-folder of the configuration-folder of the current user. It contains the environment-variables-configuration-file
+        and the secret-files and custom scripts which belong to it. This is the folder of the machine on which a command was started, so it
+        is also the folder which is mounted into a build-container (see get_tfcps_configuration_folder_in_container)."""
+        return os.path.join(self.get_scriptcollection_configuration_folder(),"TFCPS")
 
     @GeneralUtilities.check_arguments
     def get_environment_variables_configuration_file(self)->str:
@@ -260,7 +276,7 @@ class ScriptCollectionCore:
         get_global_environment_variables_configuration_file, which inside a container resolves to that mount instead). The file defines
         where the values of the required environment-variables of a product (see TFCPS_Tools_General.get_required_environment_variables)
         and of the OCI-registry-credentials (see get_docker_registry_credentials_from_environment_variables) come from."""
-        return os.path.join(self.get_scriptcollection_configuration_folder(),"TFCPS","EnvironmentVariables.csv")
+        return os.path.join(self.get_tfcps_configuration_folder(),"EnvironmentVariables.csv")
 
     def __get_global_environment_variables_configuration_file(self)->str:
         """Returns the machine-wide environment-variables-configuration-file. The file which the host mounted into a build-container has
@@ -383,15 +399,24 @@ class ScriptCollectionCore:
         BuildRunnerConfiguration.md) does not need a second, registry-specific mount.
         The names of the environment-variables are treated case-insensitively because they are not case-sensitive on all operating-systems.
         A registry-address may be declared with or without the scheme 'https://'; the scheme is removed because docker expects the address
-        of a registry without it."""
+        of a registry without it.
+        A registry whose values can not be resolved in the current environment (for example because its password is declared as a
+        'hostenvvariable' which is only set on the developer-machine, or because it is declared without credentials at all) is skipped
+        with a warning instead of letting the whole build fail: the registries are machine-wide, so a declaration which is unusable here
+        typically belongs to a different environment and must not break a build which does not even need that registry. The consequence of
+        a skipped registry is the documented one - its images are taken from the fallback-registry - and the warning names the reason."""
         result: list[tuple[str,str,str]] = []
         for registry_name in self.__get_defined_oci_registry_names():
             required_by = f"the OCI-registry \"{registry_name}\""
-            address: str = self.resolve_environment_variable(f"OCIRegistry_{registry_name}_Address", required_by).strip()
-            if address.startswith("https://"):
-                address = address[len("https://"):]
-            username: str = self.resolve_environment_variable(f"OCIRegistry_{registry_name}_Username", required_by)
-            password: str = self.resolve_environment_variable(f"OCIRegistry_{registry_name}_Password", required_by)
+            try:
+                address: str = self.resolve_environment_variable(f"OCIRegistry_{registry_name}_Address", required_by).strip()
+                if address.startswith("https://"):
+                    address = address[len("https://"):]
+                username: str = self.resolve_environment_variable(f"OCIRegistry_{registry_name}_Username", required_by)
+                password: str = self.resolve_environment_variable(f"OCIRegistry_{registry_name}_Password", required_by)
+            except Exception as exception:
+                self.log.log(f"The OCI-registry \"{registry_name}\" is declared but can not be used in this environment, so its images will be taken from the fallback-registry. Reason: {GeneralUtilities.exception_to_str(exception)}", LogLevel.Warning)
+                continue
             result.append((address, username, password))
         result.sort()#sorted so the order (and therefore the log-output) is deterministic
         return result

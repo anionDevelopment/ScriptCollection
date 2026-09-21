@@ -56,22 +56,50 @@ class ScriptCollectionCoreTests(unittest.TestCase):
                 #the scheme is removed because docker expects the address of a registry without it.
                 assert actual_result == [("myotherregistry.example.com", "MyOtherUser", "MyOtherPassword"), ("myregistry.example.com", "MyUser", "MyPassword")]
 
-    def test_get_docker_registry_credentials_from_environment_variables_throws_exception_when_the_password_is_not_declared(self) -> None:
+    def test_get_docker_registry_credentials_from_environment_variables_skips_a_registry_whose_values_can_not_be_resolved(self) -> None:
         with tempfile.TemporaryDirectory() as configuration_folder:
             # arrange
             sc = ScriptCollectionCore()
             setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
             declarations = {
-                "OCIRegistry_MyRegistry_Address": "myregistry.example.com",
-                "OCIRegistry_MyRegistry_Username": "MyUser",
+                "OCIRegistry_IncompleteRegistry_Address": "incompleteregistry.example.com",
+                "OCIRegistry_IncompleteRegistry_Username": "MyUser",
+                "OCIRegistry_UsableRegistry_Address": "usableregistry.example.com",
+                "OCIRegistry_UsableRegistry_Username": "MyOtherUser",
+                "OCIRegistry_UsableRegistry_Password": "MyOtherPassword",
             }
             with patch.dict(os.environ, declarations, clear=True):
 
-                # act & assert
-                #a registry which is declared without credentials is a misconfiguration and not a registry which allows anonymous
-                #pulls: such a registry does not have to be declared at all.
-                with self.assertRaises(ValueError):
-                    sc.get_docker_registry_credentials_from_environment_variables()
+                # act
+                actual_result = sc.get_docker_registry_credentials_from_environment_variables()
+
+                # assert
+                #the registries are machine-wide, so a declaration which can not be resolved here (its password is missing) must not break
+                #a build which does not even need that registry; it is skipped with a warning and its images fall back to the upstream-registry.
+                assert actual_result == [("usableregistry.example.com", "MyOtherUser", "MyOtherPassword")]
+
+    def test_get_docker_registry_credentials_from_environment_variables_resolves_a_secret_file_relative_to_the_configuration_file(self) -> None:
+        with tempfile.TemporaryDirectory() as configuration_folder:
+            # arrange
+            #this is what a build inside a container does: it reads the configuration-file which the host mounted, so a 'file'-value with a
+            #relative path (the recommended form) must resolve against the folder of that file and not against the host-path it came from.
+            sc = ScriptCollectionCore()
+            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(configuration_folder, "TFCPS", "EnvironmentVariables.csv"), [
+                "OCIRegistry_MyRegistry_Address;literal;myregistry.example.com",
+                "OCIRegistry_MyRegistry_Username;literal;MyUser",
+                "OCIRegistry_MyRegistry_Password;file;Secrets/MyRegistryToken.txt",
+            ])
+            secret_file = os.path.join(configuration_folder, "TFCPS", "Secrets", "MyRegistryToken.txt")
+            GeneralUtilities.ensure_directory_exists(os.path.dirname(secret_file))
+            GeneralUtilities.write_text_to_file(secret_file, "MyTokenFromTheSecretFile\n")
+            with patch.dict(os.environ, {}, clear=True):
+
+                # act
+                actual_result = sc.get_docker_registry_credentials_from_environment_variables()
+
+                # assert
+                assert actual_result == [("myregistry.example.com", "MyUser", "MyTokenFromTheSecretFile")]
 
     @staticmethod
     def __create_scriptcollectioncore_for_registry_login(configuration_folder: str, mounted_environment_variables_file: str) -> tuple[ScriptCollectionCore, list[str]]:
