@@ -74,6 +74,13 @@ The mount into the **job**-containers is configured once in the `config.toml` of
 
 Afterwards restart the runner (`docker compose restart gitlab-runner`) so the changed configuration takes effect.
 
+A build on a build-server should additionally state that it is one, so that a step which only makes sense on a developer-machine is skipped instead of failing here (see [Telling a build that it runs on a build-server](#telling-a-build-that-it-runs-on-a-build-server)):
+
+```toml
+[[runners]]
+  environment = ["IS_RUNNING_IN_SERVER_PIPELINE=true"]
+```
+
 ### GitHub (SCGitHubRunner)
 
 `SCGitHubRunner` (a codeunit of the `SCBuilder`-repository) adds this mount to every job-container it starts, configured once per runner with `SCRIPTCOLLECTION_CONFIGURATION_FOLDER` - so no repository-workflow has to be changed:
@@ -97,7 +104,7 @@ services:
       - /Workspace/Other/Runner/MyRunner:/Workspace/Other/Runner/MyRunner
 ```
 
-This requires an `SCGitHubRunner`-image which contains the container-hook (see the "Container-hooks" section of its usage-documentation); after updating the image, `docker compose pull && docker compose up -d` on the runner-host.
+This requires an `SCGitHubRunner`-image which contains the container-hook (see the "Container-hooks" section of its usage-documentation); after updating the image, `docker compose pull && docker compose up -d` on the runner-host. That same hook also sets `IS_RUNNING_IN_SERVER_PIPELINE` in every job-container it starts (see below), so nothing has to be configured for that here.
 
 ### GitHub (any other runner-image)
 
@@ -119,6 +126,22 @@ jobs:
 `/root/.ScriptCollection` is the configuration-folder of the user the job-container runs as. The SCBuilder-image runs as `root`; for an image which runs as another user the target-path is the `.ScriptCollection`-folder in the home-directory of that user.
 
 The mount is needed for a repository which declares required environment-variables, and it is also what makes a custom OCI-registry (and its credentials) available to every build on this runner - see [Custom OCI-registries](./CustomOCIRegistries.md).
+
+## Telling a build that it runs on a build-server
+
+A build-server deliberately provides less than a developer-machine: it has the configuration-folder, but not the developer's personal tooling and credential-files. A preparation-step which uses those has to be skipped there instead of failing - and a build can not derive that situation on its own, because a build which was started with `scbuildcodeunits -c` on a developer-machine also runs in a container and is otherwise indistinguishable from a job-container of a runner. It is therefore stated explicitly, with the environment-variable `IS_RUNNING_IN_SERVER_PIPELINE`:
+
+```yaml
+IS_RUNNING_IN_SERVER_PIPELINE: "true"
+```
+
+It is set in three places, which do not conflict because they all set the same value:
+
+- in the pipeline-definition of the repository (`env:` of the workflow respectively `variables:` of `.gitlab-ci.yml`) - this is where the generated pipeline-files put it,
+- by the GitLab-runner, for every job it starts (`environment` in its `config.toml`, see above),
+- by `SCGitHubRunner`, for every job-container it starts (its container-hook sets it unconditionally).
+
+Setting it on the runner as well is what makes a repository whose pipeline-file is older than this convention work anyway: the preparation which needs it runs before the step which would update that pipeline-file, so a repository which only relies on its own pipeline-file can not repair itself.
 
 ## Alternative: the secret-store of the forge
 

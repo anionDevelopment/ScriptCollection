@@ -40,7 +40,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.31"
+version = "4.4.32"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -325,7 +325,14 @@ class ScriptCollectionCore:
           get_environment_variables_file_in_container), if the variable is defined there.
         - the environment of the current process otherwise. This is how a build-pipeline provides a value from its own secret-store.
         The configuration-file has precedence, so a resolved value does not depend on what happens to be set in the environment of the
-        caller. If a value can not be determined in either way the resolution fails with a message which names both possibilities.
+        caller. That precedence only applies as long as the source which the file names is actually available here: a 'file'-entry which
+        points outside the configuration-folder (a secret-file of the host) and a 'hostenvvariable'-entry both name something which exists
+        on the machine the command was started on but not inside a build-container, which only gets the configuration-file itself. In that
+        case the value is taken from the environment instead, because that is where the host put the value it resolved before it started
+        the container (see TFCPS_CodeUnit_BuildCodeUnits.__run_scriptcollection_executable_in_container, which forwards every required
+        variable by name). Without that fallback, making the configuration-file visible inside a container would break exactly those
+        entries which only the host can resolve.
+        If a value can not be determined in either way the resolution fails with a message which names both possibilities.
         This function centralizes the resolution so every caller (the required environment-variables of a product as well as the
         OCI-registry-credentials, see get_docker_registry_credentials_from_environment_variables) obtains identical values instead of
         re-implementing the resolution-logic. 'required_by' names the thing which needs the values and is used in the error-message when a
@@ -334,10 +341,16 @@ class ScriptCollectionCore:
         configuration_file: str = self.__get_global_environment_variables_configuration_file()
         entries: dict[str, tuple[str, str]] = self.__read_environment_variables_configuration_file(configuration_file)
         for environment_variable_name in environment_variable_names:
+            value_from_environment: str = os.environ.get(environment_variable_name)
             if environment_variable_name in entries:
-                result[environment_variable_name] = self.__resolve_environment_variable_value(environment_variable_name, entries[environment_variable_name], configuration_file)
+                try:
+                    result[environment_variable_name] = self.__resolve_environment_variable_value(environment_variable_name, entries[environment_variable_name], configuration_file)
+                    continue
+                except Exception as exception:
+                    GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(value_from_environment), f"The value of the environment-variable '{environment_variable_name}' which is required by {required_by} can not be determined: '{configuration_file}' defines where it comes from, but that source is not available here ({GeneralUtilities.exception_to_str(exception)}), and the variable is not set in the environment either.")
+                    self.log.log(f"The value of the environment-variable '{environment_variable_name}' is taken from the environment because the source which '{configuration_file}' defines for it is not available here.", LogLevel.Debug)
+                    result[environment_variable_name] = value_from_environment
             else:
-                value_from_environment: str = os.environ.get(environment_variable_name)
                 GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(value_from_environment), f"The value of the environment-variable '{environment_variable_name}' which is required by {required_by} is unknown: it is not defined in '{configuration_file}' and it is not set in the environment. Add a line '{environment_variable_name};<kind>;<value>' to that file (allowed kinds are: {', '.join(ScriptCollectionCore.__allowed_environment_variable_kinds)}) or provide the value as an environment-variable, which is how a build-pipeline usually provides it.")
                 result[environment_variable_name] = value_from_environment
         return result
@@ -4822,6 +4835,7 @@ OCR-content:
     def is_runnning_in_container(self) ->bool:
         """this function is based on a convention and does not do a real check."""
         return os.environ.get("ISRUNNINGINCONTAINER") == "true"
+
     
     @GeneralUtilities.check_arguments
     def is_running_in_build_container(self) ->bool:
