@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.4.33"
+version = "4.4.34"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
@@ -27,9 +27,9 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "build>=1.5.0",
+    "build>=1.6.1",
     "CountryInformation>=1.0.12",
-    "coverage>=7.15.2",
+    "coverage>=7.16.1",
     "cyclonedx-bom>=7.1.0",
     "defusedxml>=0.7.1",
     "keyboard>=0.13.5",
@@ -38,11 +38,11 @@ dependencies = [
     "ntplib>=0.4.0",
     "Pillow>=11.3.0",
     "psutil>=7.2.2",
-    "pycdlib>=1.16.0",
-    "Pygments>=2.20.0",
-    "pylint>=4.0.6",
+    "pycdlib>=1.20.0",
+    "Pygments>=2.21.0",
+    "pylint>=4.0.8",
     "pyOpenSSL>=25.3.0",
-    "PyPDF>=6.14.2",
+    "PyPDF>=6.19.0",
     "pytest>=8.4.2",
     "PyYAML>=6.0.3",
     "qrcode>=8.2.0",

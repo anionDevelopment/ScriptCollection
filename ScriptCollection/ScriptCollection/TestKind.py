@@ -10,20 +10,20 @@ class TestKind(Enum):
     # Tests that 2 (or more) components work together like defined.
     IntegrationTest = 1
 
-    # Tests that are always skipped when committing but can be useful to do or debug a certain task/function.
+    # Tests that are not doing anything when committing but can be useful to do or debug a certain task/function.
     DebugHelperTest = 2
 
-    # Tests that a specific bug does not happen anymore.
-    RegressionTest = 3
-
     # Tests that other required systems/services used by the function under test are still available and work like specified so that the function under test is able to be working correctly.
-    SystemTest = 4
+    SystemTest = 3
 
     # Tests that will be done by reflection to assert a certain property for all types or all methods or all attributes in a certain scope.
-    ReflectionTest = 5
+    ReflectionTest = 4
 
-    # Tests that are always skipped when committing but can be useful to demonstrate a certain thing/function.
-    DemonstrationTest = 6
+    # Verifies that recent changes did not break anything.
+    RegressionTest = 5
+
+    # Verifies that recent changes did not change the UI.
+    VisualRegressionTest = 6
 
     # Tests that verifies a certain performance for a certain operation. Testcases of this kind often require appropriate hardware.
     PerformanceTest = 7
@@ -31,10 +31,10 @@ class TestKind(Enum):
     # Tests that verifies that the entire communication between 2 systems is working correctly including serialization, transport and deserialization.
     EndToEndTest = 8
 
-    # Test that only generates build-artifacts.
+    # Test that (re)generates something.
     GenerationTest = 9
 
-    # Smoke testing refers to various classes of tests of systems, usually intended to determine whether they are ready for more robust testing.
+    # Verifies that a certain function is working correctly in a minimal environment with minimal dependencies.
     SmokeTest = 10
 
     def __int__(self):
