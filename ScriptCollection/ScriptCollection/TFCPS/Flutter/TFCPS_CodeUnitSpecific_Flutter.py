@@ -98,10 +98,15 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
             elif target == "windows":
                 # Windows-builds prefer a Windows-task-runner - even when building on a Windows-client - so that all builds
                 # are produced uniformly in the same defined environment. See the remote-build-article in the reference. If
-                # no runner is configured, fall back to building locally (only possible when already running on Windows)
-                # instead of failing, so a development machine without a configured runner is not blocked.
+                # no runner is configured, fall back to building locally instead of failing, so a development machine
+                # without a configured runner is not blocked. This is the one exception to "no fallbacks": it only applies
+                # when this process itself already runs on Windows (a container never does, even on a Windows host, so a
+                # containerized build without a configured runner still fails as before) and only when the local
+                # prerequisites for it (flutter and the Visual-Studio-C++-toolchain "flutter build windows" needs) are
+                # actually available - a machine which lacks them falls through to the runner-branch below, which raises a
+                # clear "no runner configured"-error instead of a local build failing with a toolchain-error.
                 windows_release_folder = os.path.join(src_folder, "build/windows/x64/runner/Release")
-                if platform.system() == "Windows" and not TFCPS_RemoteBuild(self._protected_sc).has_any_runner_configured():
+                if platform.system() == "Windows" and not TFCPS_RemoteBuild(self._protected_sc).has_any_runner_configured() and self.__local_windows_build_prerequisites_are_available():
                     self._protected_sc.log.log("No remote-build-runner is configured; building the windows-target locally "
                                                 "instead. This build is not guaranteed to be produced in the same uniform "
                                                 "environment as a runner-built one.", LogLevel.Warning)
@@ -196,6 +201,28 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
             GeneralUtilities.copy_content_of_folder(source_code_folder, build_result_source_code_folder)
         if add_readme_of_codeunit_to_package or add_license_of_repository_to_package or add_changelog_of_repository_to_package:
             self.__add_package_registry_files_to_artifacts(artifacts_folder, package_name, add_readme_of_codeunit_to_package, add_license_of_repository_to_package, add_changelog_of_repository_to_package, branch_of_published_state)
+
+    @GeneralUtilities.check_arguments
+    def __local_windows_build_prerequisites_are_available(self) -> bool:
+        """Whether this machine can build the windows-target of a flutter-app locally: "flutter build windows" needs
+        the flutter-tool itself as well as a Visual Studio installation with the "Desktop development with C++"-
+        workload, which is not a given on every Windows-machine that otherwise has "flutter" available. Only a
+        simple presence-check is done here (not a full "flutter doctor"-verification), because this only decides
+        whether the local-build-fallback in build() is attempted at all: an actually broken toolchain still fails
+        the "flutter build windows"-call below with its own, real error."""
+        if shutil.which("flutter") is None:
+            return False
+        # Same detection TFCPS_CodeUnitSpecific_CPP_Functions.__find_msbuild_path uses to locate MSBuild: vswhere.exe
+        # is installed by every Visual-Studio-installer and can report whether an installation with the C++-desktop-
+        # development-component exists, without having to guess a version-specific installation-path.
+        program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        vswhere_path = os.path.join(program_files_x86, "Microsoft Visual Studio", "Installer", "vswhere.exe")
+        if not os.path.isfile(vswhere_path):
+            return False
+        exitcode, installation_path, _, _ = self._protected_sc.run_program_argsasarray(
+            vswhere_path, ["-latest", "-products", "*", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath"],
+            GeneralUtilities.get_temp_folder(), throw_exception_if_exitcode_is_not_zero=False)
+        return exitcode == 0 and GeneralUtilities.string_has_content(installation_path.strip())
 
     @GeneralUtilities.check_arguments
     def __generate_bom_for_flutter_package(self, package_name: str) -> None:
