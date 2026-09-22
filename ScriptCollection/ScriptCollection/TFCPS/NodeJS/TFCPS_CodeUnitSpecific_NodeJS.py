@@ -4,9 +4,10 @@ import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from lxml import etree
-from ...GeneralUtilities import GeneralUtilities
+from ...GeneralUtilities import GeneralUtilities, VersionEcholon
 from ...SCLog import  LogLevel
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_CodeUnitSpecific_Base_CLI
+from ..NpmDependencies import NpmDependencies
 from ...HTTPMaintenanceOverheadHelper import HTTPMaintenanceOverheadHelper
 
 class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
@@ -126,17 +127,43 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
         self._protected_sc.run_with_epew("cyclonedx-npm", f"--output-format xml --output-file {relative_path_to_bom_file}", self.get_codeunit_folder(),print_live_output=self._protected_sc.log.loglevel==LogLevel.Diagnostic,encode_argument_in_base64=True)
         self._protected_sc.format_xml_file(self.get_codeunit_folder()+"/"+relative_path_to_bom_file)
 
+    @GeneralUtilities.check_arguments
+    def get_package_json_file(self)->str:
+        """Returns the package-file of this codeunit."""
+        return os.path.join(self.get_codeunit_folder(),"package.json")
+
+    @GeneralUtilities.check_arguments
     def get_dependencies(self)->dict[str,set[str]]:
-        return dict[str,set[str]]()#TODO
-    
+        return GeneralUtilities.merge_dependency_lists([NpmDependencies.get_dependencies(self.get_package_json_file())])
+
     @GeneralUtilities.check_arguments
     def get_available_versions(self,dependencyname:str)->list[str]:
-        return []#TODO
-    
+        return NpmDependencies.get_available_versions(dependencyname)
+
     @GeneralUtilities.check_arguments
     def set_dependency_version(self,name:str,new_version:str)->None:
-        raise ValueError(f"Operation is not implemented.")
-    
+        package_json_file:str=self.get_package_json_file()
+        GeneralUtilities.assert_condition(NpmDependencies.set_dependency_version(package_json_file,name,new_version),f"The package-file \"{package_json_file}\" does not contain a dependency which is named \"{name}\".")
+        self._protected_sc.format_json_file(package_json_file)
+
+    @GeneralUtilities.check_arguments
+    def update_dependencies_with_specific_echolon(self,echolon:VersionEcholon)->None:
+        """Updates the dependencies of this codeunit and confirms the result in its lock-file.
+
+        The update changes the versions the package-file asks for, and the lock-file still states the versions which
+        were resolved before. Writing it again is part of the update: without it the state of the dependencies of
+        the codeunit would be spread over two files which do not agree, and the next build would install the old
+        versions again.
+
+        The lock-file is only written when the update really changed a version, because writing it means installing
+        the dependencies again, which is the most expensive part of an update-run."""
+        dependencies_before_the_update:dict[str,set[str]]=self.get_dependencies()
+        super().update_dependencies_with_specific_echolon(echolon)
+        if dependencies_before_the_update!=self.get_dependencies():
+            #The cache must not be used here: the whole point of this install is to resolve the dependencies again.
+            self.tfcps_Tools_General.do_npm_install(self.get_codeunit_folder(),True,False)
+
+
     @GeneralUtilities.check_arguments
     def add_culture_chooser(self,site_title:str,supported_cultures:list[str])->None:
         output_folder=self.get_codeunit_folder()+"/Other/Artifacts/BuildResult_WebApplication/browser"

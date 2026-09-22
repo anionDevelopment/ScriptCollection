@@ -11,9 +11,10 @@ import zipfile
 import yaml
 
 from ...ArbTranslationsOrganizer import ArbTranslationsOrganizer
-from ...GeneralUtilities import GeneralUtilities
+from ...GeneralUtilities import GeneralUtilities, VersionEcholon
 from ...SCLog import  LogLevel
 from ...ScriptCollectionCore import ScriptCollectionCore
+from ..PubDependencies import PubDependencies
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_CodeUnitSpecific_Base_CLI
 from ..TFCPS_RemoteBuild import TFCPS_RemoteBuild, RunnerOperatingSystem
 
@@ -666,16 +667,53 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
         return re.sub(r' name="lib(\.[^"]*)?"', lambda match: f' name="{codeunit_name}{match.group(1) or ""}"', cobertura_xml_content)
     
     
-    def get_dependencies(self)->dict[str,set[str]]:
-        return dict[str,set[str]]()#TODO
-    
     @GeneralUtilities.check_arguments
-    def get_available_versions(self,dependencyname:str)->list[str]:
-        return []#TODO
-    
-    def set_dependency_version(self,name:str,new_version:str)->None:
-        raise ValueError(f"Operation is not implemented.")
-    
+    def get_pubspec_files(self) -> list[str]:
+        """Returns the package-file of every package of this codeunit."""
+        return [os.path.join(package_folder, "pubspec.yaml") for package_folder in self.__get_package_folders()]
+
+    @GeneralUtilities.check_arguments
+    def get_dependencies(self) -> dict[str, set[str]]:
+        return GeneralUtilities.merge_dependency_lists([PubDependencies.get_dependencies(pubspec_file) for pubspec_file in self.get_pubspec_files()])
+
+    @GeneralUtilities.check_arguments
+    def get_available_versions(self, dependencyname: str) -> list[str]:
+        return PubDependencies.get_available_versions(dependencyname)
+
+    @GeneralUtilities.check_arguments
+    def set_dependency_version(self, name: str, new_version: str) -> None:
+        # A codeunit can consist of several packages, and a dependency which several of them declare has to be set
+        # in every one of them: get_dependencies reports the dependencies of all packages of the codeunit together,
+        # so a package which keeps the former version would make the codeunit use two versions of one dependency.
+        dependency_was_set: bool = False
+        for pubspec_file in self.get_pubspec_files():
+            if PubDependencies.set_dependency_version(pubspec_file, name, new_version):
+                dependency_was_set = True
+        GeneralUtilities.assert_condition(dependency_was_set, f"No package of the codeunit \"{self.get_codeunit_name()}\" contains a dependency which is named \"{name}\".")
+
+    @GeneralUtilities.check_arguments
+    def update_dependencies_with_specific_echolon(self, echolon: VersionEcholon) -> None:
+        """Updates the dependencies of this codeunit and confirms the result in the lock-files of its packages.
+
+        The update changes the versions the package-files ask for, and the lock-files still state the versions which
+        were resolved before. Writing them again is part of the update: without it the state of the dependencies of
+        the codeunit would be spread over two files which do not agree, and pub would resolve the old versions
+        again as long as they still fit the new constraints.
+
+        The lock-files are only written when the update really changed a version, because writing them means
+        resolving the dependencies again, which is the most expensive part of an update-run."""
+        dependencies_before_the_update: dict[str, set[str]] = self.get_dependencies()
+        super().update_dependencies_with_specific_echolon(echolon)
+        if dependencies_before_the_update == self.get_dependencies():
+            return
+        for package_folder in self.__get_package_folders():
+            # Every package below a package-folder is resolved too, for the same reason for which the linting does
+            # so: a package which lies deeper (for example the "example"-application of a library) has a lock-file
+            # of its own which states the same dependencies.
+            for folder_to_resolve in TFCPS_CodeUnitSpecific_Flutter_Functions.__get_folders_with_a_package(package_folder):
+                self._protected_sc.run_with_epew("flutter", "pub get", folder_to_resolve, print_live_output=self.get_verbosity() == LogLevel.Debug)
+
+
 class TFCPS_CodeUnitSpecific_Flutter_CLI:
 
     @staticmethod

@@ -1275,7 +1275,7 @@ class GeneralUtilities:
             cert = crypto.load_certificate(crypto.FILETYPE_PEM, certificate_file_content.read())
             date_as_bytes = cert.get_notAfter()
             date_as_string = date_as_bytes.decode("utf-8")
-            result = datetime.strptime(date_as_string, '%Y%m%d%H%M%SZ')
+            result = datetime.strptime(date_as_string, '%Y%m%d%H%M%SZ').replace(tzinfo=timezone.utc)
             return result
 
     @staticmethod
