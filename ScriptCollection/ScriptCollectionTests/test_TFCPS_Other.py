@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
 from ..ScriptCollection.GeneralUtilities import GeneralUtilities
@@ -117,6 +118,18 @@ def write_openspec_configuration_file(repository: str) -> str:
     configuration_file = os.path.join(openspec_folder, "config.yaml")
     GeneralUtilities.write_text_to_file(configuration_file, "schema: spec-driven\n")
     return configuration_file
+
+
+@contextmanager
+def isolated_scriptcollection_configuration(configuration_folder: str):
+    """Makes the given folder the machine-wide configuration of the code under test, instead of the real configuration of the machine
+    which runs the test. Both sources of that configuration have to be replaced: the configuration-folder of the current user and the
+    folder which a host mounts into a build-container, which has precedence over it (see
+    ScriptCollectionCore.get_environment_variables_file_in_container). Replacing only the first one would leave a testcase depending on
+    where it runs, because these testcases themselves run inside a build-container whose host mounted its real configuration into it."""
+    not_mounted_file = os.path.join(configuration_folder, "NotMounted", "EnvironmentVariables.csv")
+    with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.object(ScriptCollectionCore, "get_environment_variables_file_in_container", lambda self: not_mounted_file):
+        yield
 
 
 def write_environment_variables_configuration_file(configuration_folder: str, lines: list[str]) -> str:
@@ -332,7 +345,7 @@ items:
         #into the result and make this test non-deterministic depending on the machine it runs on.
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, [])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
 
                 # act
                 actual_result = t.get_required_environment_variable_names(repository)
@@ -348,7 +361,7 @@ items:
         #into the result and make this test non-deterministic depending on the machine it runs on.
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, ["MyFirstVariable", "MySecondVariable"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
 
                 # act
                 actual_result = t.get_required_environment_variable_names(repository)
@@ -374,7 +387,7 @@ items:
             write_product_information_file(repository, ["MyFirstVariable"])
             #comments and blank lines must be ignored, and a name which is already declared by the repository must not be duplicated.
             write_additional_required_environment_variables_file(configuration_folder, ["# a comment", "", "MyMachineLocalVariable", "MyFirstVariable"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
 
                 # act
                 actual_result = t.get_required_environment_variable_names(repository)
@@ -389,7 +402,7 @@ items:
         t = TFCPS_Tools_General(ScriptCollectionCore())
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, ["MyFirstVariable"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
 
                 # act
                 #the file which declares the machine-local additional names is optional: a machine which does not have any does not have to create an empty one.
@@ -406,7 +419,7 @@ items:
         #into the result and make this test non-deterministic depending on the machine it runs on.
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, [])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
 
                 # act
                 actual_result = t.get_required_environment_variables(repository)
@@ -422,7 +435,7 @@ items:
         #into the result and make this test non-deterministic depending on the machine it runs on.
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, [])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
 
                 # act
                 t.ensure_required_environment_variables_are_set(repository)
@@ -443,7 +456,7 @@ items:
             secret_file = os.path.join(configuration_folder, "TFCPS", "Secrets", "MySecret.txt")
             GeneralUtilities.ensure_directory_exists(os.path.dirname(secret_file))
             GeneralUtilities.write_text_to_file(secret_file, "MySecretValue\n")
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.dict(os.environ, {"MY_HOST_ENV_VARIABLE": "MyHostValue"}):
+            with isolated_scriptcollection_configuration(configuration_folder), patch.dict(os.environ, {"MY_HOST_ENV_VARIABLE": "MyHostValue"}):
 
                 # act
                 actual_result = t.get_required_environment_variables(repository)
@@ -458,7 +471,7 @@ items:
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, ["MyVariable"])
             write_environment_variables_configuration_file(configuration_folder, ["MyVariable;literal;ValueFromTheConfigurationFile"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.dict(os.environ, {"MyVariable": "ValueFromTheEnvironment"}):
+            with isolated_scriptcollection_configuration(configuration_folder), patch.dict(os.environ, {"MyVariable": "ValueFromTheEnvironment"}):
 
                 # act
                 actual_result = t.get_required_environment_variables(repository)
@@ -472,7 +485,7 @@ items:
         t = TFCPS_Tools_General(ScriptCollectionCore())
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, ["MyVariableFromThePipeline"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.dict(os.environ, {"MyVariableFromThePipeline": "MyValue"}):
+            with isolated_scriptcollection_configuration(configuration_folder), patch.dict(os.environ, {"MyVariableFromThePipeline": "MyValue"}):
 
                 # act
                 #this is the case in a build-pipeline which provides the value from its own secret-store and has no configuration-file at all.
@@ -486,7 +499,7 @@ items:
         t = TFCPS_Tools_General(ScriptCollectionCore())
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, ["MyUnknownVariable"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
                 os.environ.pop("MyUnknownVariable", None)
 
                 # act & assert
@@ -499,7 +512,7 @@ items:
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, ["MyVariableWhichHasToBeSet"])
             write_environment_variables_configuration_file(configuration_folder, ["MyVariableWhichHasToBeSet;literal;MyValue"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.dict(os.environ, {}):
+            with isolated_scriptcollection_configuration(configuration_folder), patch.dict(os.environ, {}):
 
                 # act
                 t.ensure_required_environment_variables_are_set(repository)

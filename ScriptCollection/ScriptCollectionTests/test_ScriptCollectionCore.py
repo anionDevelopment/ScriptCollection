@@ -18,14 +18,26 @@ class ScriptCollectionCoreTests(unittest.TestCase):
     testfileprefix = "testfile_"
     svg_namespace = "http://www.w3.org/2000/svg"
 
+    @staticmethod
+    def __create_scriptcollectioncore_with_isolated_configuration(configuration_folder: str) -> ScriptCollectionCore:
+        """Returns a ScriptCollectionCore which reads the machine-wide configuration from the given folder instead of from the real
+        configuration of the machine which runs this test. Both sources of that configuration have to be replaced: the
+        configuration-folder of the current user and the folder a host mounts into a build-container, which has precedence over it
+        (see ScriptCollectionCore.get_environment_variables_file_in_container). Replacing only the first one would leave a testcase
+        depending on where it runs, because these testcases themselves run inside a build-container whose host mounted its real
+        configuration into it."""
+        result = ScriptCollectionCore()
+        setattr(result, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+        setattr(result, "get_environment_variables_file_in_container", lambda: os.path.join(configuration_folder, "NotMounted", "EnvironmentVariables.csv"))
+        return result
+
     def test_get_docker_registry_credentials_from_environment_variables_returns_empty_list_when_nothing_is_declared(self) -> None:
         with tempfile.TemporaryDirectory() as configuration_folder:
             # arrange
-            sc = ScriptCollectionCore()
-            #the configuration-folder is isolated from the real one of the machine which runs this test, and the environment is
+            #the machine-wide configuration is isolated from the real one of the machine which runs this test, and the environment is
             #cleared, so that registries which are declared for real on this machine (for example the ones of the developer who runs
             #this test) do not leak into this test and make it non-deterministic.
-            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            sc = ScriptCollectionCoreTests.__create_scriptcollectioncore_with_isolated_configuration(configuration_folder)
             with patch.dict(os.environ, {}, clear=True):
 
                 # act
@@ -37,8 +49,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
     def test_get_docker_registry_credentials_from_environment_variables_returns_declared_credentials(self) -> None:
         with tempfile.TemporaryDirectory() as configuration_folder:
             # arrange
-            sc = ScriptCollectionCore()
-            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            sc = ScriptCollectionCoreTests.__create_scriptcollectioncore_with_isolated_configuration(configuration_folder)
             declarations = {
                 "OCIRegistry_MyRegistry_Address": "https://myregistry.example.com",
                 "OCIRegistry_MyRegistry_Username": "MyUser",
@@ -59,8 +70,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
     def test_get_docker_registry_credentials_from_environment_variables_skips_a_registry_whose_values_can_not_be_resolved(self) -> None:
         with tempfile.TemporaryDirectory() as configuration_folder:
             # arrange
-            sc = ScriptCollectionCore()
-            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            sc = ScriptCollectionCoreTests.__create_scriptcollectioncore_with_isolated_configuration(configuration_folder)
             declarations = {
                 "OCIRegistry_IncompleteRegistry_Address": "incompleteregistry.example.com",
                 "OCIRegistry_IncompleteRegistry_Username": "MyUser",
@@ -84,8 +94,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
             #this is the situation inside a build-container: it gets the configuration-file of the host mounted, but not the secret-file
             #which an entry of that file points to (that file only exists on the host). The host resolved the value before it started the
             #container and forwarded it by name, so the environment is the remaining source.
-            sc = ScriptCollectionCore()
-            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            sc = ScriptCollectionCoreTests.__create_scriptcollectioncore_with_isolated_configuration(configuration_folder)
             ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(configuration_folder, "TFCPS", "EnvironmentVariables.csv"), [
                 "MyVariable;file;~/.pp/ASecretFileWhichOnlyExistsOnTheHost.txt",
             ])
@@ -100,8 +109,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
     def test_resolve_environment_variables_throws_exception_when_neither_the_configured_source_nor_the_environment_is_available(self) -> None:
         with tempfile.TemporaryDirectory() as configuration_folder:
             # arrange
-            sc = ScriptCollectionCore()
-            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            sc = ScriptCollectionCoreTests.__create_scriptcollectioncore_with_isolated_configuration(configuration_folder)
             ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(configuration_folder, "TFCPS", "EnvironmentVariables.csv"), [
                 "MyVariable;file;~/.pp/ASecretFileWhichDoesNotExistAnywhere.txt",
             ])
@@ -117,8 +125,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
             # arrange
             #this is what a build inside a container does: it reads the configuration-file which the host mounted, so a 'file'-value with a
             #relative path (the recommended form) must resolve against the folder of that file and not against the host-path it came from.
-            sc = ScriptCollectionCore()
-            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            sc = ScriptCollectionCoreTests.__create_scriptcollectioncore_with_isolated_configuration(configuration_folder)
             ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(configuration_folder, "TFCPS", "EnvironmentVariables.csv"), [
                 "OCIRegistry_MyRegistry_Address;literal;myregistry.example.com",
                 "OCIRegistry_MyRegistry_Username;literal;MyUser",
