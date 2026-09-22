@@ -1,11 +1,9 @@
 import os
-import re
-import json
 import shutil
-import requests
 from lxml import etree
-from ...GeneralUtilities import GeneralUtilities, Dependency
+from ...GeneralUtilities import GeneralUtilities
 from ...SCLog import LogLevel
+from ..NpmDependencies import NpmDependencies
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base, TFCPS_CodeUnitSpecific_Base_CLI
 
 class TFCPS_CodeUnitSpecific_TypeScript_Functions(TFCPS_CodeUnitSpecific_Base):
@@ -123,57 +121,16 @@ class TFCPS_CodeUnitSpecific_TypeScript_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def get_dependencies(self) -> dict[str, set[str]]:
-        return GeneralUtilities.merge_dependency_lists([self.__get_dependencies_from_package_json_file()])
-
-    @GeneralUtilities.check_arguments
-    def __get_dependencies_from_package_json_file(self) -> list[Dependency]:
-        result: list[Dependency] = []
-        for name, dependency_version in self.__enumerate_dependency_entries():
-            result.append(Dependency(name, dependency_version))
-        return result
-
-    @GeneralUtilities.check_arguments
-    def __enumerate_dependency_entries(self) -> list[tuple[str, str]]:
-        """Returns the dependencies of the package-file as tuples of their name and their version. Only a
-        dependency whose version is a plain version-number is returned, because a dependency which points to a
-        file, a repository or a tag has no version which could be updated."""
-        content = json.loads(GeneralUtilities.read_text_from_file(self.get_package_json_file()))
-        result: list[tuple[str, str]] = []
-        for section in ("dependencies", "devDependencies"):
-            for name, declared_version in content.get(section, {}).items():
-                # A declared version usually carries a range-prefix ("^1.2.3" or "~1.2.3"), which is not part of
-                # the version itself.
-                version_without_prefix = declared_version.lstrip("^~")
-                if re.match(r"^\d+\.\d+\.\d+$", version_without_prefix) is not None:
-                    result.append((name, version_without_prefix))
-        return result
+        return GeneralUtilities.merge_dependency_lists([NpmDependencies.get_dependencies(self.get_package_json_file())])
 
     @GeneralUtilities.check_arguments
     def get_available_versions(self, dependencyname: str) -> list[str]:
-        # The registry of npm answers with all published versions of a package.
-        response = requests.get(f"https://registry.npmjs.org/{dependencyname}", headers={"Accept": "application/vnd.npm.install-v1+json"}, timeout=60)
-        response.raise_for_status()
-        result: list[str] = []
-        for version_string in response.json().get("versions", {}).keys():
-            if re.match(r"^\d+\.\d+\.\d+$", version_string) is not None:
-                result.append(version_string)
-        return result
+        return NpmDependencies.get_available_versions(dependencyname)
 
     @GeneralUtilities.check_arguments
     def set_dependency_version(self, name: str, new_version: str) -> None:
         package_json_file = self.get_package_json_file()
-        content = json.loads(GeneralUtilities.read_text_from_file(package_json_file))
-        dependency_was_set: bool = False
-        for section in ("dependencies", "devDependencies"):
-            if name in content.get(section, {}):
-                # The range-prefix of the former declaration is kept, because it states how the project wants to
-                # accept updates and that is not a decision of this function.
-                former_declaration = content[section][name]
-                prefix = former_declaration[0] if former_declaration[0] in ("^", "~") else GeneralUtilities.empty_string
-                content[section][name] = f"{prefix}{new_version}"
-                dependency_was_set = True
-        GeneralUtilities.assert_condition(dependency_was_set, f'The package-file "{package_json_file}" does not contain a dependency which is named "{name}".')
-        GeneralUtilities.write_text_to_file(package_json_file, json.dumps(content, indent=2, ensure_ascii=False) + "\n")
+        GeneralUtilities.assert_condition(NpmDependencies.set_dependency_version(package_json_file, name, new_version), f'The package-file "{package_json_file}" does not contain a dependency which is named "{name}".')
         self._protected_sc.format_json_file(package_json_file)
 
 class TFCPS_CodeUnitSpecific_TypeScript_CLI:
