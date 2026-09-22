@@ -4,7 +4,7 @@ description: "Contains information about the \"common project structure\" and ho
 metadata:
   purpose: "Information about repository-conventions."
   tags: information, conventions
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # General
@@ -102,10 +102,12 @@ Building means running all scripts of all enabled codeunits (for building, linti
 In repositories which implement the common project structure using ScriptCollection the pipeline-command for this is `scbuildcodeunits` (with the `-c`-switch it runs the scripts in a container which provides a standardized environment). The details and all further switches are described in the skill `automation-using-scriptcollection`.
 If the pipeline-command exits with 0 then everything is fine. If it exits with a non-zero exit-code then there is an error and the output of the command should be checked for details.
 
+To ensure that the current branch is buildable the usual command to check that is `scbuildcodeunits -c -v 4`. Using `-c` makes it more resilient when running on different machines and also when running in parallel with `scbuildcodeunits` other projects on the same machine.
+
 ## Changelog
 
 The changelog is always located in `<repository>\Other\Resources\Changelog`.
 When you change something then then always update the changelog accordingly.
-To find the correct changelog-file: Query the current project version. In repositories which use ScriptCollection this is done with `scshowprojectversion` (note that `scshowversion` shows the version of ScriptCollection itself, not the version of the project).
+To find the correct changelog-file: Use `scshowprojectversion`.
 It is important to determine the version after implementing the changes, not before it.
 The changelog-filename in the changelog-folder is then `v<version>.md`, where `<version>` is the determined version.
