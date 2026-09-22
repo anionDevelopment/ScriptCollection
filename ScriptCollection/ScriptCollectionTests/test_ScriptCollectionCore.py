@@ -1174,6 +1174,56 @@ class ScriptCollectionCoreTests(unittest.TestCase):
         finally:
             GeneralUtilities.ensure_directory_does_not_exist(folder)
 
+    def test_translate_xlf_files_in_folder_translates_the_languages_the_service_offers(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        GeneralUtilities.ensure_directory_exists(folder)
+        try:
+            self.__write_xliff2_file(os.path.join(folder, "messages.de.xlf"), "de", "Hello", None)
+            self.__write_xliff2_file(os.path.join(folder, "messages.fr.xlf"), "fr", "Hello", None)
+
+            # act
+            with patch.object(ScriptCollectionCore, "get_supported_translation_languages", return_value={"de", "fr"}):
+                with patch.object(ScriptCollectionCore, "translate", return_value="Hallo"):
+                    sc.translate_xlf_files_in_folder(folder, "en", "https://translation-service.example.com")
+
+            # assert
+            for language in ["de", "fr"]:
+                segment = self.__read_segment_of_the_only_unit(os.path.join(folder, f"messages.{language}.xlf"))
+                assert segment.get("state") == "translated"
+        finally:
+            GeneralUtilities.ensure_directory_does_not_exist(folder)
+
+    def test_translate_xlf_files_in_folder_leaves_a_language_the_service_does_not_offer_untranslated(self) -> None:
+        # arrange
+        # A project states which languages it has; a translation-service knows a limited set of them. A language the
+        # service does not know keeps its texts in the base-language and must not stop the languages it does know
+        # from being translated.
+        sc = ScriptCollectionCore()
+        folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        GeneralUtilities.ensure_directory_exists(folder)
+        try:
+            unsupported_file = os.path.join(folder, "messages.tk.xlf")
+            supported_file = os.path.join(folder, "messages.de.xlf")
+            self.__write_xliff2_file(unsupported_file, "tk", "Hello", None)
+            self.__write_xliff2_file(supported_file, "de", "Hello", None)
+
+            # act
+            with patch.object(ScriptCollectionCore, "get_supported_translation_languages", return_value={"de"}):
+                with patch.object(ScriptCollectionCore, "translate", return_value="Hallo") as translate:
+                    sc.translate_xlf_files_in_folder(folder, "en", "https://translation-service.example.com")
+
+            # assert
+            assert translate.call_count == 1
+            assert self.__read_segment_of_the_only_unit(supported_file).get("state") == "translated"
+            untranslated_segment = self.__read_segment_of_the_only_unit(unsupported_file)
+            # A segment which was never translated has no state of its own, which is what "initial" means.
+            assert untranslated_segment.get("state", "initial") == "initial"
+            assert untranslated_segment.find(f"{{{self.xliff2_namespace}}}target") is None
+        finally:
+            GeneralUtilities.ensure_directory_does_not_exist(folder)
+
     def test_split_image_address_and_tag_with_tag(self) -> None:
         # act
         result = ScriptCollectionCore.split_image_address_and_tag("myregistry.example.com/debian:12")

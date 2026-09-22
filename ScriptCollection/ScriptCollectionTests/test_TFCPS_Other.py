@@ -137,6 +137,26 @@ def write_additional_required_environment_variables_file(configuration_folder: s
     return file
 
 
+def create_tools_with_recorded_certificate_commands() -> tuple[TFCPS_Tools_General, list[str]]:
+    """Returns a TFCPS_Tools_General whose openssl-commands only record under which filename they were called instead of
+    really running openssl, so a test can check whether a certificate would be generated (and under which name) without
+    needing openssl and a certificate-authority on the machine which runs the test."""
+    recorded_calls = []
+    sc = ScriptCollectionCore()
+    sc.generate_certificate = lambda folder, domain, filename, *arguments: recorded_calls.append(f"generate_certificate:{filename}")
+    sc.generate_certificate_sign_request = lambda folder, domain, filename, *arguments: recorded_calls.append(f"generate_certificate_sign_request:{filename}")
+    sc.sign_certificate = lambda folder, ca_folder, ca_name, domain, filename: recorded_calls.append(f"sign_certificate:{filename}")
+    sc.find_last_file_by_extension = lambda folder, extension: os.path.join(folder, f"TestProductCA.{extension}")
+    return (TFCPS_Tools_General(sc), recorded_calls)
+
+
+def generate_certificate_for_development_purposes(tools: TFCPS_Tools_General, service_name: str, resources_folder: str, ca_folder: str) -> None:
+    """Calls the private TFCPS_Tools_General.__generate_certificate_for_development_purposes for a test, the same way
+    rewrite_flutter_coverage_package_names above accesses another private method."""
+    # pylint:disable=protected-access
+    tools._TFCPS_Tools_General__generate_certificate_for_development_purposes(service_name, resources_folder, ca_folder)
+
+
 class TasksForCommonProjectStructureTests(unittest.TestCase):
 
     def test_sort_codenits_1(self) -> None:
@@ -932,3 +952,65 @@ items:
 
             # assert
             self.assertEqual(["--build-arg", "image_debian=docker.io/library/debian:13.4-slim"], actual_result)
+
+    def test_generate_certificate_for_development_purposes_generates_the_certificate_under_the_expected_name(self) -> None:
+        # The name of the generated files is what every Dockerfile which embeds the certificate refers to, so it is part of
+        # the contract of this function and not an implementation-detail.
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            resources_folder = os.path.join(temporary_folder, "Resources")
+            ca_folder = os.path.join(temporary_folder, "CA")
+            (tools, recorded_calls) = create_tools_with_recorded_certificate_commands()
+
+            # act
+            generate_certificate_for_development_purposes(tools, "TestProduct", resources_folder, ca_folder)
+
+            # assert
+            self.assertEqual([
+                "generate_certificate:TestProductDevelopmentCertificate",
+                "generate_certificate_sign_request:TestProductDevelopmentCertificate",
+                "sign_certificate:TestProductDevelopmentCertificate",
+            ], recorded_calls)
+
+    def test_generate_certificate_for_development_purposes_keeps_a_certificate_which_is_not_expired(self) -> None:
+        # This is the regression-scenario: the existence-check looked for a file named after the domain while the
+        # generated file is named after the product, so it never found the existing certificate and every build generated
+        # a new one.
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            resources_folder = os.path.join(temporary_folder, "Resources")
+            ca_folder = os.path.join(temporary_folder, "CA")
+            certificate_folder = os.path.join(resources_folder, "DevelopmentCertificate")
+            GeneralUtilities.ensure_directory_exists(certificate_folder)
+            certificate_file = os.path.join(certificate_folder, "TestProductDevelopmentCertificate.crt")
+            GeneralUtilities.write_text_to_file(certificate_file, "certificate-of-the-previous-run")
+            (tools, recorded_calls) = create_tools_with_recorded_certificate_commands()
+
+            # act
+            with patch.object(GeneralUtilities, "certificate_is_expired", return_value=False):
+                generate_certificate_for_development_purposes(tools, "TestProduct", resources_folder, ca_folder)
+
+            # assert
+            self.assertEqual([], recorded_calls)
+            self.assertEqual("certificate-of-the-previous-run", GeneralUtilities.read_text_from_file(certificate_file))
+
+    def test_generate_certificate_for_development_purposes_replaces_an_expired_certificate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            resources_folder = os.path.join(temporary_folder, "Resources")
+            ca_folder = os.path.join(temporary_folder, "CA")
+            certificate_folder = os.path.join(resources_folder, "DevelopmentCertificate")
+            GeneralUtilities.ensure_directory_exists(certificate_folder)
+            GeneralUtilities.write_text_to_file(os.path.join(certificate_folder, "TestProductDevelopmentCertificate.crt"), "expired-certificate")
+            (tools, recorded_calls) = create_tools_with_recorded_certificate_commands()
+
+            # act
+            with patch.object(GeneralUtilities, "certificate_is_expired", return_value=True):
+                generate_certificate_for_development_purposes(tools, "TestProduct", resources_folder, ca_folder)
+
+            # assert
+            self.assertEqual([
+                "generate_certificate:TestProductDevelopmentCertificate",
+                "generate_certificate_sign_request:TestProductDevelopmentCertificate",
+                "sign_certificate:TestProductDevelopmentCertificate",
+            ], recorded_calls)
