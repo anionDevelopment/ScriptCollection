@@ -1231,7 +1231,10 @@ class TFCPS_Tools_General:
         certificate_folder: str = os.path.join(resources_folder, resource_name)
 
         resource_content_filename: str = service_name+resource_name
-        certificate_file = os.path.join(certificate_folder, f"{domain}.crt")
+        #the certificate-files are named after resource_content_filename and not after the domain (see the calls of
+        #generate_certificate and sign_certificate below), so the existence-check has to use that name as well. With the
+        #domain as the name it never found an existing certificate and therefore generated a new one on every run.
+        certificate_file = os.path.join(certificate_folder, f"{resource_content_filename}.crt")
         unsignedcertificate_file = os.path.join(certificate_folder, f"{domain}.unsigned.crt")
         certificate_exists = os.path.exists(certificate_file)
         if certificate_exists:

@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
 from ..ScriptCollection.GeneralUtilities import GeneralUtilities
@@ -119,6 +120,18 @@ def write_openspec_configuration_file(repository: str) -> str:
     return configuration_file
 
 
+@contextmanager
+def isolated_scriptcollection_configuration(configuration_folder: str):
+    """Makes the given folder the machine-wide configuration of the code under test, instead of the real configuration of the machine
+    which runs the test. Both sources of that configuration have to be replaced: the configuration-folder of the current user and the
+    folder which a host mounts into a build-container, which has precedence over it (see
+    ScriptCollectionCore.get_environment_variables_file_in_container). Replacing only the first one would leave a testcase depending on
+    where it runs, because these testcases themselves run inside a build-container whose host mounted its real configuration into it."""
+    not_mounted_file = os.path.join(configuration_folder, "NotMounted", "EnvironmentVariables.csv")
+    with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.object(ScriptCollectionCore, "get_environment_variables_file_in_container", lambda self: not_mounted_file):
+        yield
+
+
 def write_environment_variables_configuration_file(configuration_folder: str, lines: list[str]) -> str:
     """Writes the file which defines where the values of the required environment-variables come from into the given
     configuration-folder (which a test uses instead of the configuration-folder of the current user)."""
@@ -135,6 +148,26 @@ def write_additional_required_environment_variables_file(configuration_folder: s
     GeneralUtilities.ensure_directory_exists(os.path.dirname(file))
     GeneralUtilities.write_lines_to_file(file, lines)
     return file
+
+
+def create_tools_with_recorded_certificate_commands() -> tuple[TFCPS_Tools_General, list[str]]:
+    """Returns a TFCPS_Tools_General whose openssl-commands only record under which filename they were called instead of
+    really running openssl, so a test can check whether a certificate would be generated (and under which name) without
+    needing openssl and a certificate-authority on the machine which runs the test."""
+    recorded_calls = []
+    sc = ScriptCollectionCore()
+    sc.generate_certificate = lambda folder, domain, filename, *arguments: recorded_calls.append(f"generate_certificate:{filename}")
+    sc.generate_certificate_sign_request = lambda folder, domain, filename, *arguments: recorded_calls.append(f"generate_certificate_sign_request:{filename}")
+    sc.sign_certificate = lambda folder, ca_folder, ca_name, domain, filename: recorded_calls.append(f"sign_certificate:{filename}")
+    sc.find_last_file_by_extension = lambda folder, extension: os.path.join(folder, f"TestProductCA.{extension}")
+    return (TFCPS_Tools_General(sc), recorded_calls)
+
+
+def generate_certificate_for_development_purposes(tools: TFCPS_Tools_General, service_name: str, resources_folder: str, ca_folder: str) -> None:
+    """Calls the private TFCPS_Tools_General.__generate_certificate_for_development_purposes for a test, the same way
+    rewrite_flutter_coverage_package_names above accesses another private method."""
+    # pylint:disable=protected-access
+    tools._TFCPS_Tools_General__generate_certificate_for_development_purposes(service_name, resources_folder, ca_folder)
 
 
 class TasksForCommonProjectStructureTests(unittest.TestCase):
@@ -312,7 +345,7 @@ items:
         #into the result and make this test non-deterministic depending on the machine it runs on.
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, [])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
 
                 # act
                 actual_result = t.get_required_environment_variable_names(repository)
@@ -328,7 +361,7 @@ items:
         #into the result and make this test non-deterministic depending on the machine it runs on.
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, ["MyFirstVariable", "MySecondVariable"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
 
                 # act
                 actual_result = t.get_required_environment_variable_names(repository)
@@ -354,7 +387,7 @@ items:
             write_product_information_file(repository, ["MyFirstVariable"])
             #comments and blank lines must be ignored, and a name which is already declared by the repository must not be duplicated.
             write_additional_required_environment_variables_file(configuration_folder, ["# a comment", "", "MyMachineLocalVariable", "MyFirstVariable"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
 
                 # act
                 actual_result = t.get_required_environment_variable_names(repository)
@@ -369,7 +402,7 @@ items:
         t = TFCPS_Tools_General(ScriptCollectionCore())
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, ["MyFirstVariable"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
 
                 # act
                 #the file which declares the machine-local additional names is optional: a machine which does not have any does not have to create an empty one.
@@ -386,7 +419,7 @@ items:
         #into the result and make this test non-deterministic depending on the machine it runs on.
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, [])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
 
                 # act
                 actual_result = t.get_required_environment_variables(repository)
@@ -402,7 +435,7 @@ items:
         #into the result and make this test non-deterministic depending on the machine it runs on.
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, [])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
 
                 # act
                 t.ensure_required_environment_variables_are_set(repository)
@@ -423,7 +456,7 @@ items:
             secret_file = os.path.join(configuration_folder, "TFCPS", "Secrets", "MySecret.txt")
             GeneralUtilities.ensure_directory_exists(os.path.dirname(secret_file))
             GeneralUtilities.write_text_to_file(secret_file, "MySecretValue\n")
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.dict(os.environ, {"MY_HOST_ENV_VARIABLE": "MyHostValue"}):
+            with isolated_scriptcollection_configuration(configuration_folder), patch.dict(os.environ, {"MY_HOST_ENV_VARIABLE": "MyHostValue"}):
 
                 # act
                 actual_result = t.get_required_environment_variables(repository)
@@ -438,7 +471,7 @@ items:
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, ["MyVariable"])
             write_environment_variables_configuration_file(configuration_folder, ["MyVariable;literal;ValueFromTheConfigurationFile"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.dict(os.environ, {"MyVariable": "ValueFromTheEnvironment"}):
+            with isolated_scriptcollection_configuration(configuration_folder), patch.dict(os.environ, {"MyVariable": "ValueFromTheEnvironment"}):
 
                 # act
                 actual_result = t.get_required_environment_variables(repository)
@@ -452,7 +485,7 @@ items:
         t = TFCPS_Tools_General(ScriptCollectionCore())
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, ["MyVariableFromThePipeline"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.dict(os.environ, {"MyVariableFromThePipeline": "MyValue"}):
+            with isolated_scriptcollection_configuration(configuration_folder), patch.dict(os.environ, {"MyVariableFromThePipeline": "MyValue"}):
 
                 # act
                 #this is the case in a build-pipeline which provides the value from its own secret-store and has no configuration-file at all.
@@ -466,7 +499,7 @@ items:
         t = TFCPS_Tools_General(ScriptCollectionCore())
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, ["MyUnknownVariable"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder):
+            with isolated_scriptcollection_configuration(configuration_folder):
                 os.environ.pop("MyUnknownVariable", None)
 
                 # act & assert
@@ -479,7 +512,7 @@ items:
         with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as configuration_folder:
             write_product_information_file(repository, ["MyVariableWhichHasToBeSet"])
             write_environment_variables_configuration_file(configuration_folder, ["MyVariableWhichHasToBeSet;literal;MyValue"])
-            with patch.object(GeneralUtilities, "get_scriptcollection_configuration_folder", return_value=configuration_folder), patch.dict(os.environ, {}):
+            with isolated_scriptcollection_configuration(configuration_folder), patch.dict(os.environ, {}):
 
                 # act
                 t.ensure_required_environment_variables_are_set(repository)
@@ -932,3 +965,65 @@ items:
 
             # assert
             self.assertEqual(["--build-arg", "image_debian=docker.io/library/debian:13.4-slim"], actual_result)
+
+    def test_generate_certificate_for_development_purposes_generates_the_certificate_under_the_expected_name(self) -> None:
+        # The name of the generated files is what every Dockerfile which embeds the certificate refers to, so it is part of
+        # the contract of this function and not an implementation-detail.
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            resources_folder = os.path.join(temporary_folder, "Resources")
+            ca_folder = os.path.join(temporary_folder, "CA")
+            (tools, recorded_calls) = create_tools_with_recorded_certificate_commands()
+
+            # act
+            generate_certificate_for_development_purposes(tools, "TestProduct", resources_folder, ca_folder)
+
+            # assert
+            self.assertEqual([
+                "generate_certificate:TestProductDevelopmentCertificate",
+                "generate_certificate_sign_request:TestProductDevelopmentCertificate",
+                "sign_certificate:TestProductDevelopmentCertificate",
+            ], recorded_calls)
+
+    def test_generate_certificate_for_development_purposes_keeps_a_certificate_which_is_not_expired(self) -> None:
+        # This is the regression-scenario: the existence-check looked for a file named after the domain while the
+        # generated file is named after the product, so it never found the existing certificate and every build generated
+        # a new one.
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            resources_folder = os.path.join(temporary_folder, "Resources")
+            ca_folder = os.path.join(temporary_folder, "CA")
+            certificate_folder = os.path.join(resources_folder, "DevelopmentCertificate")
+            GeneralUtilities.ensure_directory_exists(certificate_folder)
+            certificate_file = os.path.join(certificate_folder, "TestProductDevelopmentCertificate.crt")
+            GeneralUtilities.write_text_to_file(certificate_file, "certificate-of-the-previous-run")
+            (tools, recorded_calls) = create_tools_with_recorded_certificate_commands()
+
+            # act
+            with patch.object(GeneralUtilities, "certificate_is_expired", return_value=False):
+                generate_certificate_for_development_purposes(tools, "TestProduct", resources_folder, ca_folder)
+
+            # assert
+            self.assertEqual([], recorded_calls)
+            self.assertEqual("certificate-of-the-previous-run", GeneralUtilities.read_text_from_file(certificate_file))
+
+    def test_generate_certificate_for_development_purposes_replaces_an_expired_certificate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            resources_folder = os.path.join(temporary_folder, "Resources")
+            ca_folder = os.path.join(temporary_folder, "CA")
+            certificate_folder = os.path.join(resources_folder, "DevelopmentCertificate")
+            GeneralUtilities.ensure_directory_exists(certificate_folder)
+            GeneralUtilities.write_text_to_file(os.path.join(certificate_folder, "TestProductDevelopmentCertificate.crt"), "expired-certificate")
+            (tools, recorded_calls) = create_tools_with_recorded_certificate_commands()
+
+            # act
+            with patch.object(GeneralUtilities, "certificate_is_expired", return_value=True):
+                generate_certificate_for_development_purposes(tools, "TestProduct", resources_folder, ca_folder)
+
+            # assert
+            self.assertEqual([
+                "generate_certificate:TestProductDevelopmentCertificate",
+                "generate_certificate_sign_request:TestProductDevelopmentCertificate",
+                "sign_certificate:TestProductDevelopmentCertificate",
+            ], recorded_calls)

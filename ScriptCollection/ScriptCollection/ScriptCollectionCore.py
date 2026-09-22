@@ -40,7 +40,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.32"
+version = "4.4.33"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -4711,13 +4711,35 @@ OCR-content:
 
     @GeneralUtilities.check_arguments
     def translate_xlf_files_in_folder(self, folder: str, base_language: str, libre_translate_api_server: str):
-        """Translates all .xlf files directly in the given folder (non-recursive)."""
+        """Translates all .xlf files directly in the given folder (non-recursive).
+
+        Only the languages the translation-service really offers are translated. Which languages a project has is
+        its own decision and a LibreTranslate-instance knows a limited set of them, so a project which has one
+        language the instance does not know is the normal case and not a defect - its texts stay untranslated
+        (which is what the fallback to the base-language exists for) and every other language is translated.
+        Without this, the first unknown language would end the whole run with an error and the languages behind it
+        would stay untranslated as well."""
         pattern = re.compile(r'^.+\.[a-z]{2,3}\.xlf$')
-        for filename in os.listdir(folder):
+        supported_languages = self.get_supported_translation_languages(libre_translate_api_server)
+        skipped_languages: list[str] = []
+        for filename in sorted(os.listdir(folder)):
             if not pattern.match(filename):
+                continue
+            language = filename.split(".")[-2]
+            if language not in supported_languages:
+                skipped_languages.append(language)
                 continue
             file_path = os.path.join(folder, filename)
             self.translate_xlf_file(file_path, base_language, libre_translate_api_server)
+        if 0 < len(skipped_languages):
+            self.log.log(f"The translation-service does not offer these languages, so their texts stay untranslated: {', '.join(skipped_languages)}.", LogLevel.Information)
+
+    @GeneralUtilities.check_arguments
+    def get_supported_translation_languages(self, libre_translate_api_server: str) -> set[str]:
+        """The languages the LibreTranslate-instance at the given address can translate into."""
+        response = requests.get(f"{libre_translate_api_server.rstrip('/')}/languages", timeout=30)
+        response.raise_for_status()
+        return {language["code"] for language in response.json()}
 
     @GeneralUtilities.check_arguments
     def translate_xlf_file(self, file: str, base_language: str, libre_translate_api_server: str):

@@ -18,14 +18,26 @@ class ScriptCollectionCoreTests(unittest.TestCase):
     testfileprefix = "testfile_"
     svg_namespace = "http://www.w3.org/2000/svg"
 
+    @staticmethod
+    def __create_scriptcollectioncore_with_isolated_configuration(configuration_folder: str) -> ScriptCollectionCore:
+        """Returns a ScriptCollectionCore which reads the machine-wide configuration from the given folder instead of from the real
+        configuration of the machine which runs this test. Both sources of that configuration have to be replaced: the
+        configuration-folder of the current user and the folder a host mounts into a build-container, which has precedence over it
+        (see ScriptCollectionCore.get_environment_variables_file_in_container). Replacing only the first one would leave a testcase
+        depending on where it runs, because these testcases themselves run inside a build-container whose host mounted its real
+        configuration into it."""
+        result = ScriptCollectionCore()
+        setattr(result, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+        setattr(result, "get_environment_variables_file_in_container", lambda: os.path.join(configuration_folder, "NotMounted", "EnvironmentVariables.csv"))
+        return result
+
     def test_get_docker_registry_credentials_from_environment_variables_returns_empty_list_when_nothing_is_declared(self) -> None:
         with tempfile.TemporaryDirectory() as configuration_folder:
             # arrange
-            sc = ScriptCollectionCore()
-            #the configuration-folder is isolated from the real one of the machine which runs this test, and the environment is
+            #the machine-wide configuration is isolated from the real one of the machine which runs this test, and the environment is
             #cleared, so that registries which are declared for real on this machine (for example the ones of the developer who runs
             #this test) do not leak into this test and make it non-deterministic.
-            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            sc = ScriptCollectionCoreTests.__create_scriptcollectioncore_with_isolated_configuration(configuration_folder)
             with patch.dict(os.environ, {}, clear=True):
 
                 # act
@@ -37,8 +49,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
     def test_get_docker_registry_credentials_from_environment_variables_returns_declared_credentials(self) -> None:
         with tempfile.TemporaryDirectory() as configuration_folder:
             # arrange
-            sc = ScriptCollectionCore()
-            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            sc = ScriptCollectionCoreTests.__create_scriptcollectioncore_with_isolated_configuration(configuration_folder)
             declarations = {
                 "OCIRegistry_MyRegistry_Address": "https://myregistry.example.com",
                 "OCIRegistry_MyRegistry_Username": "MyUser",
@@ -59,8 +70,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
     def test_get_docker_registry_credentials_from_environment_variables_skips_a_registry_whose_values_can_not_be_resolved(self) -> None:
         with tempfile.TemporaryDirectory() as configuration_folder:
             # arrange
-            sc = ScriptCollectionCore()
-            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            sc = ScriptCollectionCoreTests.__create_scriptcollectioncore_with_isolated_configuration(configuration_folder)
             declarations = {
                 "OCIRegistry_IncompleteRegistry_Address": "incompleteregistry.example.com",
                 "OCIRegistry_IncompleteRegistry_Username": "MyUser",
@@ -84,8 +94,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
             #this is the situation inside a build-container: it gets the configuration-file of the host mounted, but not the secret-file
             #which an entry of that file points to (that file only exists on the host). The host resolved the value before it started the
             #container and forwarded it by name, so the environment is the remaining source.
-            sc = ScriptCollectionCore()
-            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            sc = ScriptCollectionCoreTests.__create_scriptcollectioncore_with_isolated_configuration(configuration_folder)
             ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(configuration_folder, "TFCPS", "EnvironmentVariables.csv"), [
                 "MyVariable;file;~/.pp/ASecretFileWhichOnlyExistsOnTheHost.txt",
             ])
@@ -100,8 +109,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
     def test_resolve_environment_variables_throws_exception_when_neither_the_configured_source_nor_the_environment_is_available(self) -> None:
         with tempfile.TemporaryDirectory() as configuration_folder:
             # arrange
-            sc = ScriptCollectionCore()
-            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            sc = ScriptCollectionCoreTests.__create_scriptcollectioncore_with_isolated_configuration(configuration_folder)
             ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(configuration_folder, "TFCPS", "EnvironmentVariables.csv"), [
                 "MyVariable;file;~/.pp/ASecretFileWhichDoesNotExistAnywhere.txt",
             ])
@@ -117,8 +125,7 @@ class ScriptCollectionCoreTests(unittest.TestCase):
             # arrange
             #this is what a build inside a container does: it reads the configuration-file which the host mounted, so a 'file'-value with a
             #relative path (the recommended form) must resolve against the folder of that file and not against the host-path it came from.
-            sc = ScriptCollectionCore()
-            setattr(sc, "get_scriptcollection_configuration_folder", lambda: configuration_folder)
+            sc = ScriptCollectionCoreTests.__create_scriptcollectioncore_with_isolated_configuration(configuration_folder)
             ScriptCollectionCoreTests.__write_environment_variables_configuration_file(os.path.join(configuration_folder, "TFCPS", "EnvironmentVariables.csv"), [
                 "OCIRegistry_MyRegistry_Address;literal;myregistry.example.com",
                 "OCIRegistry_MyRegistry_Username;literal;MyUser",
@@ -1171,6 +1178,56 @@ class ScriptCollectionCoreTests(unittest.TestCase):
             assert segment.find(f"{{{self.xliff2_namespace}}}source").text == "Hello"
             assert segment.get("state") == "translated"
             assert segment.find(f"{{{self.xliff2_namespace}}}target").text == "Hallo"
+        finally:
+            GeneralUtilities.ensure_directory_does_not_exist(folder)
+
+    def test_translate_xlf_files_in_folder_translates_the_languages_the_service_offers(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        GeneralUtilities.ensure_directory_exists(folder)
+        try:
+            self.__write_xliff2_file(os.path.join(folder, "messages.de.xlf"), "de", "Hello", None)
+            self.__write_xliff2_file(os.path.join(folder, "messages.fr.xlf"), "fr", "Hello", None)
+
+            # act
+            with patch.object(ScriptCollectionCore, "get_supported_translation_languages", return_value={"de", "fr"}):
+                with patch.object(ScriptCollectionCore, "translate", return_value="Hallo"):
+                    sc.translate_xlf_files_in_folder(folder, "en", "https://translation-service.example.com")
+
+            # assert
+            for language in ["de", "fr"]:
+                segment = self.__read_segment_of_the_only_unit(os.path.join(folder, f"messages.{language}.xlf"))
+                assert segment.get("state") == "translated"
+        finally:
+            GeneralUtilities.ensure_directory_does_not_exist(folder)
+
+    def test_translate_xlf_files_in_folder_leaves_a_language_the_service_does_not_offer_untranslated(self) -> None:
+        # arrange
+        # A project states which languages it has; a translation-service knows a limited set of them. A language the
+        # service does not know keeps its texts in the base-language and must not stop the languages it does know
+        # from being translated.
+        sc = ScriptCollectionCore()
+        folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        GeneralUtilities.ensure_directory_exists(folder)
+        try:
+            unsupported_file = os.path.join(folder, "messages.tk.xlf")
+            supported_file = os.path.join(folder, "messages.de.xlf")
+            self.__write_xliff2_file(unsupported_file, "tk", "Hello", None)
+            self.__write_xliff2_file(supported_file, "de", "Hello", None)
+
+            # act
+            with patch.object(ScriptCollectionCore, "get_supported_translation_languages", return_value={"de"}):
+                with patch.object(ScriptCollectionCore, "translate", return_value="Hallo") as translate:
+                    sc.translate_xlf_files_in_folder(folder, "en", "https://translation-service.example.com")
+
+            # assert
+            assert translate.call_count == 1
+            assert self.__read_segment_of_the_only_unit(supported_file).get("state") == "translated"
+            untranslated_segment = self.__read_segment_of_the_only_unit(unsupported_file)
+            # A segment which was never translated has no state of its own, which is what "initial" means.
+            assert untranslated_segment.get("state", "initial") == "initial"
+            assert untranslated_segment.find(f"{{{self.xliff2_namespace}}}target") is None
         finally:
             GeneralUtilities.ensure_directory_does_not_exist(folder)
 
