@@ -40,7 +40,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.35"
+version = "4.4.36"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2730,8 +2730,9 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         mock_loader_result = self.__try_load_mock(program, ' '.join(arguments_as_array), working_directory)
         if mock_loader_result[0]:
             return mock_loader_result[1]
-        process: Popen = self.__run_program_argsasarray_async_helper(program, arguments_as_array, working_directory,  print_errors_as_information, log_file, timeoutInSeconds, addLogOverhead, title, log_namespace, arguments_for_log, custom_argument, interactive, env_vars)
-        return process.pid
+        # The program-runner is used directly here (and not the helper which the synchronous functions use), because a program which
+        # is started asynchronously must not be connected to the pipes of this process: it is started to outlive this call.
+        return self.program_runner.run_program_argsasarray_async(program, arguments_as_array, working_directory, custom_argument, interactive, env_vars)
 
     # Return-values program_runner: Pid
     @GeneralUtilities.check_arguments

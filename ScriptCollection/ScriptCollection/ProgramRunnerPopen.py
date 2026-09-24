@@ -1,14 +1,14 @@
 import os
 import sys
-from subprocess import PIPE, Popen
+from subprocess import DEVNULL, PIPE, Popen
 from .GeneralUtilities import GeneralUtilities
 from .ProgramRunnerBase import ProgramRunnerBase
 
 
 class ProgramRunnerPopen(ProgramRunnerBase):
 
-    @GeneralUtilities.check_arguments
-    def run_program_argsasarray_async_helper(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> Popen:
+    def __get_process_start_information(self, program: str, arguments_as_array: list[str], env_vars: dict) -> tuple[list[str], dict]:
+        """Returns the argument-list and the environment with which the given program is started."""
         arguments_for_process = [program]
         arguments_for_process.extend(arguments_as_array)
         # "shell=True" is not allowed because it is not recommended and also something like
@@ -20,6 +20,11 @@ class ProgramRunnerPopen(ProgramRunnerBase):
         # relative to their working-directory (e.g. a leftover 'tmp/<guid>'-folder inside a codeunit-folder).
         base_environment = GeneralUtilities._internal_with_absolute_temp_folder_environment_variables(os.environ)
         env = {**base_environment, **env_vars} if env_vars is not None else base_environment
+        return arguments_for_process, env
+
+    @GeneralUtilities.check_arguments
+    def run_program_argsasarray_async_helper(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> Popen:
+        arguments_for_process, env = self.__get_process_start_information(program, arguments_as_array, env_vars)
         try:
             if interactive:
                 result = Popen(arguments_for_process, cwd=working_directory, stdout=PIPE, stderr=PIPE, shell=False, text=True, stdin=sys.stdin, env=env)  # pylint: disable=consider-using-with
@@ -53,7 +58,23 @@ class ProgramRunnerPopen(ProgramRunnerBase):
 
     @GeneralUtilities.check_arguments
     def run_program_argsasarray_async(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> int:
-        return self.run_program_argsasarray_async_helper(program, arguments_as_array, working_directory, custom_argument, interactive, env_vars).pid
+        """Starts a program which keeps running after this function returned and returns its process-id.
+
+The standard-output and the standard-error of the started program are discarded instead of being connected to a pipe.
+A program which is started asynchronously is started to keep running, but nobody reads the pipes of such a program:
+it would be stopped by the operating-system as soon as the pipe is full, and it would be terminated as soon as this
+process ends and closes its end of the pipe. Both would end the program although it is supposed to outlive the caller."""
+        arguments_for_process, env = self.__get_process_start_information(program, arguments_as_array, env_vars)
+        try:
+            if interactive:
+                process = Popen(arguments_for_process, cwd=working_directory, stdout=DEVNULL, stderr=DEVNULL, shell=False, text=True, stdin=sys.stdin, env=env)  # pylint: disable=consider-using-with
+            else:
+                process = Popen(arguments_for_process, cwd=working_directory, stdout=DEVNULL, stderr=DEVNULL, shell=False, text=True, env=env)  # pylint: disable=consider-using-with
+        except FileNotFoundError as fileNotFoundError:
+            raise FileNotFoundError(f"Starting '{program}' in '{working_directory}' resulted in a FileNotFoundError: '{str(fileNotFoundError)}'")
+        except NotADirectoryError as notADirectoryError:
+            raise NotADirectoryError(f"Starting '{program}' in '{working_directory}' resulted in a NotADirectoryError: '{str(notADirectoryError)}'")
+        return process.pid
 
     @GeneralUtilities.check_arguments
     def run_program_async(self, program: str, arguments: str = "", working_directory: str = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> int:
