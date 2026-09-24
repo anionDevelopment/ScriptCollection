@@ -134,6 +134,15 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
             self.sc.log.log(f"Start building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(start_time,False)}. (Target environment-type: {self.target_environment_type})")
 
+            #ensure common cache-files are available
+            #git commit message cache file
+            cache_folder=os.path.join(self.repository,".ScriptCollection","Cache")
+            GeneralUtilities.ensure_directory_exists(cache_folder)
+            git_commit_message_cache_file=os.path.join(cache_folder,"GitCommitMessageDraft.txt")
+            GeneralUtilities.ensure_file_exists(git_commit_message_cache_file)
+            git_commit_message_cache_file=os.path.join(cache_folder,"GitCommitDescriptionDraft.txt")
+            GeneralUtilities.ensure_file_exists(git_commit_message_cache_file)
+
             self.tfcps_tools_general.ensure_required_environment_variables_are_set(self.repository)
 
             self.__run_custom_pre_codeunit_build_script()

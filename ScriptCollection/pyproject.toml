@@ -4,9 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.4.35"
+version = "4.4.36"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
+license = "GPL-3.0-only"
 requires-python = ">=3.11"
 keywords = ["package", "release", "build", "management"]
 authors = [
@@ -16,7 +17,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Programming Language :: Python :: 3.11",
-    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: POSIX :: Linux",
     "Operating System :: Microsoft :: Windows :: Windows 10",
     "Topic :: System :: Logging",
@@ -40,7 +40,7 @@ dependencies = [
     "psutil>=7.2.2",
     "pycdlib>=1.20.0",
     "Pygments>=2.21.0",
-    "pylint>=4.0.8",
+    "pylint>=4.0.9",
     "pyOpenSSL>=25.3.0",
     "PyPDF>=6.19.0",
     "pytest>=8.4.2",
