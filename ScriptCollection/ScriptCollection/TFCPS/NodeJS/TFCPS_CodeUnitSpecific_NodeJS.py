@@ -213,7 +213,8 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
                 for unit in root.findall(f".//{ns_prefix}unit"):
                     for segment in unit.findall(f"{ns_prefix}segment"):
                         segment.set("state", "initial")
-                tree.write(target_file, encoding="utf-8", xml_declaration=True)
+                with open(target_file, "wb") as f:#binary mode (as opposed to passing the filename directly to tree.write): guarantees LF line-endings regardless of the OS' default line-ending, since binary mode never translates "\n" to "\r\n". The line-endings of the content copied from the base-file are normalized to LF too, because an XML-parser normalizes "\r\n" and "\r" to "\n" while parsing.
+                    tree.write(f, encoding="utf-8", xml_declaration=True)
 
         angular_json_file=self.get_codeunit_folder()+"/angular.json"
         if os.path.isfile(angular_json_file):
@@ -226,7 +227,7 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
                 for lang in languages
             }
             i18n_config.setdefault("locales", {}).update(new_locales)
-            with angular_json_path.open("w", encoding="utf-8") as f:
+            with angular_json_path.open("w", encoding="utf-8", newline="\n") as f:#newline="\n": guarantees LF line-endings regardless of the OS' default line-ending, since without this Python would translate "\n" to "\r\n" on Windows.
                 json.dump(angular_config, f, ensure_ascii=False, indent=2)
 
     @GeneralUtilities.check_arguments
