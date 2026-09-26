@@ -1826,7 +1826,7 @@ class ScriptCollectionCore:
                 os.remove(thumbnail_to_delete)
 
     @GeneralUtilities.check_arguments
-    def start_rtsp_test_stream(self, target_address: str, additional_text: str = None, width: int = 640, height: int = 480, frames_per_second: int = 10, font_file: str = None, working_directory: str = None) -> int:
+    def start_rtsp_test_stream(self, target_address: str, additional_text: str = None, width: int = 640, height: int = 480, frames_per_second: int = 10, font_file: str = None, working_directory: str = None, background_color: str = "black") -> int:
         """Starts a video-stream which shows a number that is counted up once per second and publishes it to the
 given rtsp-address. Returns the process-id of the running ffmpeg, which can be passed to
 GeneralUtilities.kill_process to stop the stream again.
@@ -1844,9 +1844,11 @@ stream; ffmpeg does not open a port by itself.
                         for the filter-syntax of ffmpeg, and a stream which only exists for testcases does not
                         need a text which requires that.
 :param font_file: The font which is used. When it is not given then a font of the operating-system is used.
+:param background_color: The color of the background, in the notation ffmpeg uses for a color (a name like
+                         "black" or "blue", or "0xRRGGBB", or "#RRGGBB").
 """
         GeneralUtilities.assert_condition(target_address.startswith("rtsp://"), f"'{target_address}' is not a rtsp-address.")
-        argument: list[str] = self.__get_arguments_for_test_stream(additional_text, width, height, frames_per_second, font_file) + [
+        argument: list[str] = self.__get_arguments_for_test_stream(additional_text, width, height, frames_per_second, font_file, background_color) + [
             "-f", "rtsp",
             # Tcp instead of udp, because udp loses pictures under load, which would make a screenshot show
             # something else than the number which belongs to the moment it was taken.
@@ -1855,7 +1857,7 @@ stream; ffmpeg does not open a port by itself.
         return self.run_program_argsasarray_async("ffmpeg", argument, working_directory, title=f"RTSP-test-stream ({target_address})")
 
     @GeneralUtilities.check_arguments
-    def create_test_stream_video(self, target_file: str, duration_in_seconds: int, additional_text: str = None, width: int = 640, height: int = 480, frames_per_second: int = 10, font_file: str = None, working_directory: str = None) -> None:
+    def create_test_stream_video(self, target_file: str, duration_in_seconds: int, additional_text: str = None, width: int = 640, height: int = 480, frames_per_second: int = 10, font_file: str = None, working_directory: str = None, background_color: str = "black") -> None:
         """Writes a video-file which shows the same picture as start_rtsp_test_stream, but into a file instead of
 to a rtsp-address and as fast as possible instead of in realtime.
 
@@ -1865,18 +1867,23 @@ are the same, so a picture of this file can be used as the baseline for a pictur
 :param target_file: The video-file which is written.
 :param duration_in_seconds: How long the video is. The number is counted up once per second, so a video of ten
                             seconds contains the numbers 0 to 9.
+:param background_color: The color of the background. It has to be the one the stream is started with, otherwise
+                         a picture of this file does not show the same as a picture of that stream.
 """
-        argument: list[str] = self.__get_arguments_for_test_stream(additional_text, width, height, frames_per_second, font_file, realtime=False) + [
+        argument: list[str] = self.__get_arguments_for_test_stream(additional_text, width, height, frames_per_second, font_file, background_color, realtime=False) + [
             "-t", str(duration_in_seconds),
             "-y", target_file]
         self.run_program_argsasarray("ffmpeg", argument, working_directory, throw_exception_if_exitcode_is_not_zero=True)
 
     @GeneralUtilities.check_arguments
-    def __get_arguments_for_test_stream(self, additional_text: str, width: int, height: int, frames_per_second: int, font_file: str, realtime: bool = True) -> list[str]:
+    def __get_arguments_for_test_stream(self, additional_text: str, width: int, height: int, frames_per_second: int, font_file: str, background_color: str, realtime: bool = True) -> list[str]:
         """Returns the ffmpeg-arguments which produce the picture of a test-stream. The picture is defined here
 only once, so that the video which is used as the expected result really shows the same as the stream."""
         if additional_text is not None:
             GeneralUtilities.assert_condition(re.fullmatch("[a-zA-Z0-9 ]+", additional_text) is not None, f"The additional text must consist of letters, digits and spaces only, but it is '{additional_text}'.")
+        # The color is put into the description of the lavfi-source, whose parts are separated by colons, so a
+        # value which contains one would not be a color anymore but an additional option of that source.
+        GeneralUtilities.assert_condition(re.fullmatch("[a-zA-Z0-9#]+", background_color) is not None, f"The background-color must consist of letters, digits and the number-sign only, but it is '{background_color}'.")
         if font_file is None:
             font_file = self.__get_font_file_for_drawing_text()
         # "%{eif:t:d}" is the amount of seconds the stream is running, rounded down to an integer, so the number
@@ -1893,7 +1900,7 @@ only once, so that the video which is used as the expected result really shows t
             result.append("-re")
         result = result + [
             "-f", "lavfi",
-            "-i", f"color=c=black:s={width}x{height}:r={frames_per_second}",
+            "-i", f"color=c={background_color}:s={width}x{height}:r={frames_per_second}",
             "-vf", ",".join(text_filters),
             "-c:v", "libx264",
             "-preset", "ultrafast",
