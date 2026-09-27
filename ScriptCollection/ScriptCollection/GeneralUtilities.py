@@ -1375,6 +1375,14 @@ class GeneralUtilities:
     @staticmethod
     @check_arguments
     def retry_action(action, amount_of_attempts: int, action_name: str = None,delay_in_seconds:int=2) -> None:
+        return GeneralUtilities.retry_action_if(action, lambda exception: True, amount_of_attempts, action_name, delay_in_seconds)
+
+    @staticmethod
+    @check_arguments
+    def retry_action_if(action, exception_is_retryable, amount_of_attempts: int, action_name: str = None,delay_in_seconds:int=2) -> None:
+        """Executes action and retries it if it throws an exception for which exception_is_retryable returns True.
+        An exception for which exception_is_retryable returns False is propagated immediately without any further attempt,
+        because retrying an action which failed for a permanent reason can not succeed."""
         amount_of_fails = 0
         last_exception:Exception=None
         GeneralUtilities.assert_condition(0<amount_of_attempts,"amount_of_attempts must be greater than 0.")
@@ -1383,6 +1391,8 @@ class GeneralUtilities:
                 result = action()
                 return result
             except Exception as e:
+                if not exception_is_retryable(e):
+                    raise
                 time.sleep(delay_in_seconds)
                 amount_of_fails = amount_of_fails+1
                 last_exception=e

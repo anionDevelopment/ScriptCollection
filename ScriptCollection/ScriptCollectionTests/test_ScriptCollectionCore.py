@@ -911,6 +911,35 @@ class ScriptCollectionCoreTests(unittest.TestCase):
   <span>test</span>
 </div>"""
 
+    def test_format_html_content_keeps_the_and_operator_of_an_angular_expression(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        input_content = """@if (a!=null && b!=null) {
+  <div>x</div>
+}"""
+
+        # act
+        result = sc.format_html_content(input_content)
+
+        # assert
+        assert result == """@if (a!=null && b!=null) {
+<div>x</div>
+}"""
+
+    def test_format_html_content_keeps_the_spaces_around_an_entity(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        input_content = "<div><b>x</b>Tom &amp; Jerry</div>"
+
+        # act
+        result = sc.format_html_content(input_content)
+
+        # assert
+        assert result == """<div>
+  <b>x</b>
+  Tom &amp; Jerry
+</div>"""
+
     def test_format_html_content_adds_doctype_when_requested(self) -> None:
         # arrange
         sc = ScriptCollectionCore()
@@ -1258,6 +1287,49 @@ class ScriptCollectionCoreTests(unittest.TestCase):
 
         # assert
         assert result == ("myregistry.example.com:5000/debian", "latest")
+
+    def test_error_is_timeout_error(self) -> None:
+        # act & assert
+        assert True == ScriptCollectionCore._ScriptCollectionCore__error_is_timeout_error(ValueError("net/http: TLS handshake timeout"))
+        assert True == ScriptCollectionCore._ScriptCollectionCore__error_is_timeout_error(ValueError("dial tcp 192.0.2.1:443: i/o timeout"))
+        assert True == ScriptCollectionCore._ScriptCollectionCore__error_is_timeout_error(ValueError("connect: connection timed out"))
+        assert True == ScriptCollectionCore._ScriptCollectionCore__error_is_timeout_error(ValueError("context deadline exceeded"))
+        assert False == ScriptCollectionCore._ScriptCollectionCore__error_is_timeout_error(ValueError("unauthorized: authentication required"))
+
+    def test_docker_login_with_retry_retries_a_timeout_error(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        used_registries: list[str] = []
+
+        def login_which_fails_with_a_timeout_in_the_first_attempt(sc_instance: ScriptCollectionCore, registry: str, username: str, password: str) -> None:
+            used_registries.append(registry)
+            if len(used_registries) == 1:
+                raise ValueError("Program 'docker \"login\" ...' resulted in exitcode 1. (StdOut: '', StdErr: 'Error response from daemon: Get \"https://myregistry.example.com/v2/\": net/http: TLS handshake timeout')")
+
+        with patch.object(ScriptCollectionCore, "docker_login", login_which_fails_with_a_timeout_in_the_first_attempt), patch.object(time, "sleep"):
+
+            # act
+            sc.docker_login_with_retry("myregistry.example.com", "user", "password")
+
+        # assert
+        assert used_registries == ["myregistry.example.com", "myregistry.example.com"]
+
+    def test_docker_login_with_retry_does_not_retry_an_error_which_is_not_a_timeout_error(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        used_registries: list[str] = []
+
+        def login_which_always_fails_with_wrong_credentials(sc_instance: ScriptCollectionCore, registry: str, username: str, password: str) -> NoReturn:
+            used_registries.append(registry)
+            raise ValueError("Program 'docker \"login\" ...' resulted in exitcode 1. (StdOut: '', StdErr: 'Error response from daemon: unauthorized: authentication required')")
+
+        with patch.object(ScriptCollectionCore, "docker_login", login_which_always_fails_with_wrong_credentials), patch.object(time, "sleep"):
+
+            # act & assert
+            with self.assertRaises(ValueError):
+                sc.docker_login_with_retry("myregistry.example.com", "user", "wrong-password")
+
+        assert used_registries == ["myregistry.example.com"]
 
 
 # TODO all testcases should be independent of epew
