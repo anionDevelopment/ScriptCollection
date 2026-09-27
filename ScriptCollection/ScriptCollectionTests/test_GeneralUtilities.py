@@ -319,3 +319,33 @@ class GeneralUtilitiesTests(unittest.TestCase):
             assert actual == ["<Version>2.0.0</Version>"]
         finally:
             os.remove(testfile)
+
+    def test_retry_action_if_retries_a_retryable_exception_until_the_action_succeeds(self) -> None:
+        # arrange
+        amount_of_executions: list[int] = []
+
+        def action_which_fails_in_the_first_two_attempts() -> str:
+            amount_of_executions.append(1)
+            if len(amount_of_executions) < 3:
+                raise ValueError("retryable")
+            return "result"
+
+        # act
+        actual = GeneralUtilities.retry_action_if(action_which_fails_in_the_first_two_attempts, lambda exception: str(exception) == "retryable", 5, None, 0)
+
+        # assert
+        assert actual == "result"
+        assert len(amount_of_executions) == 3
+
+    def test_retry_action_if_does_not_retry_an_exception_which_is_not_retryable(self) -> None:
+        # arrange
+        amount_of_executions: list[int] = []
+
+        def action_which_always_fails() -> None:
+            amount_of_executions.append(1)
+            raise ValueError("not-retryable")
+
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.retry_action_if(action_which_always_fails, lambda exception: str(exception) == "retryable", 5, None, 0)
+        assert len(amount_of_executions) == 1

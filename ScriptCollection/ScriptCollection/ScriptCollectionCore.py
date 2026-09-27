@@ -40,7 +40,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.37"
+version = "4.4.38"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -222,6 +222,9 @@ class ScriptCollectionCore:
 
     # Kinds which are allowed in the environment-variables-configuration-file (see get_environment_variables_configuration_file).
     __allowed_environment_variable_kinds: list[str] = ["literal", "hostenvvariable", "file"]
+
+    # Indicators which occur in the error-message of a failed program-call when the call failed because an operation ran into a timeout. See __error_is_timeout_error.
+    __timeout_error_indicators: list[str] = ["timeout", "timed out", "context deadline exceeded"]
 
     def __init__(self):
         self.program_runner = ProgramRunnerPopen()
@@ -508,6 +511,28 @@ class ScriptCollectionCore:
             result = tag in tags 
             return result
     
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def __error_is_timeout_error(exception: Exception) -> bool:
+        """Returns True if and only if the message of the given exception indicates that the failed operation ran into a timeout."""
+        message = str(exception).lower()
+        return any(indicator in message for indicator in ScriptCollectionCore.__timeout_error_indicators)
+
+    @GeneralUtilities.check_arguments
+    def docker_login(self, registry: str, username: str, password: str) -> None:
+        """Logs in to the given docker-registry."""
+        arg = f"login {registry} -u {username} -p {password}"
+        arg_for_log = f"login {registry} -u {username} -p ***"
+        self.run_program("docker", arg, arguments_for_log=arg_for_log, print_live_output=self.log.loglevel == LogLevel.Debug)
+
+    @GeneralUtilities.check_arguments
+    def docker_login_with_retry(self, registry: str, username: str, password: str, amount_of_attempts: int = 5) -> None:
+        """Does the same as docker_login but retries the login if it failed due to a timeout.
+        A timeout (for example a tls-handshake-timeout, whose duration is hardcoded in the docker-daemon and therefore not configurable) occurs
+        sporadically when the registry or the connection to it is temporarily slow, so in this case a further attempt can succeed. Errors with a
+        permanent cause like wrong credentials would fail again in every further attempt, so only timeout-errors are retried."""
+        GeneralUtilities.retry_action_if(lambda: self.docker_login(registry, username, password), ScriptCollectionCore.__error_is_timeout_error, amount_of_attempts)
+
     def login_to_defined_docker_registries(self)->None:
         """Logs in to every registry for which credentials are available on this machine (see get_docker_registry_credentials_from_environment_variables).
         The login is only executed once per instance: the credentials do not change while a process runs, and the login has to be
@@ -520,9 +545,7 @@ class ScriptCollectionCore:
             self.log.log("No docker registry credentials defined. Skipping docker login.",LogLevel.Debug)
         else:
             for registry,username,password in registries:
-                arg=f"login {registry} -u {username} -p {password}"
-                arg_for_log=f"login {registry} -u {username} -p ***"
-                self.run_program("docker",arg,arguments_for_log=arg_for_log,print_live_output=self.log.loglevel==LogLevel.Debug)
+                self.docker_login_with_retry(registry,username,password)
 
     @staticmethod
     @GeneralUtilities.check_arguments
@@ -3593,7 +3616,7 @@ TXDX
                          "link", "meta", "param", "source", "track", "wbr"}
 
         class _Node:
-            __slots__ = ("tag", "attrs", "children", "text", "is_void", "raw")
+            __slots__ = ("tag", "attrs", "children", "text", "is_void", "raw", "text_ends_with_whitespace")
             def __init__(self, tag=None, attrs=(), text=None, is_void=False, raw=None):
                 self.tag = tag
                 self.attrs = list(attrs)
@@ -3601,6 +3624,9 @@ TXDX
                 self.text = text
                 self.is_void = is_void
                 self.raw = raw
+                # Whether the text of this node was followed by whitespace in the input. It is needed to append
+                # further text to this node with the whitespace which was between both, see _Builder._append_text.
+                self.text_ends_with_whitespace = False
 
         class _Builder(HTMLParser):
             def __init__(self):
@@ -3629,16 +3655,40 @@ TXDX
                 if len(self.stack) > 1 and self.stack[-1].tag == tag:
                     self.stack.pop()
 
+            def _append_text(self, text, whitespace_before, whitespace_after):
+                # Text which belongs together has to end up in one node, because the serializer writes every node
+                # into a line of its own. The parser hands out the text of an element in several pieces: it reports
+                # an ampersand which does not begin a character-reference separately (which is what happens to the
+                # "&&" of an angular-expression) and it reports every character-reference separately. Without joining
+                # them here, "@if (a && b) {" would become three lines and would not be parsable anymore, and
+                # "Tom &amp; Jerry" would lose the spaces around the ampersand.
+                children = self._top().children
+                if children and children[-1].text is not None:
+                    previous = children[-1]
+                    separator = " " if previous.text_ends_with_whitespace or whitespace_before else ""
+                    previous.text = previous.text + separator + text
+                    previous.text_ends_with_whitespace = whitespace_after
+                else:
+                    node = _Node(text=text)
+                    node.text_ends_with_whitespace = whitespace_after
+                    children.append(node)
+
             def handle_data(self, data):
                 t = " ".join(data.split())
                 if t:
-                    self._top().children.append(_Node(text=t))
+                    self._append_text(t, data[:1].isspace(), data[-1:].isspace())
+                else:
+                    # The piece consists of whitespace only. It carries no text, but it separates the text before it
+                    # from the text after it, which has to be kept.
+                    children = self._top().children
+                    if data and children and children[-1].text is not None:
+                        children[-1].text_ends_with_whitespace = True
 
             def handle_entityref(self, name):
-                self._top().children.append(_Node(text=f"&{name};"))
+                self._append_text(f"&{name};", False, False)
 
             def handle_charref(self, name):
-                self._top().children.append(_Node(text=f"&#{name};"))
+                self._append_text(f"&#{name};", False, False)
 
             def handle_comment(self, data):
                 self._top().children.append(_Node(raw=f"<!--{data}-->"))
