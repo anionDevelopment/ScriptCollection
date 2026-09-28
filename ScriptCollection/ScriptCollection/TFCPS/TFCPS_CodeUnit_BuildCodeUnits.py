@@ -608,7 +608,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if 0 < len(findings):
             for finding in findings:
                 self.sc.log.log(finding, LogLevel.Error)
-            raise ValueError(f"Found {len(findings)} secret-finding(s) in the built OCI-image(s). A secret which is part of an image is readable by everybody who is allowed to pull that image. See {os.path.join(self.repository, '.betterleaks.toml')} to ignore known false positives.")
+            raise ValueError(f"Found {len(findings)} secret-finding(s) in the built OCI-image(s). A secret which is part of an image is readable by everybody who is allowed to pull that image. See {os.path.join(self.repository, '.ScriptCollection', 'SecretScanConfiguration.toml')} to ignore known false positives.")
 
     @GeneralUtilities.check_arguments
     def __get_oci_images_of_repository(self) -> list[str]:
