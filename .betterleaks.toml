@@ -10,3 +10,9 @@ description = "Example/test certificates and their generation scripts (intention
 paths = [
     '''Other/Resources/OtherScripts/ServerMaintenance/Common/GenerateCertificates/''',
 ]
+
+[[allowlists]]
+description = "Testdata of the secret-scan of ScriptCollection itself (no real secrets). The testcases of TFCPS_OCIImageSecretScan have to contain the very patterns that scanner looks for, otherwise they could not check that it detects them; the reported private key for example is the marker-line plus the 14 placeholder-characters 'MIIEvQIBADANBg'. The path is unanchored, so it covers the file itself as well as its copy in the source-code-artifact of the codeunit."
+paths = [
+    '''ScriptCollectionTests/test_TFCPS_OCIImageSecretScan\.py''',
+]

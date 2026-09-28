@@ -9,6 +9,11 @@ from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
 from ..ScriptCollection.TFCPS.TFCPS_OCIImageSecretScan import TFCPS_OCIImageSecretScan
 
 
+#the scan-input of the testcases which check the detection of a private key. It is not a real key: it is the marker-line the
+#scanner looks for plus a few characters. It is declared once instead of in every testcase which needs it.
+PRIVATE_KEY_FOR_TESTS: str = "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg\n-----END PRIVATE KEY-----\n"
+
+
 def create_layer(files: dict[str, str]) -> bytes:
     """Creates the content of an image-layer (a tar-file) which contains the given files."""
     layer_stream = io.BytesIO()
@@ -40,6 +45,11 @@ def create_metadata(created_by_entries: list[str], environment_variables: list[s
         "history": [{"created_by": created_by} for created_by in created_by_entries],
         "config": {"Env": environment_variables or []},
     }
+
+
+def write_secret_scan_configuration(repository: str, content: str) -> None:
+    GeneralUtilities.ensure_directory_exists(os.path.join(repository, ".ScriptCollection"))
+    GeneralUtilities.write_text_to_file(os.path.join(repository, ".ScriptCollection", "SecretScanConfiguration.toml"), content)
 
 
 class TFCPS_OCIImageSecretScanTests(unittest.TestCase):
@@ -135,22 +145,58 @@ class TFCPS_OCIImageSecretScanTests(unittest.TestCase):
         # assert
         assert not actual_result
 
-    def test_scan_image_artifact_applies_the_betterleaks_allowlist(self) -> None:
+    def test_scan_image_artifact_ignores_the_findings_declared_in_the_secret_scan_configuration(self) -> None:
         # arrange
         scan = TFCPS_OCIImageSecretScan(ScriptCollectionCore())
-        layer = {"Workspace/Other/Certificates/DevelopmentCertificate.key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg\n-----END PRIVATE KEY-----\n"}
+        layer = {"Workspace/Other/Certificates/DevelopmentCertificate.key": PRIVATE_KEY_FOR_TESTS}
         with tempfile.TemporaryDirectory() as repository:
             image_file = os.path.join(repository, "image.tar")
             create_image_artifact(image_file, create_metadata([]), [layer])
 
             # act
-            result_without_allowlist = scan.scan_image_artifact(image_file, repository)
-            GeneralUtilities.write_text_to_file(os.path.join(repository, ".betterleaks.toml"), """[[allowlists]]
+            result_without_configuration = scan.scan_image_artifact(image_file, repository)
+            write_secret_scan_configuration(repository, """[[ignoredfindings]]
 description = "Development-certificate"
-paths = ['''Workspace/Other/Certificates/''']
+regexes = ['''Workspace/Other/Certificates/''']
 """)
-            result_with_allowlist = scan.scan_image_artifact(image_file, repository)
+            result_with_configuration = scan.scan_image_artifact(image_file, repository)
 
             # assert
-            assert len(result_without_allowlist) == 1
-            assert not result_with_allowlist
+            assert len(result_without_configuration) == 1
+            assert not result_with_configuration
+
+    def test_scan_image_artifact_ignores_only_the_findings_which_the_regex_matches(self) -> None:
+        # arrange
+        scan = TFCPS_OCIImageSecretScan(ScriptCollectionCore())
+        layer = {
+            "Workspace/Application/Backend/MediaMTX/mediamtx.yml": "# * rtsp://user:pass@host:port/path -> the stream is pulled from another RTSP server\n",
+            "Workspace/Application/Backend/MediaMTX/Certificate.key": PRIVATE_KEY_FOR_TESTS,
+        }
+        with tempfile.TemporaryDirectory() as repository:
+            image_file = os.path.join(repository, "image.tar")
+            create_image_artifact(image_file, create_metadata([]), [layer])
+            write_secret_scan_configuration(repository, r"""[[ignoredfindings]]
+description = "Placeholder-urls in the documentation-comments of the MediaMTX-default-configuration"
+regexes = ['''MediaMTX/mediamtx\.yml" in image-layer: contains credentials in the url''']
+""")
+
+            # act
+            actual_result = scan.scan_image_artifact(image_file, repository)
+
+            # assert
+            assert len(actual_result) == 1
+            assert "Certificate.key" in actual_result[0]
+
+    def test_scan_image_artifact_does_not_require_a_secret_scan_configuration(self) -> None:
+        # arrange
+        scan = TFCPS_OCIImageSecretScan(ScriptCollectionCore())
+        layer = {"Workspace/Other/Certificates/DevelopmentCertificate.key": PRIVATE_KEY_FOR_TESTS}
+        with tempfile.TemporaryDirectory() as repository:
+            image_file = os.path.join(repository, "image.tar")
+            create_image_artifact(image_file, create_metadata([]), [layer])
+
+            # act
+            actual_result = scan.scan_image_artifact(image_file, repository)
+
+            # assert
+            assert len(actual_result) == 1

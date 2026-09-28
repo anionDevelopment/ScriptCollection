@@ -48,12 +48,12 @@ class TFCPS_OCIImageSecretScan:
         self.sc = sc
 
     @GeneralUtilities.check_arguments
-    def search_for_secrets_in_image(self, image: str, repository_for_allowlist: str = None) -> list[str]:
+    def search_for_secrets_in_image(self, image: str, repository_for_ignored_findings: str = None) -> list[str]:
         """Scans the given OCI-image for secrets and returns a human-readable description for every finding.
         'image' is the reference of an image which is already available in the local docker-instance (for example
         'myimage:1.0.0'); it is exported with 'docker save' and the resulting archive is scanned.
-        'repository_for_allowlist' is optional: if it is given, the '[[allowlists]]'-entries of its '.betterleaks.toml' are
-        applied, so the same allowlist-file applies to the repository-scan and to the image-scan."""
+        'repository_for_ignored_findings' is optional: if it is given, the findings which its
+        '.ScriptCollection/SecretScanConfiguration.toml' declares as ignored are removed from the result."""
         self.sc.log.log(f"Search for secrets in image \"{image}\"...", LogLevel.Debug)
         temporary_folder: str = tempfile.mkdtemp()
         try:
@@ -63,13 +63,13 @@ class TFCPS_OCIImageSecretScan:
             result = self.sc.run_program_argsasarray("docker", ["save", image, "-o", image_file], throw_exception_if_exitcode_is_not_zero=False, print_live_output=False)
             if result[0] != 0:
                 raise ValueError(f"The image '{image}' could not be exported (exit-code {result[0]}: {result[2].strip()}). The image must be available in the local docker-instance to be scanned.")
-            findings: list[str] = self.scan_image_artifact(image_file, repository_for_allowlist)
+            findings: list[str] = self.scan_image_artifact(image_file, repository_for_ignored_findings)
         finally:
             GeneralUtilities.ensure_directory_does_not_exist(temporary_folder)
         return [f"image \"{image}\": {finding}" for finding in findings]
 
     @GeneralUtilities.check_arguments
-    def scan_image_artifact(self, image_file: str, repository_for_allowlist: str = None) -> list[str]:
+    def scan_image_artifact(self, image_file: str, repository_for_ignored_findings: str = None) -> list[str]:
         """Scans a single image-artifact (a tar-file as produced by 'docker save' or 'docker buildx build --output type=docker')."""
         findings: list[str] = []
         with tarfile.open(image_file, "r") as image_archive:
@@ -77,10 +77,10 @@ class TFCPS_OCIImageSecretScan:
                 if not member.isfile() or member.size == 0:
                     continue
                 findings = findings+self.__scan_member_of_image_archive(image_archive, member)
-        if repository_for_allowlist is None:
+        if repository_for_ignored_findings is None:
             return findings
-        allowlist_patterns: list[re.Pattern] = self.__get_allowlist_patterns(repository_for_allowlist)
-        return [finding for finding in findings if not self.__is_allowlisted(finding, allowlist_patterns)]
+        ignore_patterns: list[re.Pattern] = self.__get_ignore_patterns(repository_for_ignored_findings)
+        return [finding for finding in findings if not self.__finding_is_ignored(finding, ignore_patterns)]
 
     @GeneralUtilities.check_arguments
     def __scan_member_of_image_archive(self, image_archive: tarfile.TarFile, member: tarfile.TarInfo) -> list[str]:
@@ -196,35 +196,33 @@ class TFCPS_OCIImageSecretScan:
         return True
 
     @GeneralUtilities.check_arguments
-    def __get_allowlist_patterns(self, repository: str) -> list[re.Pattern]:
-        """Reads the allowlisted paths and regexes from '<repository>/.betterleaks.toml' so the image-scan honours the same
-        allowlist as the repository-scan instead of requiring a second configuration-file."""
-        configuration_file: str = os.path.join(repository, ".betterleaks.toml")
+    def __get_ignore_patterns(self, repository: str) -> list[re.Pattern]:
+        """Reads the regular expressions of the findings which the repository declares as known false positives from
+        '<repository>/.ScriptCollection/SecretScanConfiguration.toml'. Every expression is matched against the
+        finding-description (see the return-value of scan_image_artifact), not against a file-path, because a finding names the
+        path a file has inside the image as well as the kind of the finding: that way an entry can be scoped to exactly one kind
+        of finding in one file instead of hiding everything an image contains at that path.
+        The file is optional: a repository which does not have any known false positive does not need it."""
+        configuration_file: str = os.path.join(repository, ".ScriptCollection", "SecretScanConfiguration.toml")
         if not os.path.isfile(configuration_file):
             return []
         try:
             with open(configuration_file, "rb") as file_handle:
                 configuration = tomllib.load(file_handle)
         except tomllib.TOMLDecodeError as exception:
-            self.sc.log.log_exception(f"'{configuration_file}' could not be parsed, so no allowlist is applied to the image-scan:", exception, LogLevel.Warning)
+            self.sc.log.log_exception(f"'{configuration_file}' could not be parsed, so no finding is ignored:", exception, LogLevel.Warning)
             return []
-        allowlists: list = []
-        for key in ("allowlist", "allowlists"):
-            value = configuration.get(key)
-            if isinstance(value, dict):
-                allowlists.append(value)
-            elif isinstance(value, list):
-                allowlists = allowlists+[entry for entry in value if isinstance(entry, dict)]
         result: list[re.Pattern] = []
-        for allowlist in allowlists:
-            for key in ("paths", "regexes"):
-                for pattern in allowlist.get(key) or []:
-                    try:
-                        result.append(re.compile(str(pattern)))
-                    except re.error as exception:
-                        self.sc.log.log_exception(f"The allowlist-entry '{pattern}' of '{configuration_file}' is not a valid regular expression and is therefore ignored:", exception, LogLevel.Warning)
+        for ignored_finding in configuration.get("ignoredfindings") or []:
+            if not isinstance(ignored_finding, dict):
+                continue
+            for pattern in ignored_finding.get("regexes") or []:
+                try:
+                    result.append(re.compile(str(pattern)))
+                except re.error as exception:
+                    self.sc.log.log_exception(f"The entry '{pattern}' of '{configuration_file}' is not a valid regular expression and is therefore ignored:", exception, LogLevel.Warning)
         return result
 
     @GeneralUtilities.check_arguments
-    def __is_allowlisted(self, finding: str, allowlist_patterns: list[re.Pattern]) -> bool:
-        return any(pattern.search(finding) is not None for pattern in allowlist_patterns)
+    def __finding_is_ignored(self, finding: str, ignore_patterns: list[re.Pattern]) -> bool:
+        return any(pattern.search(finding) is not None for pattern in ignore_patterns)
