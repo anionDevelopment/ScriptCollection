@@ -1245,7 +1245,7 @@ def SearchForSecrets() -> int:
 def SearchForSecretsInImage() -> int:
     parser = argparse.ArgumentParser(description="Scans an OCI-image which is available in the local docker-instance for secrets. Exit-code 0: no secrets found. Exit-code 1: secrets found. Exit-code 2: an error occurred.")
     parser.add_argument('-i', '--image', required=True, help="Reference of the image which should be scanned, for example \"myimage:1.0.0\". The image must already be available in the local docker-instance.")
-    parser.add_argument('-r', '--repository', required=False, default=None, help="Optional path to a repository whose \".betterleaks.toml\" is used to allowlist known false positives.")
+    parser.add_argument('-r', '--repository', required=False, default=None, help="Optional path to a repository whose \".ScriptCollection/SecretScanConfiguration.toml\" declares the findings which are known false positives and therefore get ignored.")
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
     args = parser.parse_args()
