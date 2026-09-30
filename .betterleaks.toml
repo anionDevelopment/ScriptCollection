@@ -16,3 +16,13 @@ description = "Testdata of the secret-scan of ScriptCollection itself (no real s
 paths = [
     '''ScriptCollectionTests/test_TFCPS_OCIImageSecretScan\.py''',
 ]
+
+[[allowlists]]
+description = "The diff-reports of the codeunit contain the diff of test_TFCPS_OCIImageSecretScan.py and therefore its placeholder private key (see above). Only this placeholder is ignored there (condition AND), so real secrets in the diff-reports are still reported."
+condition = "AND"
+paths = [
+    '''Other/Artifacts/DiffReport/DiffReport(Dark)?\.html''',
+]
+regexes = [
+    '''MIIEvQIBADANBg\\n-----END PRIVATE KEY''',
+]
