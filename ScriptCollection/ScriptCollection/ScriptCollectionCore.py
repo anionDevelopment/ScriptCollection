@@ -40,7 +40,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.40"
+version = "4.4.41"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2998,17 +2998,6 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
     @GeneralUtilities.check_arguments
     def get_scriptcollection_repository_cache_folder(self, repository_folder: str) -> str:
         return os.path.join(repository_folder, ".ScriptCollection", "Cache")
-
-    @GeneralUtilities.check_arguments
-    def ensure_scriptcollection_gitignore_is_setup(self, repository_folder: str) -> None:
-        """Ensures that "<repository>/.ScriptCollection/.gitignore" exists and contains the expected entries."""
-        scriptcollection_folder = os.path.join(repository_folder, ".ScriptCollection")
-        GeneralUtilities.ensure_directory_exists(scriptcollection_folder)
-        gitignore_file = os.path.join(scriptcollection_folder, ".gitignore")
-        lines = [
-            "/Cache/",
-        ]
-        GeneralUtilities.write_lines_to_file(gitignore_file, lines)
 
     @GeneralUtilities.check_arguments
     def ensure_line_is_in_gitignore(self, repository_folder: str, line: str) -> None:
