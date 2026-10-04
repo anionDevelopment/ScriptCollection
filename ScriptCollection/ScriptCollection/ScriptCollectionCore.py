@@ -3093,22 +3093,6 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         return not version_string.endswith(".0")
 
     @GeneralUtilities.check_arguments
-    def get_version_from_gitversion(self, folder: str, variable: str,use_cache:bool=True) -> str:
-        git_folder:str=self.get_real_git_folder(folder)
-        cache_folder:str=os.path.join(git_folder,"gitversion_cache")
-        gitversion_timeout_in_seconds: int = 900
-        if not use_cache:
-            GeneralUtilities.ensure_directory_does_not_exist(cache_folder)
-            gitversion_timeout_in_seconds=3600
-        # /nofetch and /nonormalize: avoid network calls / branch normalization (no auth, no DNS, deterministic in containers and offline).
-        # called twice as workaround for issue 1877 in gitversion ( https://github.com/GitTools/GitVersion/issues/1877 )
-        # timeoutInSeconds: gitversion finishes within seconds on a normal repository; enforce a timeout so a hanging gitversion-process (observed in some build-containers) aborts the build instead of waiting forever.
-        result = self.run_program_argsasarray("gitversion", ["/nofetch", "/nonormalize", "/showVariable", variable], folder, timeoutInSeconds=gitversion_timeout_in_seconds)
-        result = self.run_program_argsasarray("gitversion", ["/nofetch", "/nonormalize", "/showVariable", variable], folder, timeoutInSeconds=gitversion_timeout_in_seconds)
-        result = GeneralUtilities.strip_new_line_character(result[1])
-        return result
-
-    @GeneralUtilities.check_arguments
     def generate_certificate_authority(self, folder: str, name: str, subj_c: str, subj_st: str, subj_l: str, subj_o: str, subj_ou: str, days_until_expire: int = None, password: str = None) -> None:
         if days_until_expire is None:
             days_until_expire = 1825

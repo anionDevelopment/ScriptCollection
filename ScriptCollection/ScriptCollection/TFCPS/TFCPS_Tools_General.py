@@ -2058,41 +2058,6 @@ class TFCPS_Tools_General:
         ignoreddependencies = root.xpath('//cps:codeunit/cps:properties/cps:updatesettings/cps:ignoreddependencies/cps:ignoreddependency', namespaces=namespaces)
         result = [x.text.replace("\\n", GeneralUtilities.empty_string).replace("\\r", GeneralUtilities.empty_string).replace("\n", GeneralUtilities.empty_string).replace("\r", GeneralUtilities.empty_string).strip() for x in ignoreddependencies]
         return result
-    
-    @GeneralUtilities.check_arguments
-    def update_dependencies_of_package_json(self, folder_of_package_json: str) -> None:#TODO this should probably be implemented in TFCPS_CodeUnitSpecific_NodeJS_Functions
-        #TODO move this to TFCPS_CodeUnitSpecific_NodeJS_Functions
-        if self.is_codeunit_folder(folder_of_package_json):
-            ignored_dependencies = self.get_dependencies_which_are_ignored_from_updates(folder_of_package_json)
-        else:
-            ignored_dependencies = []
-        # TODO consider ignored_dependencies
-        result = self.__sc.run_with_epew("npm", "outdated", folder_of_package_json, throw_exception_if_exitcode_is_not_zero=False)
-        if result[0] == 0:
-            return  # all dependencies up to date
-        elif result[0] == 1:
-            package_json_content = None
-            package_json_file = f"{folder_of_package_json}/package.json"
-            with open(package_json_file, "r", encoding="utf-8") as package_json_file_object:
-                package_json_content = json.load(package_json_file_object)
-                lines = GeneralUtilities.string_to_lines(result[1])[1:][:-1]
-                for line in lines:
-                    normalized_line_splitted = ' '.join(line.split()).split(" ")
-                    package = normalized_line_splitted[0]
-                    latest_version = normalized_line_splitted[3]
-                    # A package.json does not have to declare both sections (a project which only delivers
-                    # runtime-dependencies has no "devDependencies" at all), so the sections are looked up
-                    # instead of being accessed directly.
-                    for dependency_section in ["dependencies", "devDependencies"]:
-                        if dependency_section in package_json_content and package in package_json_content[dependency_section]:
-                            package_json_content[dependency_section][package] = latest_version
-            with open(package_json_file, "w", encoding="utf-8") as package_json_file_object:
-                json.dump(package_json_content, package_json_file_object, indent=4)
-            GeneralUtilities.write_text_to_file(package_json_file, GeneralUtilities.read_text_from_file(package_json_file).replace("\r", ""))
-            self.do_npm_install(folder_of_package_json, True,True)#TODO use_cache might be dangerous here
-        else:
-            self.__sc.log.log("Update dependencies resulted in an error.", LogLevel.Error)
-
 
     @GeneralUtilities.check_arguments
     def get_resource_from_submodule_with_default_ignore_pattern(self,codeunit_folder:str,submodule_name:str,resource_name:str):

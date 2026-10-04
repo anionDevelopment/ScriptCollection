@@ -168,7 +168,3 @@ Three things which are worth knowing:
 - **The line-endings of the file follow the repository.** A restore on windows writes it with CRLF while the build
   normalizes it, so the first diff after a manual restore can look like the whole file changed. `git diff
   --ignore-cr-at-eol` shows what actually differs.
-
-## TODO
-
-- Remove `TFCPS_Tools_General.update_dependencies_of_package_json`: it is a NodeJS/npm-specific leftover which parses the stdout of `npm outdated` and writes the found "latest"-versions straight into `package.json`, without any echolon-distinction and without honoring the ignored dependencies of the codeunit (see its own `# TODO consider ignored_dependencies` comment). It has no callers anymore: `TFCPS_CodeUnitSpecific_NodeJS` implements `get_dependencies`/`get_available_versions`/`set_dependency_version` and updates its dependencies via the generic `TFCPS_CodeUnitSpecific_Base.update_dependencies_with_specific_echolon`, which skips the dependencies listed in `cps:ignoreddependencies/cps:ignoreddependency` of the codeunit-file.
