@@ -130,7 +130,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.sc.ensure_line_is_in_gitignore(self.repository, "Other/Resources/Artifacts")
 
             #ensure <repo>/.ScriptCollection/.gitignore is set up (ignores the cache-folder so cache-files never show up as uncommitted changes)
-            self.sc.ensure_scriptcollection_gitignore_is_setup(self.repository)
+            self.__ensure_scriptcollection_gitignore_is_setup(self.repository)
+
+            #ensure <repo>/.gitignore is set up (ignores the cache-folder so cache-files never show up as uncommitted changes)
+            self.__ensure_global_gitignore_is_setup(self.repository)
+
+            #validate the openspec-specifications if openspec is set up in the repository
+            self.__validate_openspec()
 
             self.sc.log.log(f"Start building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(start_time,False)}. (Target environment-type: {self.target_environment_type})")
 
@@ -142,6 +148,9 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             GeneralUtilities.ensure_file_exists(git_commit_message_cache_file)
             git_commit_message_cache_file=os.path.join(cache_folder,"GitCommitDescriptionDraft.txt")
             GeneralUtilities.ensure_file_exists(git_commit_message_cache_file)
+
+            notes_folder=os.path.join(self.repository,".notes")
+            GeneralUtilities.ensure_directory_exists(notes_folder)
 
             self.tfcps_tools_general.ensure_required_environment_variables_are_set(self.repository)
 
@@ -224,6 +233,28 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         duration=end_time-start_time
         self.sc.log.log(f"Finished building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(end_time,False)}. (Duration: {GeneralUtilities.timedelta_to_simple_string(duration)})")
         self.sc.log.log(GeneralUtilities.get_line())
+
+
+    @GeneralUtilities.check_arguments
+    def __ensure_scriptcollection_gitignore_is_setup(self, repository_folder: str) -> None:
+        """Ensures that "<repository>/.ScriptCollection/.gitignore" exists and contains the expected entries."""
+        scriptcollection_folder = os.path.join(repository_folder, ".ScriptCollection")
+        GeneralUtilities.ensure_directory_exists(scriptcollection_folder)
+        gitignore_file = os.path.join(scriptcollection_folder, ".gitignore")
+        lines = [
+            "/Cache/",
+        ]
+        GeneralUtilities.write_lines_to_file(gitignore_file, lines)
+
+    @GeneralUtilities.check_arguments
+    def __ensure_global_gitignore_is_setup(self, repository_folder: str) -> None:
+        """Ensures that "<repository>/.gitignore" exists and contains the expected entries."""
+        gitignore_file = os.path.join(repository_folder, ".gitignore")
+        lines = [
+            "/.notes/",
+        ]
+        GeneralUtilities.write_lines_to_file(gitignore_file, lines)
+
 
     @GeneralUtilities.check_arguments
     def __create_artifacts_archive(self, codeunits:list[str]) -> str:
@@ -329,6 +360,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if os.path.isfile(openspec_configuration_file):
             self.sc.log.log("Update openspec-instruction-files...")
             self.sc.run_with_epew("openspec", "update --force", self.repository)
+
+    @GeneralUtilities.check_arguments
+    def __validate_openspec(self) -> None:
+        openspec_configuration_file: str = os.path.join(self.repository, "openspec", "config.yaml")
+        if os.path.isfile(openspec_configuration_file):
+            self.sc.log.log("Validate openspec-specifications...")
+            self.sc.run_with_epew("openspec", "validate --all --strict", self.repository)
 
     @GeneralUtilities.check_arguments
     def build_codeunits_in_container(self,base_mount_folder:str) -> tuple[bool, str]:
