@@ -1,0 +1,4 @@
+Product: ScriptCollection
+Version: 4.4.38
+Artifacts-archive-hash: cc3942883ac02188ad1ead0f74b58cf92e420ea84fd25757d28dced55cffb426
+Creation-timestamp: 2026-09-27 21:33:19 +00:00
