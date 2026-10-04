@@ -31,7 +31,9 @@ build-step) rather than delegating to a permanently-running task-runner.
 ## Flow
 
 1. The client packs the **whole repository** (including the `.git`-folder, uncommitted changes and git-ignored files) into
-   a tar-archive and sends it over HTTPS to the runner that provides the required operating-system.
+   a tar-archive and sends it to the URL of the runner that provides the required operating-system. ScriptCollection does
+   not enforce a scheme: the transfer uses HTTPS only if the configured URL uses it and the runner serves TLS (the runner
+   serves plain http when it is started without a certificate, for example behind a TLS-terminating reverse-proxy).
    - git-ignored files and uncommitted changes are included on purpose: they are sometimes required for the build (for
      example signing-certificates for windows-builds). The runner is part of the build-infrastructure and is trusted exactly
      like the machine/container on which `scbuildcodeunits` runs and from which such secrets originate; therefore there is
@@ -109,13 +111,19 @@ files which are not in git and can therefore not be restored, and on Windows it 
 of the codeunit runs in a folder below the codeunit, a folder a process runs in can not be removed there, so the deletion
 fails in the middle and leaves the codeunit incomplete.
 
-## Why windows-, macos-, ios- and appbundle-builds always use a runner
+## Why windows-, macos-, ios- and appbundle-builds use a runner
 
-The flutter-codeunit delegates `windows`-, `macos`-, `ios`- and `appbundle`-builds to a runner **unconditionally** - even a
-windows-build started on a Windows-developer-client is delegated to the Windows-runner. The reason is **uniform builds**:
+The flutter-codeunit delegates `windows`-, `macos`-, `ios`- and `appbundle`-builds to a runner - even a windows-build started
+on a Windows-developer-client is delegated to the Windows-runner if a runner is configured. The reason is **uniform builds**:
 every build of a given target is produced in the same, defined environment, independent of which developer-machine or
 pipeline triggered it. This avoids subtle differences between locally-built and pipeline-built artifacts. For `appbundle`
 there is the additional reason that the Android-SDK/NDK is not installed anywhere except on the Android-runner.
+
+The one exception is the `windows`-target: if no runner is configured at all, the process itself runs on Windows (a build
+in a container never does) and the local prerequisites are available (`flutter` and a Visual-Studio-installation with the
+C++-toolchain, detected via `vswhere`), the windows-target is built locally instead, with a warning that this build is not
+produced in the uniform environment of a runner. Otherwise a windows-build without a configured runner fails like the other
+targets.
 
 ## Runner-configuration (client-side)
 
@@ -127,7 +135,8 @@ NuGet-sources for C#-dependencies are configured):
 2. **Environment-variables** (primarily for the build-pipeline): `Runner_<name>_URL`, `Runner_<name>_Username` and
    `Runner_<name>_Password`.
 
-If neither source defines a runner, the remote-build fails with an error. The configuration does not state which runner
+If neither source defines a runner, the remote-build fails with an error (except for the local windows-build described
+above). The configuration does not state which runner
 provides which operating-system; instead each configured runner is queried (via its `GET /os`-endpoint) and the one matching
 the required operating-system is used.
 

@@ -339,7 +339,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         - build inside the container ('scbuildcodeunitsc' or a build-pipeline): 'CustomPreCodeUnitBuildScriptInContainer.py', located in
           the folder returned by TFCPS_Tools_General.get_custom_scripts_folder_for_container(). It is searched in the folder into which
           'scbuildcodeunitsc' mounts that whole folder and - if it is not there - directly in the configuration-folder, because a
-          build-runner usually gets the whole configuration-folder mounted instead (see the article 'Build-runner-configuration'). The
+          build-runner gets the TFCPS-folder of its configuration-folder mounted there instead (see the article 'Build-runner-configuration'). The
           script which the host itself runs before it starts the container is 'CustomPreCodeUnitBuildScriptForContainer.py' and is
           therefore run there and not here."""
         if self.sc.is_runnning_in_container():

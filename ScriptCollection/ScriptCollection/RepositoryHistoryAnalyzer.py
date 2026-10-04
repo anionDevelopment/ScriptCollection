@@ -63,9 +63,12 @@ class RepositoryHistoryAnalyzer:
 
     @GeneralUtilities.check_arguments
     def __get_commits(self, repository_path: str) -> list:
-        """Returns a list of (committer-name, committer-date)-tuples for all commits, in the committer-date's
-        own recorded utc-offset."""
-        result = self.sc.run_program_argsasarray("git", ["log", "--pretty=format:%cI%x09%cn"], repository_path)
+        """Returns a list of (committer-name, date)-tuples for all commits, with the date in its own recorded utc-offset.
+        The name is taken with "%aN" (author-name with .mailmap applied) because that is exactly the identity which
+        "git shortlog" (used by get_committers) groups by; "%cn" (the git-committer) would introduce identities like
+        "GitHub" for commits merged via the web-interface which do not appear in the committer-list. The date is the
+        author-date for the same reason."""
+        result = self.sc.run_program_argsasarray("git", ["log", "--pretty=format:%aI%x09%aN", "HEAD"], repository_path)
         commits = []
         for line in result[1].splitlines():
             if not GeneralUtilities.string_has_content(line):

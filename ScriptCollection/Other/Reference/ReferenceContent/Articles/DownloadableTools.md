@@ -7,17 +7,17 @@ Instead of requiring them to be installed system-wide, ScriptCollection download
 
 For each of these tools there are two kinds of functions on `TFCPS_Tools_General`:
 
-- An `ensure_<tool>_is_available(...)`-function that makes sure the tool is present (downloading it if necessary) and returns the path to the tool so it can be **used**.
+- An `ensure_<tool>_is_available(...)`-function that makes sure the tool is present (downloading it if necessary) so it can be **used**. Most of these functions return the path to the tool. The exceptions are `ensure_mediamtx_is_available`, which extracts MediaMTX for all supported platforms into `Other/Resources/MediaMTX_<platform>/MediaMTX` below the given (codeunit-)folder and returns nothing, and `ensure_trufflehog_is_available`, which returns a dictionary that maps the operating-system (`Windows`, `Linux`, `MacOS`) to the path of the executable.
 - A `download_<tool>(enforce_update=False)`-function that only **downloads** the tool into the global cache (all platforms), without using it.
 
-The `ensure_*`-functions are called automatically during a build when the respective tool is needed, so usually you do not have to call anything manually.
+The `ensure_*`-functions are called by the functions which use the respective tool (for example the merge of SBOM-files calls `ensure_cyclonedxcli_is_available`), so usually you do not have to call anything manually. `ensure_mediamtx_is_available` and `ensure_trufflehog_is_available` are not called by any other function of ScriptCollection: TruffleHog is not used by any build, it is only downloaded into the cache (by `download_trufflehog`).
 
 ## Available tools
 
 | Tool | Download-function | Use-function | Source |
 |------|-------------------|--------------|--------|
 | CycloneDX-CLI | `download_cyclonedx` | `ensure_cyclonedxcli_is_available` | GitHub `CycloneDX/cyclonedx-cli` |
-| JRE (Eclipse-Temurin) | `download_jre` | `ensure_jre_is_available` | GitHub `adoptium/temurin21-binaries` |
+| JRE (Eclipse-Temurin) | `download_jre` | `ensure_jre_is_available` | GitHub `adoptium/temurin<major-version>-binaries` |
 | MediaMTX | `download_mediamtx` | `ensure_mediamtx_is_available` | GitHub `bluenviron/mediamtx` |
 | TruffleHog | `download_trufflehog` | `ensure_trufflehog_is_available` | GitHub `trufflesecurity/trufflehog` |
 | OpenAPIGenerator | `download_openapigenerator` | `ensure_openapigenerator_is_available` | Maven-Central (`org.openapitools`) |

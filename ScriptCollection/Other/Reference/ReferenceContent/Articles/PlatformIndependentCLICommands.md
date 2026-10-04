@@ -82,7 +82,7 @@ This is especially useful in cases where:
 
 - the same maintenance-script has to run on developer-laptops (mixed OSes) and the CI-runner (Linux container),
 - a Taskfile / Makefile needs to call file-operations and stay cross-platform without `if`-branches per OS,
-- a Python-program uses `ScriptCollectionCore` to drive operations on a **remote** machine via SSH (or any other `ProgramRunner`); the corresponding `ScriptCollectionCore`-method then runs the matching `sc*`-command over the remote channel transparently.
+- a Python-program uses `ScriptCollectionCore` to drive operations on a **remote** machine via an own `ProgramRunner` (a subclass of `ProgramRunnerBase` whose `will_be_executed_locally` returns `False`; the runners which ScriptCollection contains, `ProgramRunnerPopen` and `ProgramRunnerSudo`, both execute locally); the corresponding `ScriptCollectionCore`-method then runs the matching `sc*`-command over that runner transparently.
 
 ## Counterpart in `ScriptCollectionCore`
 
@@ -93,7 +93,7 @@ Other methods with a matching command (for example `get_file_content` or `file_c
 
 ```python
 sc = ScriptCollectionCore()
-# Local: direct file IO. Remote (e.g. via SSH-runner): runs the matching sc*-command over the channel.
+# Local: direct file IO. Remote (via an own ProgramRunner): runs the matching sc*-command over that runner.
 if sc.is_file("/etc/hosts"):
     sc.set_file_content("/etc/hosts", new_hosts_content)
 ```

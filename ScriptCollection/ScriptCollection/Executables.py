@@ -1294,7 +1294,7 @@ def ShowVersion() -> int:
 
 
 def ShowProjectVersion() -> int:
-    parser = argparse.ArgumentParser(description="Prints the semver-version of a project as calculated by gitversion.")
+    parser = argparse.ArgumentParser(description="Prints the semver-version of a project, calculated from the latest git-tag (\"v<major>.<minor>.<patch>\") and the name of the current branch.")
     parser.add_argument('-r', '--repository', required=False, default=None, help="Path to the repository. Defaults to the current working directory.")
     args = parser.parse_args()
     repository = GeneralUtilities.resolve_relative_path(args.repository, os.getcwd()) if args.repository is not None else os.getcwd()

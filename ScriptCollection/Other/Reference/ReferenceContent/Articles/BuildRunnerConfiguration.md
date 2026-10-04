@@ -47,7 +47,7 @@ Use a **relative** path for a secret-file (it is resolved against `<configuratio
 
 ### Mount only the two subfolders, never the whole folder
 
-Only `TFCPS` and `GlobalCache/OCIImages` are mounted (read-only) into the job-container, each to its own target-path below `/root/.ScriptCollection` - not the whole folder to `/root/.ScriptCollection`. This is the same thing `scbuildcodeunits -c` does on a developer-machine.
+Only `TFCPS` and `GlobalCache/OCIImages` are mounted (read-only) into the job-container, each to its own target-path below `/root/.ScriptCollection` - not the whole folder to `/root/.ScriptCollection`. This follows the same approach as `scbuildcodeunits -c` on a developer-machine, which also mounts only these parts of the configuration-folder read-only and not the whole folder (there to own paths below `/Workspace/ScriptCollectionConfiguration`, and from `GlobalCache/OCIImages` only the file `ImageRegistries.csv`).
 
 The reason is the rest of `GlobalCache`: the SCBuilder-image already contains a prefilled tool-cache in `/root/.ScriptCollection/GlobalCache/Tools` (filled by `scdownloadcachabletools` when the image is built). A mount of the whole folder to `/root/.ScriptCollection` hides that cache. A build which then needs one of the cached tools tries to download it into `GlobalCache/Tools` and fails with `Read-only file system`. This only happens for builds which use the tool-cache at all - for example the merge of the bill-of-materials of a codeunit with the ones of its dependent codeunits, the generation of code from an API-specification or the build of an Android-app-bundle. A repository whose builds do not use the tool-cache works with both kinds of mounts, which is why the problem does not show up on every runner.
 
@@ -136,7 +136,7 @@ The mount is needed for a repository which declares required environment-variabl
 
 ## Telling a build that it runs on a build-server
 
-A build-server deliberately provides less than a developer-machine: it has the configuration-folder, but not the developer's personal tooling and credential-files. A preparation-step which uses those has to be skipped there instead of failing - and a build can not derive that situation on its own, because a build which was started with `scbuildcodeunits -c` on a developer-machine also runs in a container and is otherwise indistinguishable from a job-container of a runner. It is therefore stated explicitly, with the environment-variable `IS_RUNNING_IN_SERVER_PIPELINE`:
+A build-server deliberately provides less than a developer-machine: it has the configuration-folder, but not the developer's personal tooling and credential-files. A preparation-step which uses those has to be skipped there instead of failing - and a build can not derive that situation on its own, because a build which was started with `scbuildcodeunits -c` on a developer-machine also runs in a container and is otherwise indistinguishable from a job-container of a runner. It is therefore stated explicitly, with the environment-variable `IS_RUNNING_IN_SERVER_PIPELINE`. ScriptCollection itself does not evaluate this variable; it is a convention between the build-infrastructure and the repository-specific scripts (for example a custom pre-codeunit-build-script or `PrepareBuildCodeunits.py`) which have to behave differently on a build-server:
 
 ```yaml
 IS_RUNNING_IN_SERVER_PIPELINE: "true"
@@ -144,7 +144,7 @@ IS_RUNNING_IN_SERVER_PIPELINE: "true"
 
 It is set in three places, which do not conflict because they all set the same value:
 
-- in the pipeline-definition of the repository (`env:` of the workflow respectively `variables:` of `.gitlab-ci.yml`) - this is where the generated pipeline-files put it,
+- in the pipeline-definition of the repository (`env:` of the workflow respectively `variables:` of `.gitlab-ci.yml`) - the build-pipeline of ScriptCollection itself (`.github/workflows/buildpipeline.yml`) sets it there,
 - by the GitLab-runner, for every job it starts (`environment` in its `config.toml`, see above),
 - by `SCGitHubRunner`, for every job-container it starts (its container-hook sets it unconditionally).
 
