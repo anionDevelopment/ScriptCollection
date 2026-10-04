@@ -135,6 +135,9 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             #ensure <repo>/.gitignore is set up (ignores the cache-folder so cache-files never show up as uncommitted changes)
             self.__ensure_global_gitignore_is_setup(self.repository)
 
+            #validate the openspec-specifications if openspec is set up in the repository
+            self.__validate_openspec()
+
             self.sc.log.log(f"Start building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(start_time,False)}. (Target environment-type: {self.target_environment_type})")
 
             #ensure common cache-files are available
@@ -357,6 +360,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if os.path.isfile(openspec_configuration_file):
             self.sc.log.log("Update openspec-instruction-files...")
             self.sc.run_with_epew("openspec", "update --force", self.repository)
+
+    @GeneralUtilities.check_arguments
+    def __validate_openspec(self) -> None:
+        openspec_configuration_file: str = os.path.join(self.repository, "openspec", "config.yaml")
+        if os.path.isfile(openspec_configuration_file):
+            self.sc.log.log("Validate openspec-specifications...")
+            self.sc.run_with_epew("openspec", "validate --all --strict", self.repository)
 
     @GeneralUtilities.check_arguments
     def build_codeunits_in_container(self,base_mount_folder:str) -> tuple[bool, str]:

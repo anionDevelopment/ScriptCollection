@@ -565,6 +565,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
     <PreserveCompilationContext>false<\\/PreserveCompilationContext>
     <GenerateRuntimeConfigurationFiles>true<\\/GenerateRuntimeConfigurationFiles>
     <RestorePackagesWithLockFile>true<\\/RestorePackagesWithLockFile>
+    <NuGetAuditMode>all<\\/NuGetAuditMode>
     <Copyright>([^<]+)<\\/Copyright>
     <Description>{codeunit_description_regex}<\\/Description>
     <PackageProjectUrl>https:\\/\\/([^<]+)<\\/PackageProjectUrl>
@@ -632,6 +633,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
     <PreserveCompilationContext>false<\\/PreserveCompilationContext>
     <GenerateRuntimeConfigurationFiles>true<\\/GenerateRuntimeConfigurationFiles>
     <RestorePackagesWithLockFile>true<\\/RestorePackagesWithLockFile>
+    <NuGetAuditMode>all<\\/NuGetAuditMode>
     <Copyright>([^<]+)<\\/Copyright>
     <Description>{codeunit_name_regex}Tests is the test-project for {codeunit_name_regex}\\.<\\/Description>
     <PackageProjectUrl>https:\\/\\/([^<]+)<\\/PackageProjectUrl>
@@ -783,12 +785,19 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
 
         self.__remove_unrelated_package_from_testcoverage_file(target_file, codeunit_name)
         root: etree._ElementTree = etree.parse(target_file)
-        source_base_path_in_coverage_file: str = root.xpath("//coverage/sources/source/text()")[0].replace("\\", "/")
-        content = GeneralUtilities.read_text_from_file(target_file)
-        GeneralUtilities.assert_condition(source_base_path_in_coverage_file.startswith(repository_folder) or repository_folder.startswith(source_base_path_in_coverage_file), f"Unexpected path for coverage. Sourcepath: \"{source_base_path_in_coverage_file}\"; repository: \"{repository_folder}\"")
-        content = re.sub('\\\\', '/', content)
-        content = re.sub("filename=\"([^\"]+)\"", lambda match: self.__standardized_tasks_run_testcases_for_dotnet_project_helper(source_base_path_in_coverage_file, codeunit_folder, match), content)
-        GeneralUtilities.write_text_to_file(target_file, content)
+        source_paths_in_coverage_file: list = root.xpath("//coverage/sources/source/text()")
+        if len(source_paths_in_coverage_file) == 0:
+            # The coverage-report does not contain any source-entry. This happens when the collector produced an empty
+            # report (for example when no assembly was instrumented). There are then no filename-attributes which point
+            # into the source-tree, so the path-rewriting below is skipped instead of failing with an index-error.
+            self._protected_sc.log.log(f"The test-coverage-report \"{target_file}\" does not contain any source-entry, so no coverage seems to have been collected for codeunit \"{codeunit_name}\". The coverage-paths are therefore not rewritten.", LogLevel.Warning)
+        else:
+            source_base_path_in_coverage_file: str = source_paths_in_coverage_file[0].replace("\\", "/")
+            content = GeneralUtilities.read_text_from_file(target_file)
+            GeneralUtilities.assert_condition(source_base_path_in_coverage_file.startswith(repository_folder) or repository_folder.startswith(source_base_path_in_coverage_file), f"Unexpected path for coverage. Sourcepath: \"{source_base_path_in_coverage_file}\"; repository: \"{repository_folder}\"")
+            content = re.sub('\\\\', '/', content)
+            content = re.sub("filename=\"([^\"]+)\"", lambda match: self.__standardized_tasks_run_testcases_for_dotnet_project_helper(source_base_path_in_coverage_file, codeunit_folder, match), content)
+            GeneralUtilities.write_text_to_file(target_file, content)
         self.run_testcases_common_post_task(repository_folder, codeunit_name, True, self.get_target_environment_type())
         artifacts_folder = os.path.join(repository_folder, codeunit_name, "Other", "Artifacts")
         for subfolder in GeneralUtilities.get_direct_folders_of_folder(artifacts_folder):
