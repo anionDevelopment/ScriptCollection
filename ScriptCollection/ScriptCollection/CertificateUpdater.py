@@ -58,7 +58,7 @@ class CertificateUpdater:
 
     @GeneralUtilities.check_arguments
     def __replace_symlink_by_file(self, domain: str, filename: str, index: int) -> None:
-        # ".../live/example.com/cert.pem" is a symlink but should replaced by a copy of ".../archive/example.com/cert.42pem"
+        # ".../live/example.com/cert.pem" is a symlink but should be replaced by a copy of ".../archive/example.com/cert42.pem"
         archive_file = os.path.join(self.__letsencrypt_archive_folder, domain, filename+str(index)+".pem")
         live_folder = os.path.join(self.__letsencrypt_live_folder, domain)
         live_filename = filename+".pem"
@@ -68,7 +68,7 @@ class CertificateUpdater:
 
     @GeneralUtilities.check_arguments
     def __replace_file_by_symlink(self, domain: str, filename: str, index: int) -> None:
-        # new ".../live/example.com/cert.pem" is a file but should replaced by a symlink which points to ".../archive/example.com/cert42.pem"
+        # new ".../live/example.com/cert.pem" is a file but should be replaced by a symlink which points to ".../archive/example.com/cert42.pem"
         live_folder = os.path.join(self.__letsencrypt_live_folder, domain)
         live_filename = filename+".pem"
         self.__sc.run_program("rm", live_filename, live_folder, throw_exception_if_exitcode_is_not_zero=True)

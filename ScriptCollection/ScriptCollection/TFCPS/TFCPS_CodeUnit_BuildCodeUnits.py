@@ -253,7 +253,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         gitignore_file = os.path.join(repository_folder, ".gitignore")
         GeneralUtilities.ensure_file_exists(gitignore_file)
         existing_lines = GeneralUtilities.read_lines_from_file(gitignore_file)
-        if not "/.notes/" in existing_lines:
+        if "/.notes/" not in existing_lines:
             existing_lines.append("/.notes/")
             GeneralUtilities.write_lines_to_file(gitignore_file, existing_lines)
         self.sc.normalize_invisible_characters(gitignore_file)
@@ -325,7 +325,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             result = result+["--additionalargumentsfile", self.additionalargumentsfile]
         if not self.__use_cache:
             if self.sc.git_repository_has_uncommitted_changes(repository):
-                self.sc.log.log("No-cache-option can not be applied because there are uncommited changes in the repository.", LogLevel.Warning)
+                self.sc.log.log("No-cache-option can not be applied because there are uncommitted changes in the repository.", LogLevel.Warning)
             else:
                 result = result+["--nocache"]
         return result
@@ -339,7 +339,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         - build inside the container ('scbuildcodeunitsc' or a build-pipeline): 'CustomPreCodeUnitBuildScriptInContainer.py', located in
           the folder returned by TFCPS_Tools_General.get_custom_scripts_folder_for_container(). It is searched in the folder into which
           'scbuildcodeunitsc' mounts that whole folder and - if it is not there - directly in the configuration-folder, because a
-          build-runner usually gets the whole configuration-folder mounted instead (see the article 'Build-runner-configuration'). The
+          build-runner gets the TFCPS-folder of its configuration-folder mounted there instead (see the article 'Build-runner-configuration'). The
           script which the host itself runs before it starts the container is 'CustomPreCodeUnitBuildScriptForContainer.py' and is
           therefore run there and not here."""
         if self.sc.is_runnning_in_container():
@@ -373,6 +373,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
     @GeneralUtilities.check_arguments
     def build_codeunits_in_container(self,base_mount_folder:str) -> tuple[bool, str]:
+        """Runs scbuildcodeunits (with the options of this object) inside the SCBuilder-image and returns whether it succeeded and
+        its output. A failing build is reported by the result and not by an exception.
+        base_mount_folder is mounted into the container and must be the repository itself or a folder which contains it (for
+        example to make the real git-folder of a submodule available); otherwise a ValueError is raised.
+        Before the container is started the optional script "CustomPreCodeUnitBuildScriptForContainer.py" of the configuration-folder
+        is run on the host and the newest ScriptCollection is installed inside the container. See the article "Configuration-folder"
+        of the reference for what is mounted into the container."""
         container_base_mount_folder, container_repository_folder = self.__get_folders_inside_container(base_mount_folder)
 
         #build the scbuildcodeunits-arguments based on the current state (analogous to the arguments accepted by the scbuildcodeunits-executable). each token must be a separate argument because run_program_argsasarray passes every list-element verbatim and does not split on spaces.
@@ -626,7 +633,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             )
         diagram_svg_file=os.path.join(self.repository,"Other","Reference","Technical","Diagrams",f"{filenamebase}.svg")
         GeneralUtilities.ensure_file_exists(diagram_svg_file)
-        GeneralUtilities.assert_condition(not self.sc.file_is_git_ignored(f"Other/Reference/Technical/Diagrams/{filenamebase}.svg",self.repository),f"Other/Reference/Technical/Diagrams/{filenamebase}.svg must not be git-ignored")#because it should be referencable in markdown-files and viewable without building the codeunits.
+        GeneralUtilities.assert_condition(not self.sc.file_is_git_ignored(f"Other/Reference/Technical/Diagrams/{filenamebase}.svg",self.repository),f"Other/Reference/Technical/Diagrams/{filenamebase}.svg must not be git-ignored")#because it should be referenceable in markdown-files and viewable without building the codeunits.
         self.sc.generate_chart_diagram(diagram_definition_file,os.path.basename(diagram_svg_file))
         self.sc.add_tooltips_to_chart_diagram(diagram_svg_file)#so the exact values of a data-point are visible when the svg-file is opened directly in a browser
         self.sc.format_xml_file(diagram_svg_file)
@@ -736,6 +743,12 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
     @GeneralUtilities.check_arguments
     def update_dependencies(self) -> None:
+        """Updates the dependencies of all codeunits of the repository by building them with a hook which updates the dependencies
+        of each codeunit before it is built. The repository must not have uncommitted changes (otherwise a ValueError is raised).
+        If the update changed anything, a changelog-entry for the current project-version is created if it does not exist yet, all
+        codeunits are built again to verify that they are buildable with all updates together, and all changes are committed
+        ("Updated dependencies"). A failing build raises an exception and leaves the changes uncommitted.
+        Side-effect: the year in the license-file is updated as well."""
         repository=self.repository
         self.sc.log.log("Update dependencies for product...")
         self.update_year_in_license_file()

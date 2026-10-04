@@ -286,18 +286,18 @@ class OCIImageManager:
     
     @GeneralUtilities.check_arguments
     def get_available_tags_of_image(self,image_name:str,registry_address:str)->list[str]:
-        """registry_address must have one of theese formats: "myregistry.example.com/debian" or "docker.io/debian" or "docker.io/myuser/debian".
+        """registry_address must have one of these formats: "myregistry.example.com/debian" or "docker.io/debian" or "docker.io/myuser/debian".
         returns something like ["13.2-slim", "13.2", "13.3-slim", "13.3"]."""
         return self.get_image_handler(image_name).get_available_tags_of_image(image_name,registry_address)
 
     @GeneralUtilities.check_arguments
     def tag_to_version(self,image_name:str,tag:str)->Version:
-        """registry_address must have one of theese formats: "myregistry.example.com/debian" or "docker.io/debian" or "docker.io/myuser/debian"."""
+        """registry_address must have one of these formats: "myregistry.example.com/debian" or "docker.io/debian" or "docker.io/myuser/debian"."""
         return self.get_image_handler(image_name).tag_to_version(image_name, tag)
 
     @GeneralUtilities.check_arguments
     def version_to_tag(self,image_name:str,version:Version)->str:
-        """registry_address must have one of theese formats: "myregistry.example.com/debian" or "docker.io/debian" or "docker.io/myuser/debian".
+        """registry_address must have one of these formats: "myregistry.example.com/debian" or "docker.io/debian" or "docker.io/myuser/debian".
         returns something like "13.3-slim".
         If there are multiple tags available for a certain version then the image-handler decides which one will be returned."""
         return self.get_image_handler(image_name).version_to_tag(image_name,version)

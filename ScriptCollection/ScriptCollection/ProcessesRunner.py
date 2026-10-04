@@ -2,7 +2,7 @@ import psutil
 from .GeneralUtilities import GeneralUtilities
 from .ScriptCollectionCore import ScriptCollectionCore
 
-# runs multiple processes in parallel and terminate all if at least one is terminated
+# runs multiple processes in parallel and terminates all if at least one is terminated
 
 
 class ProcessStartInformation:
@@ -34,7 +34,7 @@ class ProcessesRunner:
             for pid in pids:
                 if not psutil.pid_exists(pid):
                     enabled = False
-        # one program terminate so exit and terminate all now
+        # one program terminated so exit and terminate all now
         processes = psutil.process_iter()
         for pid in pids:
             if psutil.pid_exists(pid):

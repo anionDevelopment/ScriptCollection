@@ -1,5 +1,5 @@
 #! /bin/bash
-# This script is intended to be executed inside as user with elevated privileges.
+# This script is intended to be executed as user with elevated privileges.
 
 pushd $(dirname $0)
 

@@ -2,17 +2,17 @@
 
 ![Development-state](https://img.shields.io/badge/development--state-active%20development-brightgreen)
 ![License](https://img.shields.io/badge/license-GPLv3-blue)
-![GitHub last commit](https://img.shields.io/github/last-commit/anionDevevlopment/ScriptCollection)
-![GitHub issues](https://img.shields.io/github/issues-raw/anionDevevlopment/ScriptCollection)
+![GitHub last commit](https://img.shields.io/github/last-commit/anionDevelopment/ScriptCollection)
+![GitHub issues](https://img.shields.io/github/issues-raw/anionDevelopment/ScriptCollection)
 
 ## General
 
 ScriptCollection is the place for reusable scripts.
-The details can be found [here](https://github.com/anionDev/ScriptCollection/tree/main/ScriptCollection).
+The details can be found [here](https://github.com/anionDevelopment/ScriptCollection/tree/main/ScriptCollection).
 
 ## Build
 
-This product requires to use `scbuildcodeunits` implemented/provided by [ScriptCollection](https://github.com/anionDev/ScriptCollection) to build the project.
+This product requires to use `scbuildcodeunits` implemented/provided by [ScriptCollection](https://github.com/anionDevelopment/ScriptCollection) to build the project.
 
 ## Known issues
 
@@ -40,6 +40,40 @@ This product requires to use `scbuildcodeunits` implemented/provided by [ScriptC
   be to override a version which another package pins on purpose. Note that the `npm install --force` which the
   node-codeunit-automation does hides such a conflict instead of reporting it, which is why it only shows up here.
 
+- **`GeneralUtilities.get_version_parts` accepts versions with arbitrary separators.** The dots in its regex
+  `^(\d+).(\d+).(\d+)$` are not escaped, so a string like `1x2x3` is accepted as version `1.2.3` instead of being
+  rejected. The fix is to escape the dots (`\.`).
+
+- **`GeneralUtilities.is_ignored_by_glob_pattern` does not reliably reject paths outside the source-directory.** The
+  check whether the path is located inside the source-directory is a plain `startswith`, so a sibling-folder with a
+  shared prefix (for example `/folder/src2/a.txt` for the source-directory `/folder/src`) passes the check; the
+  relative path then starts with `..` and can still be matched by patterns like `*`. The fix is to compare against the
+  source-directory plus a trailing path-separator, as `ScriptCollectionCore.path_is_allowed_within_base_folder`
+  already does.
+
+- **`GeneralUtilities.replace_underscores_in_text` never terminates for self-referencing replacements.** If a value
+  contains its own placeholder (for example `{"a": "__a__"}`) or two values reference each other, the replacement-loop
+  runs forever.
+
+- **`GeneralUtilities.timedelta_to_simple_string` is wrong for durations of 24 hours or more.** It formats a datetime
+  with `%H`, so the days are dropped and for example 25 hours are shown as `01:00:00`.
+
+- **The error-messages of `translate_safe` name a wrong path.** In the NodeJS- and Flutter-codeunit-specific classes
+  the message says that the translation-service has to be configured in
+  `~/.ScriptCollection/TranslationServiceProperties.txt`, while the file is actually read from
+  `~/.ScriptCollection/GlobalCache/TranslationServiceProperties.txt`.
+
+- **`scprintfilecontent` checks a different file than it reads when `-b` is not the current working-directory.** A
+  relative `-p` is resolved against `-b` for the check whether reading is allowed, but the file is then read relative
+  to the current working-directory. With `-b .` (the default) both are the same; with any other base-folder a file
+  outside the base-folder or inside an excluded folder can be read. The fix is to read the same resolved path which
+  was checked.
+
+- **The testcase `get_latest_version` in `test_GeneralUtilities.py` never runs.** Its name has no `test_`-prefix, and
+  its expectation is wrong as well: it expects `3.1.0` as latest version of `["2.3.4","3.1.0","16.5"]`, although `16.5`
+  is not even a valid version for `get_latest_version`. The intended behavior is covered by the
+  `test_get_latest_version_*`-testcases, so the testcase can be removed.
+
 ## Changelog
 
 See the [Changelog-folder](./Other/Resources/Changelog).
@@ -48,7 +82,7 @@ See the [Changelog-folder](./Other/Resources/Changelog).
 
 Contributions are always welcome.
 
-This product has the contribution-requirements defines by [DefaultOpenSourceContributionProcess](https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/blob/main/Conventions/Contributing/DefaultOpenSourceContributionProcess/DefaultOpenSourceContributionProcess.md).
+This product has the contribution-requirements defined by [DefaultOpenSourceContributionProcess](https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/blob/main/Conventions/Contributing/DefaultOpenSourceContributionProcess/DefaultOpenSourceContributionProcess.md).
 
 ## Repository-structure
 

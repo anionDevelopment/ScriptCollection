@@ -71,6 +71,10 @@ class GeneralUtilities:
 
     @staticmethod
     def check_arguments(function):
+        """Decorator which checks at runtime that the arguments passed to the decorated function match the type-hints of its
+        parameters and raises a TypeError otherwise. None is accepted for every parameter. Parameters without a type-hint and
+        parameters whose type-hint is a generic type (for example list[str] or dict[str, str]) are not checked.
+        The docstring of the decorated function is kept."""
         def __check_function(*args, **named_args):
             # "signature" is used instead of "getfullargspec", because it follows the "__wrapped__"-chain which
             # "functools.wraps" sets. Without that this decorator would only see the wrapper when it is applied
@@ -91,7 +95,7 @@ class GeneralUtilities:
                     # regular TypeError of python, whose message names the expected and the given amount.
                     break
                 if argument is not None:  # Check type of None is not possible. None is always a valid argument-value
-                    if parameters[index] in function.__annotations__:  # Check if a type-hint for parameter exist. If not, no parameter-type available for argument-type-check
+                    if parameters[index] in function.__annotations__:  # Check if a type-hint for parameter exists. If not, no parameter-type available for argument-type-check
                         # Check type of arguments if the type is a generic type seems to be impossible.
                         if not GeneralUtilities.is_generic(function.__annotations__[parameters[index]]):
                             if not isinstance(argument, function.__annotations__[parameters[index]]):
@@ -108,6 +112,8 @@ class GeneralUtilities:
 
     @staticmethod
     def deprecated(reason: str=None):
+        """Decorator which marks a function or a class as deprecated: every call of the function (respectively every instantiation
+        of the class) emits a DeprecationWarning which contains the optional reason. The behavior of the target is not changed."""
         def decorator(target):
             if isinstance(target, type):
                 # target is a class: wrap its __init__ so the warning is emitted on instantiation while target stays a class.
@@ -1098,6 +1104,11 @@ class GeneralUtilities:
     @staticmethod
     @check_arguments
     def read_csv_file(file: str, ignore_first_line: bool = False, treat_number_sign_at_begin_of_line_as_comment: bool = True, trim_values: bool = True, encoding="utf-8", ignore_empty_lines: bool = True, separator_character: str = ";", values_are_surrounded_by_quotes: bool = False) -> list[list[str]]:
+        """Reads a simple csv-file and returns one list of values per used line. ignore_first_line skips the header-line.
+        This is not a full csv-parser: every line is split at every occurrence of separator_character, so a value must not contain
+        the separator (even if it is quoted) and a value can not span several lines. With values_are_surrounded_by_quotes the first
+        and the last character of every value are removed and doubled quotes are unescaped, without checking that they are quotes.
+        By default lines starting with "#" are treated as comments and empty lines are skipped."""
         lines = GeneralUtilities.read_lines_from_file(file, encoding)
 
         if ignore_first_line:
@@ -1319,7 +1330,7 @@ class GeneralUtilities:
 
     @staticmethod
     @check_arguments
-    def input(prompt: str, print_result: bool) -> str:  # This function is a workaround for usescases like python scripts which calls input(...) using epew because then the prompt is not printed by the built-in-input-function.
+    def input(prompt: str, print_result: bool) -> str:  # This function is a workaround for use cases like python scripts which call input(...) using epew because then the prompt is not printed by the built-in-input-function.
         GeneralUtilities.write_message_to_stdout(prompt)
         result: str = input()
         if print_result:
@@ -1714,17 +1725,4 @@ class GeneralUtilities:
             result = sys.executable
         else:
             result = "python"
-        return result
-
-    @staticmethod
-    @check_arguments
-    def get_docker_executable() -> str:
-        configured_file = os.path.join(GeneralUtilities.get_scriptcollection_configuration_folder(), "DockerExecutable.txt")
-        if os.path.isfile(configured_file):
-            result = GeneralUtilities.read_text_from_file(configured_file).strip()
-            GeneralUtilities.assert_condition(os.path.isfile(result), f"Docker executable does not exist: '{result}'")
-        elif GeneralUtilities.string_has_content(sys.executable):
-            result = sys.executable
-        else:
-            result = "docker"
         return result

@@ -1,7 +1,10 @@
 import os
+import json
+import tempfile
+from pathlib import Path
 from datetime import datetime, date, timezone, timedelta
 import unittest
-from ..ScriptCollection.GeneralUtilities import GeneralUtilities
+from ..ScriptCollection.GeneralUtilities import GeneralUtilities, VersionEcholon
 
 
 class GeneralUtilitiesTests(unittest.TestCase):
@@ -349,3 +352,473 @@ class GeneralUtilitiesTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             GeneralUtilities.retry_action_if(action_which_always_fails, lambda exception: str(exception) == "retryable", 5, None, 0)
         assert len(amount_of_executions) == 1
+
+    def test_get_version_parts_returns_the_numeric_parts_of_a_valid_version(self) -> None:
+        # arrange
+        version = "10.20.300"
+
+        # act
+        actual = GeneralUtilities.get_version_parts(version)
+
+        # assert
+        assert actual == (10, 20, 300)
+
+    def test_get_version_parts_rejects_a_version_with_only_two_parts(self) -> None:
+        # arrange
+        version = "1.2"
+
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.get_version_parts(version)
+
+    def test_get_version_parts_rejects_a_version_with_four_parts(self) -> None:
+        # arrange
+        version = "1.2.3.4"
+
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.get_version_parts(version)
+
+    def test_get_version_parts_rejects_a_version_with_a_prefix(self) -> None:
+        # arrange
+        version = "v1.2.3"
+
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.get_version_parts(version)
+
+    def test_get_major_minor_and_patch_part_of_version(self) -> None:
+        # arrange
+        version = "4.5.6"
+
+        # act
+        actual = (GeneralUtilities.get_major_part_of_version(version), GeneralUtilities.get_minor_part_of_version(version), GeneralUtilities.get_patch_part_of_version(version))
+
+        # assert
+        assert actual == (4, 5, 6)
+
+    def test_get_latest_version_compares_versions_numerically_and_not_lexicographically(self) -> None:
+        # arrange
+        versions = ["1.9.0", "1.10.0", "1.2.0"]
+
+        # act
+        actual = GeneralUtilities.get_latest_version(versions)
+
+        # assert
+        assert actual == "1.10.0"
+
+    def test_get_latest_version_rejects_an_empty_list(self) -> None:
+        # arrange
+        versions = []
+
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.get_latest_version(versions)
+
+    def test_choose_version_latest_patch_stays_in_the_current_minor_version(self) -> None:
+        # arrange
+        available_versions = ["1.1.2", "1.1.9", "1.10.5", "1.2.0", "2.0.0"]
+
+        # act
+        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEcholon.LatestPatch)
+
+        # assert
+        # "1.10.5" shares the textual prefix "1.1" but belongs to another minor version, so it must not be chosen.
+        assert actual == "1.1.9"
+
+    def test_choose_version_latest_patch_or_latest_minor_stays_in_the_current_major_version(self) -> None:
+        # arrange
+        available_versions = ["1.1.2", "1.10.5", "2.0.0", "10.0.0"]
+
+        # act
+        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEcholon.LatestPatchOrLatestMinor)
+
+        # assert
+        assert actual == "1.10.5"
+
+    def test_choose_version_latest_version_returns_the_highest_available_version(self) -> None:
+        # arrange
+        available_versions = ["1.1.2", "10.0.0", "2.0.0"]
+
+        # act
+        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEcholon.LatestVersion)
+
+        # assert
+        assert actual == "10.0.0"
+
+    def test_choose_version_no_update_returns_the_current_version(self) -> None:
+        # arrange
+        available_versions = ["1.1.2", "10.0.0"]
+
+        # act
+        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEcholon.NoUpdate)
+
+        # assert
+        assert actual == "1.1.0"
+
+    def test_string_to_boolean_accepts_true_values_case_insensitive_and_with_surrounding_whitespace(self) -> None:
+        # arrange
+        values = ["yes", "Y", " true ", "T", "1"]
+
+        # act
+        actual = [GeneralUtilities.string_to_boolean(value) for value in values]
+
+        # assert
+        assert actual == [True, True, True, True, True]
+
+    def test_string_to_boolean_accepts_false_values_case_insensitive_and_with_surrounding_whitespace(self) -> None:
+        # arrange
+        values = ["no", "N", " false ", "F", "0"]
+
+        # act
+        actual = [GeneralUtilities.string_to_boolean(value) for value in values]
+
+        # assert
+        assert actual == [False, False, False, False, False]
+
+    def test_string_to_boolean_rejects_an_unknown_value(self) -> None:
+        # arrange
+        value = "maybe"
+
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.string_to_boolean(value)
+
+    def test_to_list_returns_empty_list_for_none(self) -> None:
+        # act
+        actual = GeneralUtilities.to_list(None)
+
+        # assert
+        assert len(actual) == 0, actual
+
+    def test_to_list_returns_empty_list_for_whitespace(self) -> None:
+        # act
+        actual = GeneralUtilities.to_list("   ")
+
+        # assert
+        assert len(actual) == 0, actual
+
+    def test_to_list_returns_one_item_when_the_separator_is_not_contained(self) -> None:
+        # act
+        actual = GeneralUtilities.to_list(" a ")
+
+        # assert
+        assert actual == ["a"]
+
+    def test_to_list_splits_by_custom_separator_and_trims_the_items(self) -> None:
+        # act
+        actual = GeneralUtilities.to_list("a ; b;c", ";")
+
+        # assert
+        assert actual == ["a", "b", "c"]
+
+    def test_strip_new_line_character_removes_mixed_line_breaks_at_both_ends_but_keeps_inner_ones(self) -> None:
+        # arrange
+        value = "\r\n\r\na\nb\n\r"
+
+        # act
+        actual = GeneralUtilities.strip_new_line_character(value)
+
+        # assert
+        assert actual == "a\nb"
+
+    def test_write_lines_to_file_and_read_lines_from_file_roundtrip(self) -> None:
+        # arrange
+        lines = ["first", "", "third with spaces "]
+        with tempfile.TemporaryDirectory() as folder:
+            file = os.path.join(folder, "file.txt")
+            GeneralUtilities.write_lines_to_file(file, lines)
+
+            # act
+            actual = GeneralUtilities.read_lines_from_file(file)
+
+        # assert
+        assert actual == lines
+
+    def test_read_lines_from_file_returns_empty_list_for_an_empty_file(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as folder:
+            file = os.path.join(folder, "file.txt")
+            GeneralUtilities.write_text_to_file(file, GeneralUtilities.empty_string)
+
+            # act
+            actual = GeneralUtilities.read_lines_from_file(file)
+
+        # assert
+        assert len(actual) == 0, actual
+
+    def test_read_lines_from_file_removes_carriage_returns_of_crlf_line_endings(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as folder:
+            file = os.path.join(folder, "file.txt")
+            GeneralUtilities.write_text_to_file(file, "a\r\nb")
+
+            # act
+            actual = GeneralUtilities.read_lines_from_file(file)
+
+        # assert
+        assert actual == ["a", "b"]
+
+    def test_read_text_from_file_rejects_a_file_which_does_not_exist(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as folder:
+            file = os.path.join(folder, "missing.txt")
+
+            # act & assert
+            with self.assertRaises(ValueError):
+                GeneralUtilities.read_text_from_file(file)
+
+    def test_ensure_path_is_not_quoted_removes_double_quotes(self) -> None:
+        # act
+        actual = GeneralUtilities.ensure_path_is_not_quoted('"C:/some folder/file.txt"')
+
+        # assert
+        assert actual == "C:/some folder/file.txt"
+
+    def test_ensure_path_is_not_quoted_removes_single_quotes(self) -> None:
+        # act
+        actual = GeneralUtilities.ensure_path_is_not_quoted("'/some folder/file.txt'")
+
+        # assert
+        assert actual == "/some folder/file.txt"
+
+    def test_ensure_path_is_not_quoted_keeps_a_path_with_mismatching_quotes_unchanged(self) -> None:
+        # arrange
+        path = "\"/some folder/file.txt'"
+
+        # act
+        actual = GeneralUtilities.ensure_path_is_not_quoted(path)
+
+        # assert
+        assert actual == path
+
+    def test_resolve_relative_path_resolves_parent_folder_references_against_the_base_path(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as base_folder:
+            expected = str(Path(os.path.join(base_folder, "c")).resolve())
+
+            # act
+            actual = GeneralUtilities.resolve_relative_path(os.path.join("a", "..", "b", "..", "c"), base_folder)
+
+        # assert
+        assert actual == expected
+
+    def test_resolve_relative_path_returns_an_absolute_path_unchanged(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as folder:
+            absolute_path = os.path.join(folder, "x")
+
+            # act
+            actual = GeneralUtilities.resolve_relative_path(absolute_path, os.path.join(folder, "other"))
+
+        # assert
+        assert actual == absolute_path
+
+    def test_replace_variable_in_string_replaces_every_occurrence(self) -> None:
+        # act
+        actual = GeneralUtilities.replace_variable_in_string("a __[name]__ b __[name]__", "name", "value")
+
+        # assert
+        assert actual == "a value b value"
+
+    def test_replace_variable_in_string_rejects_a_variable_name_containing_the_control_sequence(self) -> None:
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.replace_variable_in_string("a __[x__y]__ b", "x__y", "value")
+
+    def test_replace_variable_replaces_prefix_variable_and_suffix_including_whitespace(self) -> None:
+        # act
+        actual = GeneralUtilities.replace_variable("${{", "version", "}}", "1.2.3", "v=${{ __version__ }};")
+
+        # assert
+        assert actual == "v=1.2.3;"
+
+    def test_replace_variable_throws_exception_when_the_variable_is_not_surrounded_by_the_expected_prefix(self) -> None:
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.replace_variable("${{", "version", "}}", "1.2.3", "v=__version__;")
+
+    def test_replace_variable_rejects_a_variable_name_containing_the_control_sequence(self) -> None:
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.replace_variable("", "a__b", "", "1", "__a__b__")
+
+    def test_replace_underscores_in_text_resolves_a_value_which_contains_another_placeholder(self) -> None:
+        # arrange
+        replacements = {"outer": "<__inner__>", "inner": "value"}
+
+        # act
+        actual = GeneralUtilities.replace_underscores_in_text("x __outer__ y", replacements)
+
+        # assert
+        assert actual == "x <value> y"
+
+    def test_escape_json_string_value_escapes_quotes_backslashes_and_line_breaks(self) -> None:
+        # arrange
+        value = 'a"b\\c\nd'
+
+        # act
+        actual = GeneralUtilities.escape_json_string_value(value)
+
+        # assert
+        assert actual == 'a\\"b\\\\c\\nd'
+        assert json.loads(f'"{actual}"') == value
+
+    def test_escape_json_property_value_removes_characters_which_are_not_allowed(self) -> None:
+        # act
+        actual = GeneralUtilities.escape_json_property_value("my-property name!")
+
+        # assert
+        assert actual == "mypropertyname"
+
+    def test_escape_json_property_value_rejects_a_value_starting_with_a_digit(self) -> None:
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.escape_json_property_value("1abc")
+
+    def test_escape_json_property_value_rejects_a_value_without_any_allowed_character(self) -> None:
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.escape_json_property_value("\"; --")
+
+    def test_platform_short_str_roundtrip_for_all_platforms(self) -> None:
+        # arrange
+        platforms = GeneralUtilities.get_all_platforms()
+
+        # act
+        actual = [GeneralUtilities.platform_from_short_str(GeneralUtilities.platform_to_short_str(p)) for p in platforms]
+
+        # assert
+        assert actual == platforms
+
+    def test_platform_dash_str_roundtrip_for_all_platforms(self) -> None:
+        # arrange
+        platforms = GeneralUtilities.get_all_platforms()
+
+        # act
+        actual = [GeneralUtilities.platform_from_dash_str(GeneralUtilities.platform_to_dash_str(p)) for p in platforms]
+
+        # assert
+        assert actual == platforms
+
+    def test_platform_from_short_str_rejects_an_unknown_platform(self) -> None:
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.platform_from_short_str("win-arm64")
+
+    def test_platform_from_dash_str_rejects_an_unknown_platform(self) -> None:
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.platform_from_dash_str("windows-x64")
+
+    def test_internal_extract_log_file_number_returns_the_number_of_a_rotated_log_file(self) -> None:
+        # act
+        actual = GeneralUtilities._internal_extract_log_file_number("Log.archive.12.log")
+
+        # assert
+        assert actual == 12
+
+    def test_internal_extract_log_file_number_rejects_a_filename_which_is_no_rotated_log_file(self) -> None:
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities._internal_extract_log_file_number("Log.archive.12.log.bak")
+
+    def test_get_only_item_from_list_returns_the_only_item(self) -> None:
+        # act
+        actual = GeneralUtilities.get_only_item_from_list(["x"])
+
+        # assert
+        assert actual == "x"
+
+    def test_get_only_item_from_list_rejects_an_empty_list(self) -> None:
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.get_only_item_from_list([])
+
+    def test_get_only_item_from_list_rejects_a_list_with_two_items(self) -> None:
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.get_only_item_from_list(["x", "y"])
+
+    def test_remove_duplicates_keeps_the_order_of_the_first_occurrences(self) -> None:
+        # act
+        actual = GeneralUtilities.remove_duplicates(["b", "a", "b", "c", "a"])
+
+        # assert
+        assert actual == ["b", "a", "c"]
+
+    def test_args_array_surround_with_quotes_if_required_quotes_only_unquoted_arguments_with_whitespace(self) -> None:
+        # act
+        actual = GeneralUtilities.args_array_surround_with_quotes_if_required(["a", "b c", '"d e"'])
+
+        # assert
+        assert actual == ["a", '"b c"', '"d e"']
+
+    def test_arguments_to_array_returns_empty_list_for_none_and_whitespace(self) -> None:
+        # act
+        actual = (GeneralUtilities.arguments_to_array(None), GeneralUtilities.arguments_to_array("  "))
+
+        # assert
+        assert actual == ([], [])
+
+    def test_arguments_to_array_splits_by_space(self) -> None:
+        # act
+        actual = GeneralUtilities.arguments_to_array("build --configuration Release")
+
+        # assert
+        assert actual == ["build", "--configuration", "Release"]
+
+    def test_read_csv_file_ignores_comments_and_empty_lines_and_trims_values(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as folder:
+            file = os.path.join(folder, "file.csv")
+            GeneralUtilities.write_lines_to_file(file, ["# comment", " a ; b ", "", "c;d"])
+
+            # act
+            actual = GeneralUtilities.read_csv_file(file)
+
+        # assert
+        assert actual == [["a", "b"], ["c", "d"]]
+
+    def test_read_csv_file_ignores_the_first_line_when_requested(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as folder:
+            file = os.path.join(folder, "file.csv")
+            GeneralUtilities.write_lines_to_file(file, ["header1;header2", "a;b"])
+
+            # act
+            actual = GeneralUtilities.read_csv_file(file, ignore_first_line=True)
+
+        # assert
+        assert actual == [["a", "b"]]
+
+    def test_read_csv_file_removes_surrounding_quotes_and_unescapes_doubled_quotes(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as folder:
+            file = os.path.join(folder, "file.csv")
+            GeneralUtilities.write_lines_to_file(file, ['"a ""quoted"" value";"b"'])
+
+            # act
+            actual = GeneralUtilities.read_csv_file(file, values_are_surrounded_by_quotes=True)
+
+        # assert
+        assert actual == [['a "quoted" value', "b"]]
+
+    def test_is_ignored_by_glob_pattern_returns_false_when_no_patterns_are_given(self) -> None:
+        # act
+        actual = GeneralUtilities.is_ignored_by_glob_pattern("/folder/src", "/folder/src/a/b/c.txt", None)
+
+        # assert
+        assert actual is False
+
+    def test_is_ignored_by_glob_pattern_rejects_a_path_outside_of_the_source_directory(self) -> None:
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.is_ignored_by_glob_pattern("/folder/src", "/other/a.txt", ["**"])
+
+    def test_float_to_string_pads_leading_and_trailing_zeros(self) -> None:
+        # act
+        actual = GeneralUtilities.float_to_string(1.5, 3, 2)
+
+        # assert
+        assert actual == "001.50"

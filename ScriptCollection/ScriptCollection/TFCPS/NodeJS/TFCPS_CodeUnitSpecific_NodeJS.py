@@ -74,7 +74,7 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
         os.rename(os.path.join(coverage_folder, "cobertura-coverage.xml"), target_file)
         self.__rename_packagename_in_coverage_file(target_file, codeunit_name)
 
-        # adapt backslashs to slashs
+        # adapt backslashes to slashes
         content = GeneralUtilities.read_text_from_file(target_file)
         content = re.sub('\\\\', '/', content)
         GeneralUtilities.write_text_to_file(target_file, content)
@@ -244,7 +244,7 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def translate_safe(self,base_language:str="en", throw_if_no_credentials:bool=False)->None:
-        """Translates XLF files if a translation service is configured. The translation service can be configured by creating a file at ~/.ScriptCollection/TranslationServiceProperties.txt with the content 'LibreTranslateAPI=your_api_server_url'."""
+        """Translates XLF files if a translation service is configured. The translation service can be configured by creating a file at ~/.ScriptCollection/GlobalCache/TranslationServiceProperties.txt with the content 'LibreTranslateAPI=your_api_server_url'. If no translation service is configured nothing is translated, or a ValueError is raised if throw_if_no_credentials is set."""
         translationservice_file:str=self._protected_sc.get_global_cache_folder()+"/TranslationServiceProperties.txt"
         api_server:str=None
         if os.path.isfile(translationservice_file):

@@ -76,7 +76,7 @@ class TFCPS_CreateRelease:
         branch_to_be_released_commit_id = self.sc.git_get_commit_id(tfcps_CreateReleaseConfiguration.repository, tfcps_CreateReleaseConfiguration.branch_to_be_released)
         main_branch_commit_id = self.sc.git_get_commit_id(tfcps_CreateReleaseConfiguration.repository, tfcps_CreateReleaseConfiguration.main_branch)
         if branch_to_be_released_commit_id == main_branch_commit_id:
-            self.sc.log.log("Merge to main-branch will not be done because there are no changed which can be merged.")
+            self.sc.log.log("Merge to main-branch will not be done because there are no changes which can be merged.")
         else:
             self.sc.log.log("Merge to main-branch...",LogLevel.Information)
             mergeToMainConfiguration:MergeToMainConfiguration=MergeToMainConfiguration(tfcps_CreateReleaseConfiguration.current_file,tfcps_CreateReleaseConfiguration.product_name,tfcps_CreateReleaseConfiguration.product_name,tfcps_CreateReleaseConfiguration.branch_to_be_released,tfcps_CreateReleaseConfiguration.log_level,tfcps_CreateReleaseConfiguration.additional_arguments_file,tfcps_CreateReleaseConfiguration.main_branch,tfcps_CreateReleaseConfiguration.common_remote_name,tfcps_CreateReleaseConfiguration.build_repository)
@@ -86,7 +86,7 @@ class TFCPS_CreateRelease:
         main_branch_commit_id = self.sc.git_get_commit_id(tfcps_CreateReleaseConfiguration.repository, tfcps_CreateReleaseConfiguration.main_branch)
         stable_branch_commit_id = self.sc.git_get_commit_id(tfcps_CreateReleaseConfiguration.repository, tfcps_CreateReleaseConfiguration.stable_branch)
         if main_branch_commit_id == stable_branch_commit_id:
-            self.sc.log.log("Merge to stable-branch will not be done because there are no changed which can be released.")
+            self.sc.log.log("Merge to stable-branch will not be done because there are no changes which can be released.")
         else:
             self.sc.log.log("Merge to stable-branch...",LogLevel.Information) 
             mergeToStableConfiguration:MergeToStableConfiguration=MergeToStableConfiguration(tfcps_CreateReleaseConfiguration.log_level,tfcps_CreateReleaseConfiguration.main_branch,tfcps_CreateReleaseConfiguration.stable_branch,tfcps_CreateReleaseConfiguration.repository,tfcps_CreateReleaseConfiguration.build_repository,tfcps_CreateReleaseConfiguration.common_remote_name,tfcps_CreateReleaseConfiguration.build_repo_main_branch_name,tfcps_CreateReleaseConfiguration.reference_repo_main_branch_name,tfcps_CreateReleaseConfiguration.reference_remote_name,tfcps_CreateReleaseConfiguration.build_repo_remote_name,tfcps_CreateReleaseConfiguration.artifacts_target_folder,tfcps_CreateReleaseConfiguration.common_remote_url,tfcps_CreateReleaseConfiguration.additional_arguments_file)

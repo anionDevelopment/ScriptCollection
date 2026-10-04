@@ -90,8 +90,9 @@ class TFCPS_Tools_General:
         """Downloads all tools that are stored in the global ScriptCollection-cache.
         Running this (for example in a build-image) lets repeated pipeline-runs avoid
         rate-limits and run faster, because the tools are already present when a later
-        ensure_*_is_available-call needs them. Each tool is downloaded for all platforms,
-        so the warmed cache can be reused independent of the executing platform.
+        ensure_*_is_available-call needs them. The tools are downloaded for all platforms for which they are provided,
+        so the warmed cache can be reused independent of the executing platform. The exception is the JRE, which is only
+        downloaded for the executing platform (see ensure_jre_is_available).
         When verbose is set, the loglevel is set to debug so the per-tool log-output becomes visible."""
         if verbose:
             self.__sc.log.loglevel = LogLevel.Debug
@@ -257,7 +258,7 @@ class TFCPS_Tools_General:
                     continue
                 codeunits_with_dependent_codeunits[codeunit_name] = self.get_dependent_code_units(codeunit_file)
         sorted_codeunits = self._internal_get_sorted_codeunits_by_dict(codeunits_with_dependent_codeunits)
-        #TODO show warning somehow for enabled codeunits which depends on ignored codeunits
+        #TODO show warning somehow for enabled codeunits which depend on ignored codeunits
         return sorted_codeunits
 
     @GeneralUtilities.check_arguments
@@ -714,7 +715,7 @@ class TFCPS_Tools_General:
 
     @GeneralUtilities.check_arguments
     def generate_diff_report(self, repository_folder: str, codeunit_name: str, current_version: str) -> None:
-        #TODO refactor this. if new changes (committed or uncommitted) since last git-tag: diff-report from last tag to "now". if no new changes (curren-commit==commit on a vx.y-tag): take diff from last tag to this tag
+        #TODO refactor this. if new changes (committed or uncommitted) since last git-tag: diff-report from last tag to "now". if no new changes (current-commit==commit on a vx.y-tag): take diff from last tag to this tag
         self.__sc.assert_is_git_repository(repository_folder)
         codeunit_folder = os.path.join(repository_folder, codeunit_name)
         target_folder = GeneralUtilities.resolve_relative_path("Other/Artifacts/DiffReport", codeunit_folder)
@@ -1095,7 +1096,7 @@ class TFCPS_Tools_General:
                 lines.append(GeneralUtilities.empty_string)
             self.__sc.set_file_content(task_file, "\n".join(lines))
         else:
-            self.__sc.run_program("scgeneratetasksfilefromworkspacefile", f"--repositoryfolder {repository_folder}")
+            self.__sc.run_program("scgeneratetaskfilefromworkspacefile", f"--repositoryfolder {repository_folder}")
 
     @GeneralUtilities.check_arguments
     def ensure_androidappbundletool_is_available(self, target_folder: str,enforce_update:bool) -> str:
@@ -1256,6 +1257,10 @@ class TFCPS_Tools_General:
  
     @GeneralUtilities.check_arguments
     def do_npm_install(self, package_json_folder: str, npm_force: bool,use_cache:bool) -> None:
+        """Installs the npm-dependencies of the package.json in package_json_folder (using epew, which must be available).
+        Side-effects: the package-lock.json is updated and node_modules is recreated; a marker-file ".sc_installed_for_platform" is
+        written into node_modules. If use_cache is set and node_modules was installed for the current platform before, nothing is done.
+        npm_force passes "--force" to every npm-call, which also hides dependency-conflicts instead of reporting them."""
         target_folder:str=os.path.join(package_json_folder,"node_modules")
         platform_marker_file:str=os.path.join(target_folder,".sc_installed_for_platform")
         current_platform:str=f"{sys.platform}-{platform.machine().lower()}"
@@ -1294,8 +1299,8 @@ class TFCPS_Tools_General:
     @staticmethod
     @GeneralUtilities.check_arguments
     def sort_reference_folder(folder1: str, folder2: str) -> int:
-        """Returns a value greater than 0 if and only if folder1 has a base-folder-name with a with a higher version than the base-folder-name of folder2.
-        Returns a value lower than 0 if and only if folder1 has a base-folder-name with a with a lower version than the base-folder-name of folder2.
+        """Returns a value greater than 0 if and only if folder1 has a base-folder-name with a higher version than the base-folder-name of folder2.
+        Returns a value lower than 0 if and only if folder1 has a base-folder-name with a lower version than the base-folder-name of folder2.
         Returns 0 if both values are equal."""
         if (folder1 == folder2):
             return 0
@@ -1822,6 +1827,14 @@ class TFCPS_Tools_General:
 
     @GeneralUtilities.check_arguments
     def push_docker_build_artifact(self, push_artifacts_file: str, registry: str, push_readme: bool, repository_folder_name: str, remote_image_name: str = None) -> None:
+        """Pushes the OCI-image-artifacts ("Other/Artifacts/BuildResult_OCIImage/*.tar") of a codeunit as one multi-arch-image to
+        "<registry>/<remote_image_name>" with the tags "v<codeunit-version>" and "latest".
+        This function is meant to be called by a script named "PushArtifacts.<codeunitname>.py" (the codeunit-name is taken from this
+        filename) which is located in a folder two levels below a folder which contains the repository as
+        "Submodules/<repository_folder_name>". remote_image_name defaults to the lowercase codeunit-name. With push_readme the
+        ReadMe.md of the codeunit is pushed as description of the image using docker-pushrm.
+        Raises a ValueError if the filename does not match the expected pattern or an artifact has an unsupported platform, and a
+        NotImplementedError for Windows- and MacOS-images."""
         folder_of_this_file = os.path.dirname(push_artifacts_file)
         filename = os.path.basename(push_artifacts_file)
         codeunitname_regex: str = "([a-zA-Z0-9]+)"
@@ -2045,41 +2058,6 @@ class TFCPS_Tools_General:
         ignoreddependencies = root.xpath('//cps:codeunit/cps:properties/cps:updatesettings/cps:ignoreddependencies/cps:ignoreddependency', namespaces=namespaces)
         result = [x.text.replace("\\n", GeneralUtilities.empty_string).replace("\\r", GeneralUtilities.empty_string).replace("\n", GeneralUtilities.empty_string).replace("\r", GeneralUtilities.empty_string).strip() for x in ignoreddependencies]
         return result
-    
-    @GeneralUtilities.check_arguments
-    def update_dependencies_of_package_json(self, folder_of_package_json: str) -> None:#TODO this should probably be implemented in TFCPS_CodeUnitSpecific_NodeJS_Functions
-        #TODO move this to TFCPS_CodeUnitSpecific_NodeJS_Functions
-        if self.is_codeunit_folder(folder_of_package_json):
-            ignored_dependencies = self.get_dependencies_which_are_ignored_from_updates(folder_of_package_json)
-        else:
-            ignored_dependencies = []
-        # TODO consider ignored_dependencies
-        result = self.__sc.run_with_epew("npm", "outdated", folder_of_package_json, throw_exception_if_exitcode_is_not_zero=False)
-        if result[0] == 0:
-            return  # all dependencies up to date
-        elif result[0] == 1:
-            package_json_content = None
-            package_json_file = f"{folder_of_package_json}/package.json"
-            with open(package_json_file, "r", encoding="utf-8") as package_json_file_object:
-                package_json_content = json.load(package_json_file_object)
-                lines = GeneralUtilities.string_to_lines(result[1])[1:][:-1]
-                for line in lines:
-                    normalized_line_splitted = ' '.join(line.split()).split(" ")
-                    package = normalized_line_splitted[0]
-                    latest_version = normalized_line_splitted[3]
-                    # A package.json does not have to declare both sections (a project which only delivers
-                    # runtime-dependencies has no "devDependencies" at all), so the sections are looked up
-                    # instead of being accessed directly.
-                    for dependency_section in ["dependencies", "devDependencies"]:
-                        if dependency_section in package_json_content and package in package_json_content[dependency_section]:
-                            package_json_content[dependency_section][package] = latest_version
-            with open(package_json_file, "w", encoding="utf-8") as package_json_file_object:
-                json.dump(package_json_content, package_json_file_object, indent=4)
-            GeneralUtilities.write_text_to_file(package_json_file, GeneralUtilities.read_text_from_file(package_json_file).replace("\r", ""))
-            self.do_npm_install(folder_of_package_json, True,True)#TODO use_cache might be dangerous here
-        else:
-            self.__sc.log.log("Update dependencies resulted in an error.", LogLevel.Error)
-
 
     @GeneralUtilities.check_arguments
     def get_resource_from_submodule_with_default_ignore_pattern(self,codeunit_folder:str,submodule_name:str,resource_name:str):

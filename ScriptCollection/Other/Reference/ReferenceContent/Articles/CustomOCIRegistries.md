@@ -40,7 +40,7 @@ OCIRegistry_CommonApplicationImageRegistry_Password;file;Secrets/CommonApplicati
 
 Unlike a [required environment-variable](./ConfigurationFolder.md#required-environment-variables) of a product, an `OCIRegistry_*`-declaration does **not** have to be repeated per repository: every registry declared this way is available to every build on the machine, because which registries exist is a property of the machine/pipeline, not of a particular product. There is deliberately no separate credentials-file for this (only `EnvironmentVariables.csv`), so the same single mount/copy makes both the required environment-variables of a product and the OCI-registry-credentials available.
 
-With both files in place, `get_registry_address_for_image` (used for every image ScriptCollection resolves, including the base-image of a Dockerfile via its `ARG image_<name>`/`FROM ${image_<name>}` pair) logs in to `commonapplicationimageregistry.aniondev.de` first and then prefers it over the upstream fallback-registry the repository declares - transparently, for every product built on the machine.
+With both files in place, `get_registry_address_for_image` (used for every image ScriptCollection resolves, including the base-image of a Dockerfile via its `ARG image_<name>`/`FROM ${image_<name>}` pair) prefers `commonapplicationimageregistry.aniondev.de` over the upstream fallback-registry the repository declares - transparently, for every product built on the machine. The custom registry is used if the image is already available with its address and tag in the local image-store of the docker-daemon; otherwise ScriptCollection logs in to all registries for which credentials are available and asks the custom registry whether it provides the image with that tag, and only uses it if it does.
 
 ## Setup per environment
 
@@ -56,7 +56,7 @@ Create the two files under `~/.ScriptCollection/`. Same as Windows, `scbuildcode
 
 Nothing to configure beyond the host-setup above: `ImageRegistries.csv` and the whole `TFCPS`-folder of the configuration-folder of the user who starts the build are mounted read-only into the build-container automatically (to `/Workspace/ScriptCollectionConfiguration/OCIImages/ImageRegistries.csv` and `/Workspace/ScriptCollectionConfiguration/TFCPS`), so the build inside the container resolves both exactly like a build on the host does. The whole `TFCPS`-folder is mounted (and not only `EnvironmentVariables.csv` in it) so that a `file`-value with a relative path - the recommended form for a secret - also resolves inside the container.
 
-> A value of the kind `hostenvvariable` is the one exception: it names an environment-variable of the machine the command was started on, which by definition does not exist inside the job-container. A registry declared that way is skipped there (with a warning naming the reason) and its images are taken from the fallback-registry. Use `literal` or `file` for a registry which has to work inside a container as well.
+> A value of the kind `hostenvvariable` is the one exception: it names an environment-variable of the machine the command was started on, which by definition does not exist inside the build-container. A registry declared that way is skipped there (with a warning naming the reason) and its images are taken from the fallback-registry. Use `literal` or `file` for a registry which has to work inside a container as well.
 
 ### GitLab-pipeline
 
@@ -70,7 +70,7 @@ If the self-hosted runner is the `SCGitHubRunner`-codeunit, set `SCRIPTCOLLECTIO
 
 The fallback to the upstream-registry never breaks a build, so an incomplete setup shows up as rate-limits instead of as an error. Every fallback is logged with its reason, so the build-log is the place to look. The usual causes:
 
-- The folder on the runner-host does not contain `GlobalCache/OCIImages/ImageRegistries.csv` - then no image has a custom registry at all. Note that this file has to exist even when it is empty, see [Build-runner-configuration](./BuildRunnerConfiguration.md#folder-on-the-runner-host).
+- The folder on the runner-host does not contain `GlobalCache/OCIImages/ImageRegistries.csv`. ScriptCollection then creates the file with only the header-line, so no image has a custom registry at all. On a read-only mount that creation fails and the build aborts instead, which is why the file has to exist even when it is empty, see [Build-runner-configuration](./BuildRunnerConfiguration.md#folder-on-the-runner-host).
 - The credentials can not be resolved in this environment: the registry is then skipped with a warning which names the reason (a secret-file which does not exist there, a `hostenvvariable` which is not set there).
 - The image does not exist in the custom registry with the tag the repository declares (`.ScriptCollection/OCIImages/ImageDefinition.csv`) - the mirror does not have that tag yet.
 - The build runs with a ScriptCollection-version which does not have this mechanism yet. In a pipeline that version is the one the pipeline installs (`pip3 install scriptcollection --upgrade` as a step of the workflow respectively of `.gitlab-ci.yml`) - without such a step it is the version which is pinned in the job-image.

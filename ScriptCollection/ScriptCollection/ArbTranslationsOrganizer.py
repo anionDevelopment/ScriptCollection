@@ -114,8 +114,8 @@ class ArbTranslationsOrganizer:
     BaseLanguage="en"#"en" means en-US; this is also why "en-GB" is allowed to be contained in "languages" further down.
 
     def organize_translations(self,sc:ScriptCollectionCore,arb_folder:str,xlf_folder:str,languages:list[str])->dict[str,dict[int,float]]:#languages look like ["fr","de","es","de-CH","en-GB"]; "en" is not contained because en is always the default language.
-        #after this functions all texts in the arb files should be in the xlf files, and all texts in the xlf files should be in the arb files. see algorithm below
-        #in general: arb_en.arb is the source of the truth regarding to which texts exist and the source of truh for the english texts.
+        #after this function all texts in the arb files should be in the xlf files, and all texts in the xlf files should be in the arb files. see algorithm below
+        #in general: arb_en.arb is the source of the truth regarding to which texts exist and the source of truth for the english texts.
         #returns the translation-state-statistics of the xlf-files (not of the arb-files), see ScriptCollectionCore.sync_xlf2_files.
         GeneralUtilities.assert_folder_exists(arb_folder)
         GeneralUtilities.ensure_directory_exists(xlf_folder)
@@ -129,14 +129,14 @@ class ArbTranslationsOrganizer:
         return statistics
 
     def __ensure_arb_files_exist(self,arb_folder:str,languages:list[str]):
-        #after this function in arb_folder should be a arb-file for each language in languages. create the file if not already exist.
+        #after this function in arb_folder should be an arb-file for each language in languages. create the file if it does not already exist.
         for language in languages:
             arb_file=ARBTranslationHelper.arb_file_path(arb_folder,language)
             if not os.path.isfile(arb_file):
                 ARBTranslationHelper.write_arb_messages(arb_file,language,[],{})
 
     def __ensure_xlf_files_exist(self,arb_folder:str,xlf_folder:str,languages:list[str]):
-        #after this function in xlf_folder should be a xlf-file for each language in languages. create the file if not already exist.
+        #after this function in xlf_folder should be a xlf-file for each language in languages. create the file if it does not already exist.
         #a newly created file is bootstrapped from the language's current arb-translations (not left empty/untranslated), so translation-work already done directly in the arb-file (as it is right now for de/fr/es) is not discarded once that language starts taking part in the xlf-side of the sync.
         english_messages=ARBTranslationHelper.read_arb_messages(ARBTranslationHelper.arb_file_path(arb_folder,self.BaseLanguage))
         for language in languages:
@@ -155,7 +155,7 @@ class ArbTranslationsOrganizer:
             ARBTranslationHelper.write_arb_messages(arb_file,language,template_keys,ARBTranslationHelper.read_arb_messages(arb_file))
 
     def __write_arb_entries_to_xlf_files(self,arb_folder:str,xlf_folder:str):
-        #after this function all texts from arb_en.arb should be in messages.xlf (do not touch other files than this both in the other steps) replace the entire message content of all entries in xlf. arb_en.arb defines all "true" entries and this is the only source of truth. so messages.xlf should contain these and only these entries. simple algorithm: remove the entire content from messages.xlf, then for each entry in arb_en.arb create a new entry in messages.xlf with the same message-key and the same message-value.
+        #after this function all texts from arb_en.arb should be in messages.xlf (do not touch other files than these two in the other steps) replace the entire message content of all entries in xlf. arb_en.arb defines all "true" entries and this is the only source of truth. so messages.xlf should contain these and only these entries. simple algorithm: remove the entire content from messages.xlf, then for each entry in arb_en.arb create a new entry in messages.xlf with the same message-key and the same message-value.
         english_messages=ARBTranslationHelper.read_arb_messages(ARBTranslationHelper.arb_file_path(arb_folder,self.BaseLanguage))
         units=[ARBTranslationHelper.build_unit(key,value,None) for key,value in english_messages.items()]
         ARBTranslationHelper.write_xliff2_file(ARBTranslationHelper.base_xlf_file_path(xlf_folder),self.BaseLanguage,None,units)

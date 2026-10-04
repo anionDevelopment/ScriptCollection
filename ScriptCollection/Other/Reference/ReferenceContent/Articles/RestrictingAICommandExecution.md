@@ -27,8 +27,8 @@ scruncommandinfolder -b <basefolder> -c <command> -a "<arguments>" [-e <excluded
 | `-b` / `--basefolder` | The repository-folder. The command is **always** executed with this folder as its working-directory. `actualfolder` must be this folder or a subfolder of it. |
 | `-c` / `--command` | The program to execute (for example `python`, `dotnet`, `git`). |
 | `-a` / `--arguments` | The arguments passed to the command. May contain the magic string `{actual_folder}`, which is replaced by the resolved `actualfolder`. |
-| `-e` / `--excludedfolder` | A folder that is **forbidden** even though it lies inside `basefolder`. Must be given **relative to** `basefolder`. Can be repeated. If `actualfolder` is equal to or inside one of these, the command is rejected. |
-| `-f` / `--actualfolder` | A subpath of `basefolder` that the agent may supply. It is validated and then substituted into the arguments via the placeholder — it does **not** change where the command runs. If it is relative it is resolved against the current working-directory. |
+| `-e` / `--excludedfolder` | A folder that is **forbidden** even though it lies inside `basefolder`. A relative path is resolved against `basefolder` (recommended, see below). Can be repeated. If `actualfolder` is equal to or inside one of these, the command is rejected. |
+| `-f` / `--actualfolder` | A subpath of `basefolder` that the agent may supply. It is validated and then substituted into the arguments via the placeholder — it does **not** change where the command runs. If it is relative it is resolved against `basefolder`. |
 
 The command itself always runs with `basefolder` as its working-directory; the agent never gets to choose
 the folder the command runs *in*. The only thing `actualfolder` does is provide a (validated) path that can
@@ -150,9 +150,9 @@ Two properties make this robust:
 
 - The excluded folders are resolved (relative to the base-folder) and normalized, so a `..`-trick like
   `-f .git/../.git` cannot sneak back into an excluded folder.
-- The excluded folders **must be relative**. Passing an absolute path as `-e` is rejected with an error.
-  This keeps the meaning unambiguous (always "relative to this repository") and keeps the allow-rule
-  portable when `-b .` is used.
+- The excluded folders should be given **relative** to the base-folder. An absolute path is accepted as
+  well, but a relative one keeps the meaning unambiguous (always "relative to this repository") and keeps
+  the allow-rule portable when `-b .` is used.
 
 In an allow-list, the excluded folders are part of the pinned prefix, just like the command and its
 arguments — the agent cannot remove or weaken them:
@@ -176,15 +176,15 @@ base-folder but uses `..`-segments to climb back out:
 scruncommandinfolder -b /work/myrepo -c dotnet -a "test" -f "/work/myrepo/../../../OtherProject"
 ```
 
-or, with a relative argument that walks up from the working-directory:
+or, with a relative argument that walks up from the base-folder:
 
 ```text
 scruncommandinfolder -b /work/myrepo -c dotnet -a "test" -f "../../../OtherProject"
 ```
 
 Both attempts are **rejected**. Before comparing, `scruncommandinfolder` resolves `actualfolder` to a
-normalized absolute path (relative paths are resolved against the current working-directory, and every
-`..`-segment is collapsed). The string `"/work/myrepo/../../../OtherProject"` therefore becomes something
+normalized absolute path (relative paths are resolved against the base-folder, every `..`-segment is
+collapsed and symbolic links are resolved). The string `"/work/myrepo/../../../OtherProject"` therefore becomes something
 like `/OtherProject`, which is neither equal to `/work/myrepo` nor located inside it. The check fails and
 the command exits with an error **without executing anything**.
 
@@ -220,6 +220,6 @@ error.
 
 Note that this is **not** done with fragile `deny`-string-patterns. The exclusion is enforced inside the
 command by the same resolved, normalized-path containment-check that `scruncommandinfolder` uses (both share
-`ScriptCollectionCore.path_is_inside_one_of_the_folders`). So a `..`-trick or a different path-spelling cannot
+`ScriptCollectionCore.path_is_allowed_within_base_folder`). So a `..`-trick or a different path-spelling cannot
 be used to read an excluded file — the check operates on the real, resolved target-path, not on the literal
 command-string.
