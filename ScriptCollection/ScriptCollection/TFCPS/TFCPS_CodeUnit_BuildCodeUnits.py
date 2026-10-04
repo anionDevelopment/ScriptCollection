@@ -245,15 +245,18 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             "/Cache/",
         ]
         GeneralUtilities.write_lines_to_file(gitignore_file, lines)
+        self.sc.normalize_invisible_characters(gitignore_file)
 
     @GeneralUtilities.check_arguments
     def __ensure_global_gitignore_is_setup(self, repository_folder: str) -> None:
         """Ensures that "<repository>/.gitignore" exists and contains the expected entries."""
         gitignore_file = os.path.join(repository_folder, ".gitignore")
-        lines = [
-            "/.notes/",
-        ]
-        GeneralUtilities.write_lines_to_file(gitignore_file, lines)
+        GeneralUtilities.ensure_file_exists(gitignore_file)
+        existing_lines = GeneralUtilities.read_lines_from_file(gitignore_file)
+        if not "/.notes/" in existing_lines:
+            existing_lines.append("/.notes/")
+            GeneralUtilities.write_lines_to_file(gitignore_file, existing_lines)
+        self.sc.normalize_invisible_characters(gitignore_file)
 
 
     @GeneralUtilities.check_arguments
