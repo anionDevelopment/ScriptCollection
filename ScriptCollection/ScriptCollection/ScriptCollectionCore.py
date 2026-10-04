@@ -40,7 +40,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.41"
+version = "4.4.43"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -198,7 +198,7 @@ class ScriptCollectionCore:
 
     # The purpose of this property is to use it when testing your code which uses scriptcollection for external program-calls.
     # Do not change this value for productive environments.
-    mock_program_calls: bool = False#TODO remove this variable. When someone want to mock program-calls then the ProgramRunnerMock can be used instead
+    mock_program_calls: bool = False#TODO remove this variable. When someone wants to mock program-calls then the ProgramRunnerMock can be used instead
     # The purpose of this property is to use it when testing your code which uses scriptcollection for external program-calls.
     execute_program_really_if_no_mock_call_is_defined: bool = False
     __mocked_program_calls: list = None
@@ -551,7 +551,7 @@ class ScriptCollectionCore:
     @GeneralUtilities.check_arguments
     def split_image_address_and_tag(image_with_tag: str) -> tuple[str, str]:
         """Splits an image-address which contains a tag into the address and the tag.
-        Example: "myregistry.example.com:5000/debian:12" is splitted into ("myregistry.example.com:5000/debian", "12").
+        Example: "myregistry.example.com:5000/debian:12" is split into ("myregistry.example.com:5000/debian", "12").
         If the given address does not contain a tag then "latest" is returned as tag, which is the tag docker assumes in this case too."""
         last_colon_index = image_with_tag.rfind(":")
         last_slash_index = image_with_tag.rfind("/")
@@ -788,10 +788,10 @@ class ScriptCollectionCore:
         if (result[0] != 0):
             return False
         if (not GeneralUtilities.contains_line(result[1].splitlines(), f"gpg\\:\\ using\\ [A-Za-z0-9]+\\ key\\ [A-Za-z0-9]+{key}")):
-            # TODO check whether this works on machines where gpg is installed in another langauge than english
+            # TODO check whether this works on machines where gpg is installed in another language than english
             return False
         if (not GeneralUtilities.contains_line(result[1].splitlines(), "gpg\\:\\ Good\\ signature\\ from")):
-            # TODO check whether this works on machines where gpg is installed in another langauge than english
+            # TODO check whether this works on machines where gpg is installed in another language than english
             return False
         return True
 
@@ -825,7 +825,7 @@ class ScriptCollectionCore:
         elif exit_code == 1:
             return False
         else:
-            raise ValueError(f'Can not calculate if {ancestor} is an ancestor of {descendant} in repository {repository_folder}. Outout of "{repository_folder}> git merge-base --is-ancestor {ancestor} {descendant}": Exitcode: {exit_code}; StdOut: {result[1]}; StdErr: {result[2]}.')
+            raise ValueError(f'Can not calculate if {ancestor} is an ancestor of {descendant} in repository {repository_folder}. Output of "{repository_folder}> git merge-base --is-ancestor {ancestor} {descendant}": Exitcode: {exit_code}; StdOut: {result[1]}; StdErr: {result[2]}.')
 
     @GeneralUtilities.check_arguments
     def __git_changes_helper(self, repository_folder: str, arguments_as_array: list[str]) -> bool:
@@ -943,6 +943,11 @@ class ScriptCollectionCore:
 
     @GeneralUtilities.check_arguments
     def git_push(self, folder: str, remotename: str, localbranchname: str, remotebranchname: str, forcepush: bool = False, pushalltags: bool = True, verbosity: LogLevel = LogLevel.Quiet,resurse_submodules:bool=False) -> None:
+        """Pushes localbranchname to remotebranchname on the given remote (with pushalltags also all tags).
+        Without forcepush (and if folder is not a bare repository) the push is skipped (only logged on debug-level) when the
+        remote-branch is not strictly behind the local-branch, i.e. when it is equal, ahead or diverged (see git_branch_is_pushable),
+        because a push would then fail with a non-fast-forward-error or would have nothing to do. In that case the tags are not pushed
+        either. Note that this check fetches from the remote. Raises a ValueError if the push itself fails."""
         self.is_git_or_bare_git_repository(folder)
         if not forcepush and not self.is_bare_git_repository(folder):
             # If the remote-branch already contains the current commit or is ahead of the local-branch there is nothing to push and a
@@ -1170,7 +1175,7 @@ class ScriptCollectionCore:
         self.git_merge(repository_folder, f"{remote}/{branch}", branch)
         self.git_push_with_retry(repository_folder, remote, branch, branch)
         self.git_checkout(repository_folder, branch)
-        #TODO opeional: checkfor merge conflicts and if there is one merge conflict print a warning
+        #TODO optional: check for merge conflicts and if there is one merge conflict print a warning
 
     @GeneralUtilities.check_arguments
     def git_merge_abort(self, directory: str) -> None:
@@ -1442,7 +1447,7 @@ class ScriptCollectionCore:
         self.assert_is_git_repository(repository_folder)
         git_folder = repository_folder + "/.git"
         if not self.is_folder(git_folder):
-            raise ValueError(f"Converting '{repository_folder}' to a bare repository not possible. The folder '{git_folder}' does not exist. Converting is currently only supported when the git-folder is a direct folder in a repository and not a reference to another location.")
+            raise ValueError(f"Converting '{repository_folder}' to a bare repository is not possible. The folder '{git_folder}' does not exist. Converting is currently only supported when the git-folder is a direct folder in a repository and not a reference to another location.")
         target_folder: str = repository_folder + ".git"
         GeneralUtilities.ensure_directory_exists(target_folder)
         GeneralUtilities.move_content_of_folder(git_folder, target_folder)
@@ -1489,7 +1494,7 @@ class ScriptCollectionCore:
                     normalized_line = line.replace("\r", "")
                     result.append(normalized_line)
             else:
-                raise ValueError(f"Fatal error occurrs while checking whether file '{path}' exists. StdErr: '{stderr}'")
+                raise ValueError(f"Fatal error occurred while checking whether file '{path}' exists. StdErr: '{stderr}'")
         result = [item for item in result if GeneralUtilities.string_has_nonwhitespace_content(item)]
         return result
 
@@ -1503,10 +1508,10 @@ class ScriptCollectionCore:
             if exit_code == 0:
                 return True
             elif exit_code == 1:
-                raise ValueError(f"Not calculatable whether file '{path}' exists. StdErr: '{stderr}'")
+                raise ValueError(f"Not calculable whether file '{path}' exists. StdErr: '{stderr}'")
             elif exit_code == 2:
                 return False
-            raise ValueError(f"Fatal error occurrs while checking whether file '{path}' exists. StdErr: '{stderr}'")
+            raise ValueError(f"Fatal error occurred while checking whether file '{path}' exists. StdErr: '{stderr}'")
 
     @GeneralUtilities.check_arguments
     def get_size(self, path: str) -> int:
@@ -1518,7 +1523,7 @@ class ScriptCollectionCore:
             if exit_code == 0:
                 return int(stdout.replace("\r","").replace("\n","").strip())
             else:
-                raise ValueError(f"Fatal error occurrs while checking whether file '{path}' exists. StdErr: '{stderr}'")
+                raise ValueError(f"Fatal error occurred while checking whether file '{path}' exists. StdErr: '{stderr}'")
 
     @GeneralUtilities.check_arguments
     def is_folder(self, path: str) -> bool:
@@ -1530,10 +1535,10 @@ class ScriptCollectionCore:
             if exit_code == 0:
                 return True
             elif exit_code == 1:
-                raise ValueError(f"Not calculatable whether folder '{path}' exists. StdErr: '{stderr}'")
+                raise ValueError(f"Not calculable whether folder '{path}' exists. StdErr: '{stderr}'")
             elif exit_code == 2:
                 return False
-            raise ValueError(f"Fatal error occurrs while checking whether folder '{path}' exists. StdErr: '{stderr}'")
+            raise ValueError(f"Fatal error occurred while checking whether folder '{path}' exists. StdErr: '{stderr}'")
 
 
 
@@ -1546,7 +1551,7 @@ class ScriptCollectionCore:
             content_bytes = content.encode('utf-8')
             base64_bytes = base64.b64encode(content_bytes)
             base64_string = base64_bytes.decode('utf-8')
-            self.run_program_argsasarray("scsetfilecontent", ["--path", path, "--argumentisinbase64", "--content", base64_string])  # works platform-indepent
+            self.run_program_argsasarray("scsetcontentoffile", ["--path", path, "--argumentisinbase64", "--content", base64_string])  # works platform-independent
 
     @GeneralUtilities.check_arguments
     def file_contains_content(self, path: str, content: str, treat_content_as_regex: bool = False, case_sensitive: bool = True, encoding: str = "utf-8") -> bool:
@@ -1573,11 +1578,11 @@ class ScriptCollectionCore:
             if self.is_file(path):
                 exit_code, stdout, stderr, _ = self.run_program_argsasarray("scremovefile", ["--path", path], throw_exception_if_exitcode_is_not_zero=False)  # works platform-indepent
                 if exit_code != 0:
-                    raise ValueError(f"Fatal error occurrs while removing file '{path}'; Exitcode: '{exit_code}'; StdOut: '{stdout}'. StdErr: '{stderr}'")
+                    raise ValueError(f"Fatal error occurred while removing file '{path}'; Exitcode: '{exit_code}'; StdOut: '{stdout}'. StdErr: '{stderr}'")
             if self.is_folder(path):
                 exit_code, stdout, stderr, _ = self.run_program_argsasarray("scremovefolder", ["--path", path], throw_exception_if_exitcode_is_not_zero=False)  # works platform-indepent
                 if exit_code != 0:
-                    raise ValueError(f"Fatal error occurrs while removing folder '{path}'; Exitcode: '{exit_code}'; StdOut: '{stdout}'. StdErr: '{stderr}'")
+                    raise ValueError(f"Fatal error occurred while removing folder '{path}'; Exitcode: '{exit_code}'; StdOut: '{stdout}'. StdErr: '{stderr}'")
 
     @GeneralUtilities.check_arguments
     def rename(self,  source: str, target: str) -> None:
@@ -1587,7 +1592,7 @@ class ScriptCollectionCore:
         else:
             exit_code, stdout, stderr, _ = self.run_program_argsasarray("screname", ["--source", source, "--target", target], throw_exception_if_exitcode_is_not_zero=False)  # works platform-indepent
             if exit_code != 0:
-                raise ValueError(f"Fatal error occurrs while renaming '{source}' to '{target}'; Exitcode: '{exit_code}'; StdOut: '{stdout}'. StdErr: '{stderr}'")
+                raise ValueError(f"Fatal error occurred while renaming '{source}' to '{target}'; Exitcode: '{exit_code}'; StdOut: '{stdout}'. StdErr: '{stderr}'")
 
     @GeneralUtilities.check_arguments
     def copy(self, source: str, target: str) -> None:
@@ -1605,7 +1610,7 @@ class ScriptCollectionCore:
         else:
             exit_code, stdout, stderr, _ = self.run_program_argsasarray("sccopy", ["--source", source, "--target", target], throw_exception_if_exitcode_is_not_zero=False)  # works platform-indepent
             if exit_code != 0:
-                raise ValueError(f"Fatal error occurrs while copying '{source}' to '{target}'; Exitcode: '{exit_code}'; StdOut: '{stdout}'. StdErr: '{stderr}'")
+                raise ValueError(f"Fatal error occurred while copying '{source}' to '{target}'; Exitcode: '{exit_code}'; StdOut: '{stdout}'. StdErr: '{stderr}'")
 
     @GeneralUtilities.check_arguments
     def get_file_content(self, file: str, encoding: str = "utf-8", from_line: int = None, to_line: int = None) -> str:
@@ -1667,7 +1672,7 @@ class ScriptCollectionCore:
 
             if not os.path.isdir(folder):
                 if create_necessary_folder:
-                    GeneralUtilities.ensure_directory_exists(folder)  # TODO check if this also create nested folders if required
+                    GeneralUtilities.ensure_directory_exists(folder)  # TODO check if this also creates nested folders if required
                 else:
                     raise ValueError(f"Folder '{folder}' does not exist.")
 
@@ -1683,7 +1688,7 @@ class ScriptCollectionCore:
 
             exit_code, stdout, stderr, _ = self.run_program_argsasarray("sccreatefile", arguments, throw_exception_if_exitcode_is_not_zero=False)  # works platform-indepent
             if exit_code != 0:
-                raise ValueError(f"Fatal error occurrs while create file '{path}'; Exitcode: '{exit_code}'; StdOut: '{stdout}'. StdErr: '{stderr}'")
+                raise ValueError(f"Fatal error occurred while creating file '{path}'; Exitcode: '{exit_code}'; StdOut: '{stdout}'. StdErr: '{stderr}'")
 
     @GeneralUtilities.check_arguments
     def create_folder(self, path: str, error_if_already_exists: bool, create_necessary_folder: bool) -> None:
@@ -1701,7 +1706,7 @@ class ScriptCollectionCore:
 
             if not os.path.isdir(folder):
                 if create_necessary_folder:
-                    GeneralUtilities.ensure_directory_exists(folder)  # TODO check if this also create nested folders if required
+                    GeneralUtilities.ensure_directory_exists(folder)  # TODO check if this also creates nested folders if required
                 else:
                     raise ValueError(f"Folder '{folder}' does not exist.")
 
@@ -1717,7 +1722,7 @@ class ScriptCollectionCore:
 
             exit_code, stdout, stderr, _ = self.run_program_argsasarray("sccreatefolder", arguments, throw_exception_if_exitcode_is_not_zero=False)  # works platform-indepent
             if exit_code != 0:
-                raise ValueError(f"Fatal error occurrs while create folder '{path}'; Exitcode: '{exit_code}'; StdOut: '{stdout}'. StdErr: '{stderr}'")
+                raise ValueError(f"Fatal error occurred while creating folder '{path}'; Exitcode: '{exit_code}'; StdOut: '{stdout}'. StdErr: '{stderr}'")
 
     @GeneralUtilities.check_arguments
     def __sort_fmd(self, line: str):
@@ -2400,7 +2405,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
 
     @GeneralUtilities.check_arguments
     def get_file_permission(self, file: str) -> str:
-        """This function returns an usual octet-triple, for example "700"."""
+        """This function returns a usual octet-triple, for example "700"."""
         ls_output: str = self.run_ls_for_folder(file)
         return self.__get_file_permission_helper(ls_output)
 
@@ -2461,7 +2466,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
 
     @GeneralUtilities.check_arguments
     def set_permission(self, file_or_folder: str, permissions: str, recursive: bool = False) -> None:
-        """This function expects an usual octet-triple, for example "700"."""
+        """This function expects a usual octet-triple, for example "700"."""
         args = []
         if recursive:
             args.append("--recursive")
@@ -2593,6 +2598,20 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
 
     @GeneralUtilities.check_arguments
     def run_program_argsasarray(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = None, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False, print_live_output: bool = False, env_vars: dict = None) -> tuple[int, str, str, int]:
+        """Runs a program synchronously and returns (exitcode, stdout, stderr, pid).
+        Every element of arguments_as_array is passed to the program as exactly one argument; nothing is split at spaces.
+        A relative working_directory is resolved against the current working-directory, None means the current working-directory
+        (both only when the program is executed locally). A ValueError is raised if that folder does not exist.
+        stdout and stderr are returned without empty lines and without the trailing linebreak of each line. If log_file is given,
+        their lines are additionally appended to that file (first the stdout-lines, then the stderr-lines).
+        arguments_for_log replaces the arguments in the log-output, which is meant to keep secrets which are passed as argument out of the log.
+        Failure-behavior: if throw_exception_if_exitcode_is_not_zero is set (default) a ValueError (containing stdout and stderr) is
+        raised when the exitcode is not 0. A TimeoutError is raised if the program does not finish within timeoutInSeconds; the process
+        is killed then.
+        If mocking is enabled and a mock-call is defined for this program-call, the mocked result is returned and the program is not
+        executed; if no matching mock-call is defined a LookupError is raised unless execute_program_really_if_no_mock_call_is_defined is set.
+        If call_program_runner_directly is set, the call is passed to the program-runner directly, without mocking, logging and
+        exitcode-check."""
         if self.call_program_runner_directly:
             return self.program_runner.run_program_argsasarray(program, arguments_as_array, working_directory, custom_argument, interactive, env_vars)
         try:
@@ -2911,6 +2930,9 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
 
     @GeneralUtilities.check_arguments
     def increment_version(self, input_version: str, increment_major: bool, increment_minor: bool, increment_patch: bool) -> str:
+        """Increments a version in the format "major.minor.patch". Incrementing a part resets the less significant parts to 0;
+        if several flags are set they are applied in the order major, minor, patch (so for example major and patch together
+        turn "1.2.3" into "2.0.1"). Raises a ValueError if input_version does not consist of exactly three parts."""
         splitted = input_version.split(".")
         GeneralUtilities.assert_condition(len(splitted) == 3, f"Version '{input_version}' does not have the 'major.minor.patch'-pattern.")
         major = int(splitted[0])
@@ -3043,6 +3065,10 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
 
     @GeneralUtilities.check_arguments
     def get_real_git_folder(self,repository_folder:str) -> str:
+        """Returns the folder which contains the git-data of the repository. This is "<repository>/.git" for a normal repository;
+        for a submodule or a worktree (where ".git" is a file containing "gitdir: <path>") it is the folder this file points to
+        (a relative path is resolved against repository_folder).
+        Raises a ValueError if there is no ".git", if the ".git"-file has an unexpected format or if the folder it points to does not exist."""
         git_folder = os.path.join(repository_folder, ".git")
         if os.path.isfile(git_folder):
             with open(git_folder, "r", encoding="utf-8") as f:
@@ -3093,6 +3119,12 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
 
     @GeneralUtilities.check_arguments
     def generate_certificate(self, folder: str,  domain: str, filename: str, subj_c: str, subj_st: str, subj_l: str, subj_o: str, subj_ou: str, days_until_expire: int = None, password: str = None) -> None:
+        """Generates a self-signed certificate for the given domain using openssl (which must be available as command).
+        The following files are written into folder (existing files are overwritten): "<filename>.key" (unencrypted private key),
+        "<filename>.unsigned.crt", "<filename>.selfsigned.pfx" (protected by the password), "<filename>.password" (the password in
+        plain text) and "<filename>.san.conf" (configuration which can be used to create a sign-request for the same subject).
+        If password is None a random password is generated. days_until_expire defaults to 397 days.
+        Raises a ValueError if an openssl-call fails."""
         if days_until_expire is None:
             days_until_expire = 397
         if password is None:
@@ -3413,14 +3445,14 @@ TXDX
 
 TXDX
 
-## Deployment-proecsses
+## Deployment-processes
 
 TXDX""")
         self.__add_chapter(main_reference_file, reference_content_folder, 8, 'Crosscutting Concepts', """TXDX""")
         self.__add_chapter(main_reference_file, reference_content_folder, 9, 'Architectural Decisions', """## Decision-board
 
 | Decision-identifier | Date | Decision | Reason and notes |
-| ------------------- | ---- | -------- | ---------------- |""")  # empty because there are no decsions yet
+| ------------------- | ---- | -------- | ---------------- |""")  # empty because there are no decisions yet
         self.__add_chapter(main_reference_file, reference_content_folder, 10, 'Quality Requirements', """TXDX""")
         self.__add_chapter(main_reference_file, reference_content_folder, 11, 'Risks and Technical Debt', """## Risks
 
@@ -3428,7 +3460,7 @@ Currently there are no known risks.
 
 ## Technical debts
 
-Currently there are no technical depts.""")
+Currently there are no technical debts.""")
         self.__add_chapter(main_reference_file, reference_content_folder, 12, 'Glossary', """## Terms
 
 | Term | Meaning |
@@ -3444,7 +3476,7 @@ Currently there are no technical depts.""")
 
 | Responsibility  | Name and contact-information |
 | --------------- | ---------------------------- |
-| Pdocut-owner    | TXDX                         |
+| Product-owner   | TXDX                         |
 | Product-manager | TXDX                         |
 | Support         | TXDX                         |
 
@@ -3951,6 +3983,15 @@ OCR-content:
 
     @GeneralUtilities.check_arguments
     def start_local_test_service(self, file: str):
+        """Starts the test-service defined by the "docker-compose.yml" located in the same folder as file (typically the
+        start-script of the test-service) in the background, using the compose-project-name "test<foldername>" (lowercase) and the
+        "Parameters.env" next to it if it exists. Containers whose names are equal to the names of the services of the compose-file
+        are removed forcibly first.
+        Outside of a build-container the exposed ports of the services are published to localhost (using a temporary override-file),
+        so the tests running on the host can reach them. Inside a build-container no port is published (to avoid port-conflicts between
+        concurrent pipelines on the same host); instead the build-container is attached to the networks of the compose-file and the
+        container-names are registered in its /etc/hosts, so the tests can use the container-names as hostnames.
+        Raises a ValueError if starting the services fails."""
         example_folder = os.path.dirname(file)
         docker_compose_file = os.path.join(example_folder, "docker-compose.yml")
         for service in self.get_services_from_yaml_file(docker_compose_file):

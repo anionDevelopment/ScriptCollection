@@ -6,9 +6,9 @@ ScriptCollection ships with a set of small command-line tools that wrap common f
 The reason they exist as standalone CLI-commands (and not "just" as Python-functions on `ScriptCollectionCore`) is that they make the same operation usable from:
 
 - any shell on **any operating system** (Windows `cmd`/PowerShell, Linux/macOS `bash`/`zsh`, etc.) with **identical syntax**,
-- inside Python-code via `ScriptCollectionCore`, which transparently delegates to these commands when the actual execution happens on a **remote/different platform** through the configured `ProgramRunner`.
+- inside Python-code via `ScriptCollectionCore`, which for a part of these operations (see [Counterpart in `ScriptCollectionCore`](#counterpart-in-scriptcollectioncore)) transparently delegates to these commands when the actual execution happens on a **remote/different platform** through the configured `ProgramRunner`.
 
-If you write a build- or maintenance-script with these commands, the same script will run unchanged on Windows, Linux and macOS — and the matching `ScriptCollectionCore`-method will work the same way locally and remotely.
+If you write a build- or maintenance-script with these commands, the same script will run unchanged on Windows, Linux and macOS.
 
 ## Commands
 
@@ -18,18 +18,18 @@ If you write a build- or maintenance-script with these commands, the same script
 |---------|--------------|------------|
 | `scfileexists -p <path>` | Tests whether `<path>` is an existing file. | `0` = exists, `2` = does not exist, `1` = error |
 | `scfolderexists -p <path>` | Tests whether `<path>` is an existing folder. | `0` = exists, `2` = does not exist, `1` = error |
-| `scgetsize -p <path>` | Prints the size of a file or folder (bytes) to stdout. | `0` = success, `1` = error |
+| `scgetsize -p <path>` | Prints the size of a file (bytes) to stdout. A relative path is resolved against the current working-directory. | `0` = success, `1` = error (for example the file does not exist) |
 | `scprintfilesize -p <path>` | Prints the size of a file (bytes) to stdout. | `0` = success, `1` = error |
-| `sclistfoldercontent -p <path> [-f] [-d] [-n]` | Lists the immediate entries of a folder. `-f` includes files, `-d` includes folders, `-n` prints only names without paths. | `0` = success, `1` = error |
+| `sclistfoldercontent -p <path> [-f] [-d] [-n] [-t] [--extension <list> \| --glob <pattern> \| --regex <pattern>]` | Lists the entries of a folder. `-f` excludes files, `-d` excludes folders, `-n` prints only names without paths, `-t` recurses into subfolders. The optional filters (mutually exclusive) are matched against the name of the entry: `--extension` takes a comma-separated list of extensions without dot. | `0` = success, `1` = error |
 
 ### File reading and writing
 
 | Command | What it does | Exit-codes |
 |---------|--------------|------------|
 | `scprintfilecontent -p <path>` | Prints the textual content of a file to stdout. | `0` = success, `1` = error |
-| `scsetcontentoffile -p <path> -c <content> [--argumentisinbase64]` | Overwrites a file's content. With `--argumentisinbase64` the content is interpreted as base64-encoded UTF-8, which lets you transport arbitrary bytes (including binary data and newlines) safely on any shell. | `0` = success, `1` = error |
+| `scsetcontentoffile -p <path> -c <content> [--argumentisinbase64]` | Overwrites a file's content. With `--argumentisinbase64` the content is interpreted as base64-encoded UTF-8, which lets you transport arbitrary text (including newlines and quotes) safely on any shell. Binary content is not supported because the decoded bytes must be valid UTF-8. | `0` = success, `1` = error |
 | `scfilecontainscontent -p <path> -c <pattern> [-r] [-i] [-e <encoding>]` | Tests whether `<pattern>` occurs in the file. `-r` treats the pattern as regex, `-i` makes the match case-insensitive. | `0` = contains, `2` = does not contain, `1` = error |
-| `scappendlinetofile -p <path> -l <line> [--skip-leading-newline-if-file-already-ends-with-newline] [--no-trailing-newline]` | Appends a single line to a file. By default a leading and a trailing newline are added so the line is on its own line and the file remains POSIX-line-ended. | `0` = success, `1` = error |
+| `scappendlinetofile -p <path> -l <line> [--skip-leading-newline-if-file-already-ends-with-newline] [--no-trailing-newline]` | Appends a single line to an existing file. By default a leading newline (only if the file is not empty) and a trailing newline are added so the line is on its own line and the file remains POSIX-line-ended. | `0` = success, `1` = error |
 | `scregexreplaceinfile -p <path> -r <pattern> -w <replacement> [-i] [-m] [-d] [-e <encoding>]` | In-place regex replacement on a file. Backreferences (`\1`, `\2`, …) are supported. Flags: `-i` case-insensitive, `-m` multiline, `-d` dotall. | `0` = success, `1` = error |
 
 ### File and folder manipulation
@@ -38,10 +38,10 @@ If you write a build- or maintenance-script with these commands, the same script
 |---------|--------------|------------|
 | `sccreatefile -p <path> [--errorwhenexists] [--createnecessaryfolder]` | Creates an empty file. | `0` = success, `1` = error |
 | `sccreatefolder -p <path> [--errorwhenexists] [--createnecessaryfolder]` | Creates an empty folder. | `0` = success, `1` = error |
-| `scremovefile -p <path>` | Removes a file. | `0` = success, `1` = error |
-| `scremovefolder -p <path>` | Removes a folder (recursively). | `0` = success, `1` = error |
+| `scremovefile -p <path> [-e]` | Removes a file. A file which does not exist is not an error unless `-e` (`--errorwhennotexists`) is set. | `0` = success, `1` = error |
+| `scremovefolder -p <path> [-e]` | Removes a folder (recursively). A folder which does not exist is not an error unless `-e` (`--errorwhennotexists`) is set. | `0` = success, `1` = error |
 | `screname -s <source> -t <target>` | Renames/moves a file or folder. | `0` = success, `1` = error |
-| `sccopy -s <source> -t <target>` | Copies a file or folder. | `0` = success, `1` = error |
+| `sccopy -s <source> -t <target>` | Copies a file or folder. Fails if the target already exists. | `0` = success, `1` = error |
 
 ### Source-code checks
 
@@ -53,13 +53,13 @@ If you write a build- or maintenance-script with these commands, the same script
 
 | Command | What it does | Exit-codes |
 |---------|--------------|------------|
-| `scforeach -f <folder> -c "<command>" [-t] [--include-folders] [--skip-files] [--continue-on-error]` | Runs a command for each entry of a folder. The placeholder `{path}` in the command template is substituted with the entry's absolute path. `-t` walks the folder transitively. By default only file-entries are processed; `--include-folders` adds folders, `--skip-files` excludes files. With `--continue-on-error` the iteration continues even if a single command fails. | `0` = all succeeded, otherwise the exit-code of the last failure |
+| `scforeach -f <folder> -c "<command>" [-t] [--include-folders] [--skip-files] [--continue-on-error]` | Runs a command for each entry of a folder. The placeholder `{path}` in the command template is substituted with the entry's absolute path. The command is executed by the shell of the operating system. `-t` walks the folder transitively. By default only file-entries are processed; `--include-folders` adds folders, `--skip-files` excludes files. Without `--continue-on-error` the iteration stops at the first failing command. | `0` = all succeeded, `1` = the folder does not exist or nothing is selected, otherwise the exit-code of the last failing command |
 
 ### Environment
 
 | Command | What it does | Exit-codes |
 |---------|--------------|------------|
-| `scprintosname` | Prints `Windows` / `Linux` / `Other` (mapped from the running OS). Useful for `if`-branches in cross-platform scripts. | `0` = success, `1` = error |
+| `scprintosname` | Prints `Windows` or `Linux` (mapped from the running OS). Useful for `if`-branches in cross-platform scripts. On any other operating system nothing is printed to stdout. | `0` = success, `1` = other operating system or error |
 | `scprintcurrentworkingdirectory` | Prints the current working directory to stdout. | `0` = success, `1` = error |
 
 ## Why platform-independent?
@@ -86,14 +86,15 @@ This is especially useful in cases where:
 
 ## Counterpart in `ScriptCollectionCore`
 
-For every command above there is a matching `ScriptCollectionCore`-method (`is_file`, `is_folder`, `get_size`, `get_file_content`, `set_file_content`, `file_contains_content`, `remove`, `rename`, `copy`, `create_file`, `create_folder`, `list_content`, …).
+For the filesystem-commands there is a matching `ScriptCollectionCore`-method (`is_file`, `is_folder`, `get_size`, `set_file_content`, `remove`, `rename`, `copy`, `create_file`, `create_folder`, `list_content`).
 These methods do the operation **locally** when the `ProgramRunner` is configured for local execution (much faster than spawning the CLI),
 and call out to the corresponding `sc*`-command when the configured runner targets a remote/different system.
+Other methods with a matching command (for example `get_file_content` or `file_contains_content`) always work on the local filesystem.
 
 ```python
 sc = ScriptCollectionCore()
-# Local: direct file IO. Remote (e.g. via SSH-runner): runs `scfilecontainscontent` over the channel.
-if sc.file_contains_content("/etc/hosts", "127.0.0.1"):
+# Local: direct file IO. Remote (e.g. via SSH-runner): runs the matching sc*-command over the channel.
+if sc.is_file("/etc/hosts"):
     sc.set_file_content("/etc/hosts", new_hosts_content)
 ```
 

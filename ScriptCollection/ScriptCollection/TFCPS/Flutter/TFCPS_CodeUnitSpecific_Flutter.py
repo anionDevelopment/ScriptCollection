@@ -479,8 +479,9 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
     def translate_safe(self, base_language: str = "en", throw_if_no_credentials: bool = False) -> None:
         """Translates every not-yet-translated segment of Other/Resources/Translations/messages.<language>.xlf via
         LibreTranslate, if a translation-service is configured. The translation-service can be configured by creating
-        a file at ~/.ScriptCollection/TranslationServiceProperties.txt with the content
-        "LibreTranslateAPI=your_api_server_url" (matching TFCPS_CodeUnitSpecific_NodeJS_Functions.translate_safe)."""
+        a file at ~/.ScriptCollection/GlobalCache/TranslationServiceProperties.txt with the content
+        "LibreTranslateAPI=your_api_server_url" (matching TFCPS_CodeUnitSpecific_NodeJS_Functions.translate_safe).
+        If no translation-service is configured nothing is translated, or a ValueError is raised if throw_if_no_credentials is set."""
         translationservice_file = os.path.join(self._protected_sc.get_global_cache_folder(), "TranslationServiceProperties.txt")
         api_server: str | None = None
         if os.path.isfile(translationservice_file):

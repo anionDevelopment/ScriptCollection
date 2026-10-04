@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.4.41"
+version = "4.4.43"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
 license = "GPL-3.0-only"
@@ -52,9 +52,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/anionDev/ScriptCollection"
+Homepage = "https://github.com/anionDevelopment/ScriptCollection"
 Documentation = "https://aniondev.github.io/ScriptCollectionReference/index.html"
-Changelog = "https://github.com/anionDev/ScriptCollection/tree/main/Other/Resources/Changelog"
+Changelog = "https://github.com/anionDevelopment/ScriptCollection/tree/main/Other/Resources/Changelog"
 
 [project.scripts]
 scbuildcodeunits = "ScriptCollection.Executables:BuildCodeUnits"
@@ -87,8 +87,6 @@ scsearchinfiles = "ScriptCollection.Executables:SearchInFiles"
 sccreatesimplemergewithoutrelease = "ScriptCollection.Executables:CreateSimpleMergeWithoutRelease"
 scshow2faasqrcode = "ScriptCollection.Executables:Show2FAAsQRCode"
 scshowmissingfiles = "ScriptCollection.Executables:ShowMissingFiles"
-scupdatenugetpackagesincsharpproject = "ScriptCollection.Executables:UpdateNugetpackagesInCsharpProject"
-scuploadfile = "ScriptCollection.Executables:UploadFile"
 scgeneratecertificateauthority = "ScriptCollection.Executables:GenerateCertificateAuthority"
 scgeneratecertificate = "ScriptCollection.Executables:GenerateCertificate"
 scgeneratecertificatesignrequest = "ScriptCollection.Executables:GenerateCertificateSignRequest"
@@ -98,7 +96,7 @@ scfolderexists = "ScriptCollection.Executables:FolderExists"
 scocranalysisoffolder = "ScriptCollection.Executables:OCRAnalysisOfFolder"
 scocranalysisoffile = "ScriptCollection.Executables:OCRAnalysisOfFile"
 scocranalysisofrepository = "ScriptCollection.Executables:OCRAnalysisOfRepository"
-scsetcontentoffile = "ScriptCollection.Executables:SetContentOfFile"
+scsetcontentoffile = "ScriptCollection.Executables:SetFileContent"
 scprintfilecontent = "ScriptCollection.Executables:PrintFileContent"
 sccreatefile = "ScriptCollection.Executables:CreateFile"
 sccreatefolder = "ScriptCollection.Executables:CreateFolder"

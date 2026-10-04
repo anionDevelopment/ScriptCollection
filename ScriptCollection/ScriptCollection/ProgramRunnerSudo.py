@@ -55,7 +55,7 @@ class ProgramRunnerSudo(ProgramRunnerBase):
 
     @GeneralUtilities.check_arguments
     def __init__(self,user_password:str):
-        GeneralUtilities.assert_condition(GeneralUtilities.current_system_is_linux(), "SudoRunner can only be only executed on Linux.")
+        GeneralUtilities.assert_condition(GeneralUtilities.current_system_is_linux(), "SudoRunner can only be executed on Linux.")
         self.__sc = ScriptCollectionCore()
         self.__password = user_password
 

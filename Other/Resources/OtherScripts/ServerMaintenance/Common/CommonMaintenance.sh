@@ -5,7 +5,7 @@ if [ "$EUID" -ne 0 ]
   exit
 fi
 
-#TOOD check if docker is available
+#TODO check if docker is available
 
 #remove unused docker-container
 #docker volume prune --force

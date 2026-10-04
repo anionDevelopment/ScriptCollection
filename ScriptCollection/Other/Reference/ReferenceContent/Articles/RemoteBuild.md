@@ -15,7 +15,7 @@ therefore delegates such operating-system-/toolchain-bound steps to a **remote t
 operating-system (or, for Android, the required toolchain inside a Linux-container).
 
 The mechanism is generic and available to every codeunit-type (it lives in `TFCPS_CodeUnitSpecific_Base`, not only in the
-flutter-codeunit): `self.run_program_on_remote_runner(required_os, program, arguments, working_directory)`. The actual
+flutter-codeunit): `self.run_program_on_remote_runner(required_os, program, arguments, working_directory, result_folder, folders_which_are_not_transferred)`. The actual
 transport/synchronization is implemented in `TFCPS_RemoteBuild`; the runners are the codeunits `SCTaskRunnerWindows`,
 `SCTaskRunnerMacOS`, `SCTaskRunnerIOS` and `SCTaskRunnerAndroid` (in the SCBuilder-repository), which each expose an
 HTTP-server. `RunnerOperatingSystem.MacOS` and `RunnerOperatingSystem.IOS` are deliberately two separate values (not one

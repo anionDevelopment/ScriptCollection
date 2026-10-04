@@ -43,7 +43,13 @@ Dependency_CSharp_MyPrivateFeed_Password;file;Secrets/MyToken.txt
 
 Use a **relative** path for a secret-file (it is resolved against `<configuration-folder>/TFCPS`). An absolute path or a `~`-path of the developer-machine does not exist inside the container.
 
-> **Create `GlobalCache/OCIImages/ImageRegistries.csv` even if it is empty** (a file containing only the header-line `ImageName;RegistryAddress` is enough). The mount is read-only, but ScriptCollection creates that file - and the folders above it - when it does not exist yet. On a read-only mount that creation fails and the build aborts, so a folder which only contains `TFCPS` breaks every build on this runner. See [Custom OCI-registries](./CustomOCIRegistries.md) for what to put into that file.
+> **Create `GlobalCache/OCIImages/ImageRegistries.csv` even if it is empty** (a file containing only the header-line `ImageName;RegistryAddress` is enough). The mount is read-only, but ScriptCollection creates that file when it does not exist yet. On a read-only mount that creation fails and the build aborts, so a missing file breaks every build on this runner. See [Custom OCI-registries](./CustomOCIRegistries.md) for what to put into that file.
+
+### Mount only the two subfolders, never the whole folder
+
+Only `TFCPS` and `GlobalCache/OCIImages` are mounted (read-only) into the job-container, each to its own target-path below `/root/.ScriptCollection` - not the whole folder to `/root/.ScriptCollection`. This is the same thing `scbuildcodeunits -c` does on a developer-machine.
+
+The reason is the rest of `GlobalCache`: the SCBuilder-image already contains a prefilled tool-cache in `/root/.ScriptCollection/GlobalCache/Tools` (filled by `scdownloadcachabletools` when the image is built). A mount of the whole folder to `/root/.ScriptCollection` hides that cache. A build which then needs one of the cached tools tries to download it into `GlobalCache/Tools` and fails with `Read-only file system`. This only happens for builds which use the tool-cache at all - for example the merge of the bill-of-materials of a codeunit with the ones of its dependent codeunits, the generation of code from an API-specification or the build of an Android-app-bundle. A repository whose builds do not use the tool-cache works with both kinds of mounts, which is why the problem does not show up on every runner.
 
 Restrict the access-rights of the folder to the user which runs the runner (for example `chmod 600` for the files below `Secrets`).
 
@@ -69,7 +75,7 @@ The mount into the **job**-containers is configured once in the `config.toml` of
 ```toml
 [[runners]]
   [runners.docker]
-    volumes = ["/var/run/docker.sock:/var/run/docker.sock", "/srv/ScriptCollectionConfiguration:/root/.ScriptCollection:ro"]
+    volumes = ["/var/run/docker.sock:/var/run/docker.sock", "/srv/ScriptCollectionConfiguration/TFCPS:/root/.ScriptCollection/TFCPS:ro", "/srv/ScriptCollectionConfiguration/GlobalCache/OCIImages:/root/.ScriptCollection/GlobalCache/OCIImages:ro"]
 ```
 
 Afterwards restart the runner (`docker compose restart gitlab-runner`) so the changed configuration takes effect.
@@ -118,12 +124,13 @@ jobs:
       image: aniondev/scbuilder:v1.2.9
       volumes:
         - /var/run/docker.sock:/var/run/docker.sock
-        - /srv/ScriptCollectionConfiguration:/root/.ScriptCollection:ro
+        - /srv/ScriptCollectionConfiguration/TFCPS:/root/.ScriptCollection/TFCPS:ro
+        - /srv/ScriptCollectionConfiguration/GlobalCache/OCIImages:/root/.ScriptCollection/GlobalCache/OCIImages:ro
 ```
 
 ### Target-path of the mount
 
-`/root/.ScriptCollection` is the configuration-folder of the user the job-container runs as. The SCBuilder-image runs as `root`; for an image which runs as another user the target-path is the `.ScriptCollection`-folder in the home-directory of that user.
+`/root/.ScriptCollection` is the configuration-folder of the user the job-container runs as; the two subfolders are mounted to `TFCPS` and `GlobalCache/OCIImages` below it (see [Mount only the two subfolders, never the whole folder](#mount-only-the-two-subfolders-never-the-whole-folder)). The SCBuilder-image runs as `root`; for an image which runs as another user the target-paths are below the `.ScriptCollection`-folder in the home-directory of that user.
 
 The mount is needed for a repository which declares required environment-variables, and it is also what makes a custom OCI-registry (and its credentials) available to every build on this runner - see [Custom OCI-registries](./CustomOCIRegistries.md).
 
@@ -160,6 +167,6 @@ A `workflow_dispatch`-input is **not** suitable for a secret: inputs have to be 
 ## Security
 
 - Everything which is mounted into a job-container (or provided as a job-environment-variable) is readable by every job which runs on that runner. On a runner which also builds repositories that accept contributions from outside, use a separate runner-instance with an own label for the repositories which need the credentials.
-- Mount the configuration-folder read-only (`:ro`): a build never has to change it.
+- Mount `TFCPS` and `GlobalCache/OCIImages` read-only (`:ro`): a build never has to change them. The tool-cache in `GlobalCache/Tools` is part of the image and stays writable inside the job-container.
 - Do not place secret-files inside the workspace of the repository: they would end up in the repository-scan, in the artifacts or in a built image.
 - Never pass a secret as a build-argument of an image-build: build-arguments are recorded in the image-history and are readable by everybody who can pull the image (the [secret-scan of the built images](../Hints.md#secret-scan-of-oci-images) reports this).

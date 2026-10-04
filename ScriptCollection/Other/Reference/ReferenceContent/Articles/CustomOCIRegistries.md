@@ -56,7 +56,7 @@ Create the two files under `~/.ScriptCollection/`. Same as Windows, `scbuildcode
 
 Nothing to configure beyond the host-setup above: `ImageRegistries.csv` and the whole `TFCPS`-folder of the configuration-folder of the user who starts the build are mounted read-only into the build-container automatically (to `/Workspace/ScriptCollectionConfiguration/OCIImages/ImageRegistries.csv` and `/Workspace/ScriptCollectionConfiguration/TFCPS`), so the build inside the container resolves both exactly like a build on the host does. The whole `TFCPS`-folder is mounted (and not only `EnvironmentVariables.csv` in it) so that a `file`-value with a relative path - the recommended form for a secret - also resolves inside the container.
 
-> A value of the kind `hostenvvariable` is the one exception: it names an environment-variable of the machine the command was started on, which by definition does not exist inside the job-container. A registry declared that way is skipped there (with a warning naming the reason) and its images are taken from the fallback-registry. Use `literal` or `file` for a registry which has to work inside a container as well.
+> A value of the kind `hostenvvariable` is the one exception: it names an environment-variable of the machine the command was started on, which by definition does not exist inside the build-container. A registry declared that way is skipped there (with a warning naming the reason) and its images are taken from the fallback-registry. Use `literal` or `file` for a registry which has to work inside a container as well.
 
 ### GitLab-pipeline
 

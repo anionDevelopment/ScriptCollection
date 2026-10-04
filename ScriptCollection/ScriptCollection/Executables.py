@@ -23,7 +23,7 @@ Caution: This script can cause harm if you pass a wrong inputfolder-argument.'''
     parser.add_argument('--printtableheadline', type=GeneralUtilities.string_to_boolean, const=True, default=True, nargs='?', help='Prints column-titles in the name-mapping-csv-file')
     parser.add_argument('--namemappingfile', default="NameMapping.csv", help='Specifies the file where the name-mapping will be written to')
     parser.add_argument('--extensions', default="exe,py,sh", help='Comma-separated list of file-extensions of files where this tool should be applied. Use "*" to obfuscate all')
-    parser.add_argument('--inputfolder', help='Specifies the foldere where the files are stored whose names should be obfuscated', required=True)
+    parser.add_argument('--inputfolder', help='Specifies the folder where the files are stored whose names should be obfuscated', required=True)
 
     args = parser.parse_args()
     ScriptCollectionCore().filenameObfuscator(args.inputfolder, args.printtableheadline, args.namemappingfile, args.extensions)
@@ -34,7 +34,7 @@ def CreateISOFileWithObfuscatedFiles() -> int:
     parser = argparse.ArgumentParser(description='''Creates an iso file with the files in the given folder and changes their names and hash-values.
 This script does not process subfolders transitively.''')
 
-    parser.add_argument('--inputfolder', help='Specifies the foldere where the files are stored which should be added to the iso-file', required=True)
+    parser.add_argument('--inputfolder', help='Specifies the folder where the files are stored which should be added to the iso-file', required=True)
     parser.add_argument('--outputfile', default="files.iso", help='Specifies the output-iso-file and its location')
     parser.add_argument('--printtableheadline', default=False, action='store_true', help='Prints column-titles in the name-mapping-csv-file')
     parser.add_argument('--createnoisofile', default=False, action='store_true', help="Create no iso file")
@@ -73,12 +73,12 @@ def Show2FAAsQRCode():
     parser = argparse.ArgumentParser(description="""Always when you use 2-factor-authentication you have the problem:
 Where to backup the secret-key so that it is easy to re-setup them when you have a new phone?
 Using this script is a solution. Always when you setup a 2fa you copy and store the secret in a csv-file.
-It should be obviously that this csv-file must be stored encrypted!
+It should be obvious that this csv-file must be stored encrypted!
 Now if you want to move your 2fa-codes to a new phone you simply call "SCShow2FAAsQRCode 2FA.csv"
 Then the qr-codes will be displayed in the console and you can scan them on your new phone.
-This script does not saving the any data anywhere.
+This script does not save any data anywhere.
 
-The structure of the csv-file can be viewd here:
+The structure of the csv-file can be viewed here:
 Displayname;Website;Email-address;Secret;Period;
 Amazon;Amazon.de;myemailaddress@example.com;QWERTY;30;
 Google;Google.de;myemailaddress@example.com;ASDFGH;30;
@@ -93,7 +93,7 @@ Hints:
 
 
 def SearchInFiles() -> int:
-    parser = argparse.ArgumentParser(description='''Searchs for the given searchstrings in the content of all files in the given folder.
+    parser = argparse.ArgumentParser(description='''Searches for the given searchstrings in the content of all files in the given folder.
 This program prints all files where the given searchstring was found to the console''')
 
     parser.add_argument('folder', help='Folder for search')
@@ -110,7 +110,7 @@ def ReplaceSubstringsInFilenames() -> int:
     parser.add_argument('folder', help='Folder where the files are stored which should be renamed')
     parser.add_argument('substringInFilename', help='String to be replaced')
     parser.add_argument('newSubstringInFilename', help='new string value for filename')
-    parser.add_argument('conflictResolveMode', help='''Set a method how to handle cases where a file with the new filename already exits and
+    parser.add_argument('conflictResolveMode', help='''Set a method how to handle cases where a file with the new filename already exists and
     the files have not the same content. Possible values are: ignore, preservenewest, merge''')
 
     args = parser.parse_args()
@@ -138,8 +138,8 @@ def OrganizeLinesInFile() -> int:
     parser.add_argument("--sort", help="Sort lines", action='store_true')
     parser.add_argument("--remove_duplicated_lines", help="Remove duplicate lines", action='store_true')
     parser.add_argument("--ignore_first_line", help="Ignores the first line in the file", action='store_true')
-    parser.add_argument("--remove_empty_lines", help="Removes lines which are empty or contains only whitespaces", action='store_true')
-    parser.add_argument('--ignored_start_character', default="", help='Characters which should not be considered at the begin of a line')
+    parser.add_argument("--remove_empty_lines", help="Removes lines which are empty or contain only whitespaces", action='store_true')
+    parser.add_argument('--ignored_start_character', default="", help='Characters which should not be considered at the beginning of a line')
 
     args = parser.parse_args()
     ScriptCollectionCore().organize_lines_in_file(args.file, args.encoding, args.sort, args.remove_duplicated_lines, args.ignore_first_line, args.remove_empty_lines, list(args.ignored_start_character))
@@ -208,7 +208,7 @@ def MergePDFs() -> int:
 
 
 def KeyboardDiagnosis() -> None:
-    """Caution: This function does usually never terminate"""
+    """Caution: This function usually never terminates"""
     keyboard.hook(__keyhook)
     while True:
         time.sleep(10)
@@ -219,7 +219,7 @@ def __keyhook(self, event) -> None:
 
 
 def GenerateThumbnail() -> int:
-    parser = argparse.ArgumentParser(description='Generate thumpnails for video-files')
+    parser = argparse.ArgumentParser(description='Generate thumbnails for video-files')
     parser.add_argument('file', help='Input-videofile for thumbnail-generation')
     parser.add_argument('framerate', help='', default="16")
     args = parser.parse_args()
@@ -478,7 +478,7 @@ def CreateChangelogEntry() -> int:
 
 
 def FileExists() -> int:
-    parser = argparse.ArgumentParser(description="This function returns 0 if the given file exists. Otherwise this function returns 2. If an error occurrs the exitcode is 1.")
+    parser = argparse.ArgumentParser(description="This function returns 0 if the given file exists. Otherwise this function returns 2. If an error occurs the exitcode is 1.")
     parser.add_argument('-p', '--path', required=True)
     args = parser.parse_args()
     if os.path.isfile(args.path):
@@ -506,7 +506,7 @@ def CheckPythonAst() -> int:
 
 
 def FolderExists() -> int:
-    parser = argparse.ArgumentParser(description="This function returns 0 if the given folder exists. Otherwise this function returns 2. If an error occurrs the exitcode is 1.")
+    parser = argparse.ArgumentParser(description="This function returns 0 if the given folder exists. Otherwise this function returns 2. If an error occurs the exitcode is 1.")
     parser.add_argument('-p', '--path', required=True)
     args = parser.parse_args()
     if os.path.isdir(args.path):
@@ -912,7 +912,7 @@ def CurrentUserHasElevatedPrivileges() -> int:
 
 
 def Espoc() -> int:
-    parser = argparse.ArgumentParser(description="Espoc (appreviation for 'exit started programs on close') is a tool to ensure the started processes of your program will also get terminated when the execution of your program is finished.")
+    parser = argparse.ArgumentParser(description="Espoc (abbreviation for 'exit started programs on close') is a tool to ensure the started processes of your program will also get terminated when the execution of your program is finished.")
     parser.add_argument('-p', '--processid', required=True)
     parser.add_argument('-f', '--file', required=True, help='Specifies the file where the process-ids of the started processes are stored (line by line). This file will be deleted when all started processes are terminated.')
     parser.add_argument('-l', '--logfile', required=False,default=None)
@@ -1304,12 +1304,12 @@ def ShowProjectVersion() -> int:
 
 
 def RunCommandInFolder() -> int:
-    parser = argparse.ArgumentParser(description="Runs a command in a folder if (and only if) the folder is located inside the allowed folder.")
-    parser.add_argument('-b', '--basefolder', required=True, help="Folder in which the command is  executed in.")
+    parser = argparse.ArgumentParser(description="Runs a command in the base-folder if (and only if) the actual folder is located inside the base-folder and not inside an excluded folder. The command is always executed in the base-folder; the actual folder is only passed to the command by using the placeholder \"{actual_folder}\" in the arguments (for example: -c git -a \"-C {actual_folder} status\").")
+    parser.add_argument('-b', '--basefolder', required=True, help="Folder in which the command is executed.")
     parser.add_argument('-c', '--command', required=True, help="Command which should be executed.")
     parser.add_argument('-a', '--arguments', required=False, default="", help="Arguments which should be passed to the command.")
     parser.add_argument('-e', '--excludedfolder', action='append', default=[], help="A folder (relative to basefolder) which is not allowed even if it lies inside basefolder. Can be specified multiple times. Example: --excludedfolder .git --excludedfolder .claude --excludedfolder Other/Secrets")
-    parser.add_argument('-f', '--actualfolder', required=True, help="Folder-argument.")
+    parser.add_argument('-f', '--actualfolder', required=True, help="Folder which is checked against the base-folder and the excluded folders and which replaces the placeholder \"{actual_folder}\" in the arguments. A relative path is resolved against the base-folder.")
     args = parser.parse_args()
     sc = ScriptCollectionCore()
     return sc.run_command_in_folder(args.basefolder, args.command, args.arguments, args.actualfolder, args.excludedfolder)

@@ -1331,5 +1331,227 @@ class ScriptCollectionCoreTests(unittest.TestCase):
 
         assert used_registries == ["myregistry.example.com"]
 
+    def test_increment_version_increments_the_patch_part(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+
+        # act
+        actual = sc.increment_version("1.2.9", False, False, True)
+
+        # assert
+        assert actual == "1.2.10"
+
+    def test_increment_version_increments_the_minor_part_and_resets_the_patch_part(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+
+        # act
+        actual = sc.increment_version("1.2.3", False, True, False)
+
+        # assert
+        assert actual == "1.3.0"
+
+    def test_increment_version_increments_the_major_part_and_resets_the_minor_and_patch_part(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+
+        # act
+        actual = sc.increment_version("1.2.3", True, False, False)
+
+        # assert
+        assert actual == "2.0.0"
+
+    def test_increment_version_rejects_a_version_without_three_parts(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+
+        # act & assert
+        with self.assertRaises(ValueError):
+            sc.increment_version("1.2", False, False, True)
+
+    def test_is_patch_version_returns_true_for_a_version_with_a_patch_part_greater_zero(self) -> None:
+        # act
+        actual = ScriptCollectionCore.is_patch_version("1.2.10")
+
+        # assert
+        assert actual is True
+
+    def test_is_patch_version_returns_false_for_a_version_with_patch_part_zero(self) -> None:
+        # act
+        actual = ScriptCollectionCore.is_patch_version("1.2.0")
+
+        # assert
+        assert actual is False
+
+    def test_ensure_line_is_in_gitignore_creates_the_gitignore_file_when_it_does_not_exist(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as repository_folder:
+
+            # act
+            sc.ensure_line_is_in_gitignore(repository_folder, "Other/Artifacts")
+
+            # assert
+            assert GeneralUtilities.read_nonempty_lines_from_file(os.path.join(repository_folder, ".gitignore")) == ["Other/Artifacts"]
+
+    def test_ensure_line_is_in_gitignore_appends_a_missing_line_and_keeps_the_existing_lines(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as repository_folder:
+            gitignore_file = os.path.join(repository_folder, ".gitignore")
+            GeneralUtilities.write_lines_to_file(gitignore_file, ["a", "b"])
+
+            # act
+            sc.ensure_line_is_in_gitignore(repository_folder, "c")
+
+            # assert
+            assert GeneralUtilities.read_nonempty_lines_from_file(gitignore_file) == ["a", "b", "c"]
+
+    def test_ensure_line_is_in_gitignore_does_not_add_a_line_which_is_already_contained(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as repository_folder:
+            gitignore_file = os.path.join(repository_folder, ".gitignore")
+            GeneralUtilities.write_text_to_file(gitignore_file, "a\r\nb")
+
+            # act
+            sc.ensure_line_is_in_gitignore(repository_folder, "b")
+
+            # assert
+            assert GeneralUtilities.read_nonempty_lines_from_file(gitignore_file) == ["a", "b"]
+
+    def test_path_is_allowed_within_base_folder_rejects_a_relative_path_which_climbs_out_of_the_base_folder(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as temp_folder:
+            base_folder = os.path.join(temp_folder, "base")
+            GeneralUtilities.ensure_directory_exists(base_folder)
+
+            # act
+            actual = sc.path_is_allowed_within_base_folder(os.path.join("..", "other", "file.txt"), base_folder, [])
+
+        # assert
+        assert actual is False
+
+    def test_path_is_allowed_within_base_folder_rejects_the_excluded_folder_itself(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as base_folder:
+
+            # act
+            actual = sc.path_is_allowed_within_base_folder(os.path.join(base_folder, ".git"), base_folder, [".git"])
+
+        # assert
+        assert actual is False
+
+    def test_path_is_allowed_within_base_folder_allows_a_sibling_whose_name_starts_with_the_name_of_an_excluded_folder(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as base_folder:
+
+            # act
+            actual = sc.path_is_allowed_within_base_folder(os.path.join(base_folder, ".github", "workflow.yml"), base_folder, [".git"])
+
+        # assert
+        # ".github" is not located inside ".git", it only shares its textual prefix.
+        assert actual is True
+
+    def test_check_python_ast_returns_no_findings_for_valid_files(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as folder:
+            GeneralUtilities.write_text_to_file(os.path.join(folder, "valid.py"), "x = 1\n")
+
+            # act
+            actual = sc.check_python_ast(folder)
+
+        # assert
+        assert len(actual) == 0, actual
+
+    def test_check_python_ast_reports_the_file_and_the_line_of_a_syntax_error(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as folder:
+            invalid_file = os.path.join(folder, "sub", "invalid.py")
+            GeneralUtilities.ensure_directory_exists(os.path.dirname(invalid_file))
+            GeneralUtilities.write_text_to_file(invalid_file, "x = 1\ndef f(:\n")
+            GeneralUtilities.write_text_to_file(os.path.join(folder, "notpython.txt"), "def f(:\n")
+
+            # act
+            actual = sc.check_python_ast(folder)
+
+        # assert
+        assert len(actual) == 1
+        assert actual[0][0] == invalid_file
+        assert actual[0][1] == 2
+
+    def test_check_python_ast_rejects_a_path_which_does_not_exist(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as folder:
+            missing_path = os.path.join(folder, "missing")
+
+            # act & assert
+            with self.assertRaises(ValueError):
+                sc.check_python_ast(missing_path)
+
+    def test_get_real_git_folder_returns_the_git_folder_of_a_normal_repository(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as repository_folder:
+            git_folder = os.path.join(repository_folder, ".git")
+            GeneralUtilities.ensure_directory_exists(git_folder)
+
+            # act
+            actual = sc.get_real_git_folder(repository_folder)
+
+        # assert
+        assert actual == git_folder
+
+    def test_get_real_git_folder_resolves_a_relative_gitdir_of_a_git_file(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as temp_folder:
+            repository_folder = os.path.join(temp_folder, "submodule")
+            real_git_folder = os.path.join(temp_folder, "modules", "submodule")
+            GeneralUtilities.ensure_directory_exists(repository_folder)
+            GeneralUtilities.ensure_directory_exists(real_git_folder)
+            GeneralUtilities.write_text_to_file(os.path.join(repository_folder, ".git"), "gitdir: ../modules/submodule\n")
+
+            # act
+            actual = sc.get_real_git_folder(repository_folder)
+
+        # assert
+        assert os.path.normcase(actual) == os.path.normcase(os.path.normpath(real_git_folder))
+
+    def test_get_real_git_folder_rejects_a_git_file_without_gitdir_entry(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as repository_folder:
+            GeneralUtilities.write_text_to_file(os.path.join(repository_folder, ".git"), "something else\n")
+
+            # act & assert
+            with self.assertRaises(ValueError):
+                sc.get_real_git_folder(repository_folder)
+
+    def test_get_real_git_folder_rejects_a_gitdir_which_does_not_exist(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as repository_folder:
+            GeneralUtilities.write_text_to_file(os.path.join(repository_folder, ".git"), "gitdir: ../does-not-exist\n")
+
+            # act & assert
+            with self.assertRaises(ValueError):
+                sc.get_real_git_folder(repository_folder)
+
+    def test_get_real_git_folder_rejects_a_folder_which_is_no_repository(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        with tempfile.TemporaryDirectory() as folder:
+
+            # act & assert
+            with self.assertRaises(ValueError):
+                sc.get_real_git_folder(folder)
+
 
 # TODO all testcases should be independent of epew

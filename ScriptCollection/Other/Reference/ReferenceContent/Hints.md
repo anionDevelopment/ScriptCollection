@@ -2,7 +2,7 @@
 
 ## Requirements
 
-The following requirements from the [tools-list](https://github.com/anionDevevlopment/ScriptCollection/blob/main/ScriptCollection/Other/Reference/ReferenceContent/Articles/RequirementsForCommonProjectStructure.md#Tools) are required to build and run this code-unit:
+The following requirements from the [tools-list](https://github.com/anionDevelopment/ScriptCollection/blob/main/ScriptCollection/Other/Reference/ReferenceContent/Articles/RequirementsForCommonProjectStructure.md#tools) are required to build and run this code-unit:
 
 - `coverage`
 - `docfx`
@@ -21,7 +21,7 @@ To create a release the following tools are also required:
 
 The recommended IDE for this code-unit is [Visual Studio Code](https://code.visualstudio.com/).
 
-It is recommended to enabled word-wrap.
+It is recommended to enable word-wrap.
 
 ## Secret-scan of OCI-images
 
@@ -60,7 +60,14 @@ A finding never contains the secret itself, because the findings are written to 
 
 ### Allowlisting
 
-Known false positives are allowlisted in the `[[allowlists]]`-entries of `<repository>/.betterleaks.toml`, the same file which is used for the repository-scan. The `paths`- and `regexes`-entries are applied to the finding, so the path of the file inside the layer can be used to allowlist it.
+Known false positives of the image-scan are declared in `<repository>/.ScriptCollection/SecretScanConfiguration.toml`. This is a separate file: the `[[allowlists]]`-entries of `<repository>/.betterleaks.toml` only apply to the repository-scan. The file is optional.
+
+```toml
+[[ignoredfindings]]
+regexes = ['^file "etc/ssl/private/ssl-cert-snakeoil\.key" in image-layer: contains a private key$']
+```
+
+Every entry of `regexes` is a regular expression which is matched against the description of a finding (as it is written to the build-log, without the leading `image "<image>": `), not against a file-path. A finding names the kind of the finding and, for a file, the path of the file inside the image, so an entry can be restricted to exactly one kind of finding in one file instead of hiding everything an image contains at that path. A file which can not be parsed or an entry which is not a valid regular expression is ignored with a warning.
 
 ### Checking an image manually
 
@@ -71,7 +78,7 @@ scsearchforsecretsinimage -i myimage:1.0.0
 scsearchforsecretsinimage -i myimage:1.0.0 -r C:\Repositories\MyProduct
 ```
 
-The optional `-r` names a repository whose `.betterleaks.toml` is used as allowlist.
+The optional `-r` names a repository whose `.ScriptCollection/SecretScanConfiguration.toml` declares the findings which are ignored.
 
 Exit-codes:
 
@@ -149,7 +156,7 @@ appear there. Commit it together with the changed project-file.
 so the file it leaves behind belongs to the commit of that update. Note that nuget suggests `--force-evaluate` in the
 text of NU1004; that is only needed for a restore which runs in locked mode anyway, not for the plain restore above.
 
-Two things which are worth knowing:
+Three things which are worth knowing:
 
 - **Do not delete the file to make an error go away.** Without it the restore resolves whatever a feed currently
   offers, and the build silently loses the property the file exists for. Update it, or find out why its content does

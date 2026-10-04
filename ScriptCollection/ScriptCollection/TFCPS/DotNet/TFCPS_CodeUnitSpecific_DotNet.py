@@ -455,7 +455,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         for (level, message, file, line) in diagnostics:
             location = f" ({file}:{line})" if file else ""
             self._protected_sc.log.log(f"{message}{location}", level)
-            if level == LogLevel.Error:#should not occurr on scbuildcodeunits because then the build would have failed already but you can also run this script manually.
+            if level == LogLevel.Error:#should not occur on scbuildcodeunits because then the build would have failed already but you can also run this script manually.
                 has_errors = True
         if has_errors:
             raise ValueError("Linting-issues occurred.")
