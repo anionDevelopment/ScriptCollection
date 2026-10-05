@@ -1276,6 +1276,20 @@ class ScriptCollectionCore:
         return result[1].replace("\r", GeneralUtilities.empty_string).replace("\n", GeneralUtilities.empty_string)
 
     @GeneralUtilities.check_arguments
+    def git_get_outermost_superproject_working_tree(self, repository: str) -> str:
+        """Returns the working-tree of the outermost repository which contains the given repository as (possibly nested) submodule.
+        If the given repository is not a submodule, the repository itself is returned.
+        This is the smallest folder which contains the real git-folder of a submodule (which is located in the git-folder of its superproject)."""
+        self.assert_is_git_repository(repository)
+        result: str = repository
+        while True:
+            stdout: str = self.run_program_argsasarray("git", ["rev-parse", "--show-superproject-working-tree"], result, throw_exception_if_exitcode_is_not_zero=True)[1]
+            superproject: str = stdout.replace("\r", GeneralUtilities.empty_string).replace("\n", GeneralUtilities.empty_string)
+            if not GeneralUtilities.string_has_content(superproject):
+                return os.path.normpath(result)
+            result = superproject
+
+    @GeneralUtilities.check_arguments
     def git_set_local_configuration_value(self, repository: str, key: str, value: str) -> None:
         """Sets a git-configuration-value in the local configuration of the given repository (does not modify the global or system configuration)."""
         self.assert_is_git_repository(repository)
