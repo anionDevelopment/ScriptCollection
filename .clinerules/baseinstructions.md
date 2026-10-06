@@ -1,0 +1,1 @@
+Read and follow the instructions from <repository-root-folder>/AGENTS.md
