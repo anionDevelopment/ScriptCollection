@@ -1740,8 +1740,8 @@ class ScriptCollectionCore:
 
     @GeneralUtilities.check_arguments
     def __sort_fmd(self, line: str):
-        splitted: list = line.split(";")
-        filetype: str = splitted[1]
+        parts: list = line.split(";")
+        filetype: str = parts[1]
         if filetype == "d":
             return -1
         if filetype == "f":
@@ -1753,11 +1753,11 @@ class ScriptCollectionCore:
         lines = GeneralUtilities.read_lines_from_file(source_file, encoding)
         lines.sort(key=self.__sort_fmd)
         for line in lines:
-            splitted: list = line.split(";")
-            full_path_of_file_or_folder: str = os.path.join(folder, splitted[0])
-            filetype: str = splitted[1]
-            user: str = splitted[2]
-            permissions: str = splitted[3]
+            parts: list = line.split(";")
+            full_path_of_file_or_folder: str = os.path.join(folder, parts[0])
+            filetype: str = parts[1]
+            user: str = parts[2]
+            permissions: str = parts[3]
             if filetype == "d" and create_folder_is_not_exist and not os.path.isdir(full_path_of_file_or_folder):
                 GeneralUtilities.ensure_directory_exists(full_path_of_file_or_folder)
             if (filetype == "f" and os.path.isfile(full_path_of_file_or_folder)) or (filetype == "d" and os.path.isdir(full_path_of_file_or_folder)):
@@ -2446,8 +2446,8 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
 
     @GeneralUtilities.check_arguments
     def __get_file_owner_helper(self, ls_output: str) -> str:
-        splitted = ls_output.split()
-        return f"{splitted[2]}:{splitted[3]}"
+        parts = ls_output.split()
+        return f"{parts[2]}:{parts[3]}"
 
     @GeneralUtilities.check_arguments
     def get_file_owner_and_file_permission(self, file: str) -> str:
@@ -2947,11 +2947,11 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         """Increments a version in the format "major.minor.patch". Incrementing a part resets the less significant parts to 0;
         if several flags are set they are applied in the order major, minor, patch (so for example major and patch together
         turn "1.2.3" into "2.0.1"). Raises a ValueError if input_version does not consist of exactly three parts."""
-        splitted = input_version.split(".")
-        GeneralUtilities.assert_condition(len(splitted) == 3, f"Version '{input_version}' does not have the 'major.minor.patch'-pattern.")
-        major = int(splitted[0])
-        minor = int(splitted[1])
-        patch = int(splitted[2])
+        parts = input_version.split(".")
+        GeneralUtilities.assert_condition(len(parts) == 3, f"Version '{input_version}' does not have the 'major.minor.patch'-pattern.")
+        major = int(parts[0])
+        minor = int(parts[1])
+        patch = int(parts[2])
         if increment_major:
             major = major+1
             minor=0
@@ -3017,8 +3017,8 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
                             result = self.increment_version(current_version, False, False, True)
                         elif self.is_minor_branch(current_branch_name):
                             incremented = self.increment_version(current_version, False, True, False)
-                            splitted = incremented.split(".")
-                            result = f"{splitted[0]}.{splitted[1]}.0"
+                            parts = incremented.split(".")
+                            result = f"{parts[0]}.{parts[1]}.0"
                         elif self.is_major_branch(current_branch_name):
                             incremented = self.increment_version(current_version, True, False, False)
                             major = incremented.split(".")[0]
@@ -3524,8 +3524,8 @@ TXDX
         result: list[str] = []
         for std_out_line in std_out_lines:
             normalized_line = ';'.join(std_out_line.split())
-            splitted = normalized_line.split(";")
-            result.append(splitted[1])
+            parts = normalized_line.split(";")
+            result.append(parts[1])
         return result
 
     @GeneralUtilities.check_arguments
@@ -4372,14 +4372,15 @@ OCR-content:
         self.run_program_with_retry("docker","buildx prune -a -f",amount_of_attempts=amount_of_attempts,throw_exception_if_exitcode_is_not_zero=False) # buildx prune is not available on every machine.
         self.run_program_with_retry("docker","system df",print_live_output=self.log.loglevel==LogLevel.Debug,amount_of_attempts=amount_of_attempts)
 
+
     @GeneralUtilities.check_arguments
     def get_docker_networks(self)->list[str]:
         program_result=self.run_program("docker","network list")
         result=[]
         lines=program_result[1].split("\n")[1:]
         for line in lines:
-            splitted=[item for item in line.split(' ') if GeneralUtilities.string_has_content(item)]
-            result.append(splitted[1].replace("\n","").replace("\r","").strip())
+            parts=[item for item in line.split(' ') if GeneralUtilities.string_has_content(item)]
+            result.append(parts[1].replace("\n","").replace("\r","").strip())
         return result
 
     @GeneralUtilities.check_arguments

@@ -321,8 +321,8 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             result: dict[str, str] = dict[str, str]()
             files_tuples = GeneralUtilities.to_list(result_plain, ";")
             for files_tuple in files_tuples:
-                splitted = files_tuple.split("=")
-                result[splitted[0]] = splitted[1]
+                parts = files_tuple.split("=")
+                result[parts[0]] = parts[1]
             return result
 
     @GeneralUtilities.check_arguments

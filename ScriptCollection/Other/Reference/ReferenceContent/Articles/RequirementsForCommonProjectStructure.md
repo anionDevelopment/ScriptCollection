@@ -25,6 +25,12 @@ See the [ReadMe](https://readme.localtest.me/) for more information.
 It can be installed with `apt-get install binutils` on a Debian- or Ubuntu-system.
 It can be installed using MinGW on a Windows-system.
 
+#### codespell
+
+[codespell](https://github.com/codespell-project/codespell) is used by `scbuildcodeunits` to search the repository for typos. Its findings are reported as warnings only and do not let the build fail.
+It is installed together with ScriptCollection, because codespell is a dependency of ScriptCollection.
+codespell runs in the repository-folder, so an optional `<repository>/.codespellrc` is used. Since codespell does not evaluate `.gitignore`, the git-ignored folders which contain build-results (for example `<codeunit>/Other/Artifacts`) should be listed in its `skip`-option; words which are no typos in the context of the repository can be listed in its `ignore-words-list`-option.
+
 #### coverage
 
 [coverage](https://github.com/nedbat/coveragepy) is required to create test-coverage-reports for [python](https://www.python.org)-projects.

@@ -15,7 +15,7 @@ import urllib
 import stat
 import fnmatch
 import secrets
-import string as strin
+import string as string_module
 import sys
 from importlib import resources
 from enum import Enum
@@ -198,8 +198,8 @@ class GeneralUtilities:
     @check_arguments
     def string_to_date(value: str) -> date:
         """expects a value in the format 2022-10-06"""
-        splitted = value.split("-")
-        return date(int(splitted[0]), int(splitted[1]), int(splitted[2])) 
+        parts = value.split("-")
+        return date(int(parts[0]), int(parts[1]), int(parts[2])) 
     
     @staticmethod
     @check_arguments
@@ -1198,7 +1198,7 @@ class GeneralUtilities:
     @check_arguments
     def generate_password(length: int = 16, alphabet: str = None) -> None:
         if alphabet is None:
-            alphabet = strin.ascii_letters + strin.digits+"_"
+            alphabet = string_module.ascii_letters + string_module.digits+"_"
         return GeneralUtilities.empty_string.join(secrets.choice(alphabet) for i in range(length))
 
     @staticmethod
@@ -1448,8 +1448,8 @@ class GeneralUtilities:
     def float_to_string(number: float, leading_zeroplaces: int, trailing_zeroplaces: int) -> str:
         plain_str = str(number)
         GeneralUtilities.assert_condition("." in plain_str)
-        splitted: list[str] = plain_str.split(".")
-        return splitted[0].zfill(leading_zeroplaces)+"."+splitted[1].ljust(trailing_zeroplaces, '0')
+        parts: list[str] = plain_str.split(".")
+        return parts[0].zfill(leading_zeroplaces)+"."+parts[1].ljust(trailing_zeroplaces, '0')
 
     @staticmethod
     @check_arguments

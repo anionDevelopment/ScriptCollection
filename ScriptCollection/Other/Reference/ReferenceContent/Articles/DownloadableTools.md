@@ -53,7 +53,7 @@ When the build itself runs in a container whose docker-socket is forwarded to th
 
 ## Pre-downloading all tools (`scdownloadcachabletools`)
 
-There is one CLI-command that downloads all cachable tools at once:
+There is one CLI-command that downloads all cacheable tools at once:
 
 ```bash
 scdownloadcachabletools

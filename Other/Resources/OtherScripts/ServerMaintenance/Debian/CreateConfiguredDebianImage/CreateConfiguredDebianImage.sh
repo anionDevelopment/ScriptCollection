@@ -67,7 +67,7 @@ echo "preseedfile ($preseed_file):"
 
 echo "Extract ISO..."
 
-mountpoint="$temp_folder/orginal"
+mountpoint="$temp_folder/original"
 mkdir -p "$mountpoint"
 mount -o loop "$isofile" "$mountpoint"
 
