@@ -1,0 +1,3 @@
+[codespell]
+skip = ./.git,./.ScriptCollection/Cache,./Other/Logs,./Other/Resources/Artifacts,./ScriptCollection/build,./ScriptCollection/scriptcollection.egg-info,./ScriptCollection/Other/Artifacts,./ScriptCollection/Other/Resources/DependentCodeUnits,./ScriptCollection/Other/Resources/TestCoverageHistory,./ScriptCollection/Other/Resources/TestCoverageBadges,./Other/Metrics,./Other/Reference/Technical/Diagrams,*.pyc,.pytest_cache,__pycache__
+ignore-words-list = alle

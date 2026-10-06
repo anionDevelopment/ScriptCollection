@@ -105,12 +105,12 @@ class TFCPS_Tools_General:
 
     @GeneralUtilities.check_arguments
     def download_cyclonedx(self, enforce_update: bool = False) -> None:
-        self.__sc.log.log("Download cachable tool \"CycloneDX-CLI\" into global cache...", LogLevel.Debug)
+        self.__sc.log.log("Download cacheable tool \"CycloneDX-CLI\" into global cache...", LogLevel.Debug)
         self.ensure_cyclonedxcli_is_available(enforce_update)
 
     @GeneralUtilities.check_arguments
     def download_jre(self, enforce_update: bool = False) -> None:
-        self.__sc.log.log("Download cachable tool \"JRE\" into global cache...", LogLevel.Debug)
+        self.__sc.log.log("Download cacheable tool \"JRE\" into global cache...", LogLevel.Debug)
         # No repository-context is available when warming the global cache (e.g. scdownloadcachabletools in a
         # build-image), so download the default version pinned by the ScriptCollection-package. Actual builds
         # pass the version pinned in their own '<repo>/Other/Resources/Dependencies/JRE/Version.txt'. This is
@@ -120,23 +120,23 @@ class TFCPS_Tools_General:
 
     @GeneralUtilities.check_arguments
     def download_mediamtx(self, enforce_update: bool = False) -> None:
-        self.__sc.log.log("Download cachable tool \"MediaMTX\" into global cache...", LogLevel.Debug)
+        self.__sc.log.log("Download cacheable tool \"MediaMTX\" into global cache...", LogLevel.Debug)
         for architecture in [Platform.Windows_AMD64, Platform.Linux_AMD64, Platform.Linux_ARM64, Platform.MacOS_ARM64]:
             self.__ensure_mediamtx_archive_in_global_cache(architecture, enforce_update)
 
     @GeneralUtilities.check_arguments
     def download_trufflehog(self, enforce_update: bool = False) -> None:
-        self.__sc.log.log("Download cachable tool \"TruffleHog\" into global cache...", LogLevel.Debug)
+        self.__sc.log.log("Download cacheable tool \"TruffleHog\" into global cache...", LogLevel.Debug)
         self.ensure_trufflehog_is_available(enforce_update)
 
     @GeneralUtilities.check_arguments
     def download_openapigenerator(self, enforce_update: bool = False) -> None:
-        self.__sc.log.log("Download cachable tool \"OpenAPIGenerator\" into global cache...", LogLevel.Debug)
+        self.__sc.log.log("Download cacheable tool \"OpenAPIGenerator\" into global cache...", LogLevel.Debug)
         self.ensure_openapigenerator_is_available(not enforce_update)
 
     @GeneralUtilities.check_arguments
     def download_androidappbundletool(self, enforce_update: bool = False) -> None:
-        self.__sc.log.log("Download cachable tool \"AndroidAppBundleTool\" into global cache...", LogLevel.Debug)
+        self.__sc.log.log("Download cacheable tool \"AndroidAppBundleTool\" into global cache...", LogLevel.Debug)
         # target_folder is not used by ensure_androidappbundletool_is_available (the jar is
         # always stored in the global cache); pass the cache folder as a harmless value.
         self.ensure_androidappbundletool_is_available(self.__sc.get_global_cache_folder(), enforce_update)
@@ -335,8 +335,8 @@ class TFCPS_Tools_General:
         result: list[tuple[str, str]] = []
         for item in plain_content:
             if len(re.findall(space_character, item)) == 1:
-                splitted = item.split(space_character)
-                result.append((splitted[0], splitted[1]))
+                parts = item.split(space_character)
+                result.append((parts[0], parts[1]))
             else:
                 raise ValueError(f'Unexpected author: "{item}"')
         return result

@@ -822,3 +822,37 @@ class GeneralUtilitiesTests(unittest.TestCase):
 
         # assert
         assert actual == "001.50"
+
+    def test_generate_password_uses_default_length_and_alphanumeric_alphabet(self) -> None:
+        # arrange
+        allowed_characters = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
+
+        # act
+        actual = GeneralUtilities.generate_password()
+
+        # assert
+        assert len(actual) == 16
+        assert set(actual) <= allowed_characters
+
+    def test_generate_password_uses_only_characters_of_the_given_alphabet(self) -> None:
+        # act
+        actual = GeneralUtilities.generate_password(64, "ab")
+
+        # assert
+        assert len(actual) == 64
+        assert set(actual) <= {"a", "b"}
+
+    def test_generate_password_with_length_zero_returns_empty_string(self) -> None:
+        # act
+        actual = GeneralUtilities.generate_password(0)
+
+        # assert
+        assert actual == GeneralUtilities.empty_string
+
+    def test_generate_password_does_not_return_the_same_password_twice(self) -> None:
+        # act
+        first = GeneralUtilities.generate_password()
+        second = GeneralUtilities.generate_password()
+
+        # assert
+        assert first != second

@@ -95,9 +95,9 @@ class OCIImageManager:
     def custom_registry_is_defined(self,image_name:str)->bool:
         global_docker_image_registries_file=self.get_global_docker_image_registries_file()
         for line in  GeneralUtilities.read_nonempty_lines_from_file(global_docker_image_registries_file)[1:]:
-            splitted_line=line.split(";")
-            if image_name==splitted_line[0]:
-                GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(splitted_line[1]),f"No registry defined for image {image_name}.")
+            line_parts=line.split(";")
+            if image_name==line_parts[0]:
+                GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(line_parts[1]),f"No registry defined for image {image_name}.")
                 return True
         return False
 
@@ -191,10 +191,10 @@ class OCIImageManager:
             if line.startswith("ImageName;"): #header line
                 new_lines.append(line)
                 continue
-            splitted_line=line.split(";")
-            image_name=splitted_line[0]
-            registry_address=splitted_line[1]
-            default_tag=splitted_line[2]
+            line_parts=line.split(";")
+            image_name=line_parts[0]
+            registry_address=line_parts[1]
+            default_tag=line_parts[2]
             tag=default_tag
             try:
                 addresses_to_check=[]

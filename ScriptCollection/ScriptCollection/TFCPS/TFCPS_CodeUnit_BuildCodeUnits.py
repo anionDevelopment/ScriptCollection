@@ -259,8 +259,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
                 self.sc.log.log(f"codespell found {len(findings)} possible typo(s). It is recommended to fix them by running \"codespell -w\" in the repository-folder. Known false positives can be ignored using the file \".codespellrc\" in the repository-folder.", LogLevel.Warning)
         except Exception as e:
             self.sc.log.log(f"An error occurred while running codespell: {e}", LogLevel.Warning)
-            return
-        
+
     @GeneralUtilities.check_arguments
     def __ensure_scriptcollection_gitignore_is_setup(self, repository_folder: str) -> None:
         """Ensures that "<repository>/.ScriptCollection/.gitignore" exists and contains the expected entries."""
@@ -603,10 +602,10 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         csv_lines=[]
         for line in GeneralUtilities.read_lines_from_file(loc_metric_file):
             if GeneralUtilities.string_has_content(line):
-                splitted=line.split(";")
-                v=splitted[0]
-                t=splitted[1]
-                loc=splitted[2]
+                parts=line.split(";")
+                v=parts[0]
+                t=parts[1]
+                loc=parts[2]
                 csv_lines.append(f"{v},{t},{loc}")
         GeneralUtilities.write_lines_to_file(loc_data_file,csv_lines)
         self.sc.normalize_invisible_characters(loc_data_file)  # ensure the generated LoC-diagram-csv always uses LF line-endings
