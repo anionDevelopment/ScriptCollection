@@ -245,10 +245,24 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     def __do_project_linting_using_codespell(self, repository_folder: str) -> None:
         """Searches for typos in the repository using codespell. Findings are only reported as warnings and do not let the build fail.
         codespell runs in the repository-folder, so an optional "<repository>/.codespellrc" is used automatically, for example to
-        define words which are no typos in the context of the repository (option "ignore-words-list")."""
+        define words which are no typos in the context of the repository (option "ignore-words-list").
+        Folders (relative to the repository-root, one per line) which should be ignored can be defined in the optional file "<repository>/.ScriptCollection/CodeSpellIgnore.txt"."""
         try:
             self.sc.log.log("Search for typos using codespell...")
-            (exit_code, stdout, stderr, _) = self.sc.run_program_argsasarray("codespell", [], repository_folder, throw_exception_if_exitcode_is_not_zero=False)
+            arguments: list[str] = []
+            ignore_file = os.path.join(repository_folder, ".ScriptCollection", "CodeSpellIgnore.txt")
+            if os.path.isfile(ignore_file):
+                skip_patterns: list[str] = []
+                for line in GeneralUtilities.string_to_lines(GeneralUtilities.read_text_from_file(ignore_file)):
+                    folder = line.strip().replace("\\", "/").strip("/")
+                    if folder.startswith("./"):
+                        folder = folder[2:]
+                    if folder != "" and not folder.startswith("#"):
+                        skip_patterns.append(f"./{folder}")
+                        skip_patterns.append(f"./{folder}/*")
+                if 0 < len(skip_patterns):
+                    arguments.append("--skip=" + ",".join(skip_patterns))
+            (exit_code, stdout, stderr, _) = self.sc.run_program_argsasarray("codespell", arguments, repository_folder, throw_exception_if_exitcode_is_not_zero=False)
             codespell_exitcode_for_found_typos: int = 65
             if exit_code not in (0, codespell_exitcode_for_found_typos):
                 raise ValueError(f"codespell failed with exit-code {exit_code}: {stderr}")
