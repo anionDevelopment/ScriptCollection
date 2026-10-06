@@ -394,6 +394,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.sc.run_with_epew("openspec", "validate --all --strict", self.repository)
 
     @GeneralUtilities.check_arguments
+    def get_default_base_mount_folder(self) -> str:
+        """Returns the folder which is mounted into the container when the caller does not specify one: the repository itself or,
+        if it is a submodule, the outermost repository which contains it. Mounting only a submodule would make its git-folder
+        unavailable inside the container, because the real git-folder of a submodule is located in the git-folder of its superproject."""
+        return self.sc.git_get_outermost_superproject_working_tree(self.repository)
+
+    @GeneralUtilities.check_arguments
     def build_codeunits_in_container(self,base_mount_folder:str) -> tuple[bool, str]:
         """Runs scbuildcodeunits (with the options of this object) inside the SCBuilder-image and returns whether it succeeded and
         its output. A failing build is reported by the result and not by an exception.

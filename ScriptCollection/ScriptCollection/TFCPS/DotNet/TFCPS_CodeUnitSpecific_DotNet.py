@@ -1,4 +1,5 @@
 import os
+import glob
 import re
 import shutil
 import uuid
@@ -764,7 +765,8 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         # temp_folder) instead of a relative "./TestResults" inside the codeunit-folder. The relative path would otherwise
         # leave a folder behind in the codeunit-folder (visible e.g. when building inside the mounted Debian-build-container).
         # The whole temp_folder - including these results - is removed in the finally-block below.
-        args += ["--results-directory", os.path.join(temp_folder, "TestResults")]
+        results_directory = os.path.join(temp_folder, "TestResults")
+        args += ["--results-directory", results_directory]
         # Run dotnet-test from an absolute working-directory (a subfolder of temp_folder) with node-reuse disabled, for the
         # same reason as in get_dotnet_build_diagnostics: building the solution with "-o" makes MSBuild create an additional
         # relative "tmp/<guid>"-output-folder, which a reused worker-node would otherwise create inside the codeunit-folder
@@ -775,10 +777,12 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         try:
             program_output=self._protected_sc.run_program_argsasarray("dotnet", args, test_working_directory, print_live_output=self.get_verbosity()==LogLevel.Debug, timeoutInSeconds=timeoutInSeconds, env_vars={"MSBUILDDISABLENODEREUSE": "1"})
             test_output:str=program_output[1]
-            output_lines=program_output[1].split("\n")
-            output_lines=[line for line in output_lines if GeneralUtilities.string_has_content(line)]
-            generated_coverage_file: str = output_lines[-1].strip()#the cobertura file is printed in the end of the output by the xplat collector
-            GeneralUtilities.assert_file_exists(generated_coverage_file)
+            # The coverage-file is searched in the results-directory instead of taking the last line of the output: dotnet-test
+            # can print further lines (for example the warning NETSDK1194 because of "-o" on a solution) after the path of the
+            # coverage-file which is printed by the xplat collector, so the last line is not reliably the path of that file.
+            generated_coverage_files: list[str] = glob.glob(os.path.join(results_directory, "**", "coverage.cobertura.xml"), recursive=True)
+            GeneralUtilities.assert_condition(len(generated_coverage_files) == 1, f"Expected exactly one coverage-file in \"{results_directory}\" but found {len(generated_coverage_files)}. Output of dotnet test:\n{test_output}")
+            generated_coverage_file: str = generated_coverage_files[0]
             shutil.copyfile(generated_coverage_file, target_file)
         finally:
             GeneralUtilities.ensure_directory_does_not_exist(temp_folder)

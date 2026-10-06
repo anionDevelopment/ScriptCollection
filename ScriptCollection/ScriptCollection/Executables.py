@@ -270,7 +270,7 @@ def BuildCodeUnits() -> int:
     if args.runincontainer:
         base_mount_folder:str=args.basemountfolder
         if base_mount_folder is None:
-            base_mount_folder=repo
+            base_mount_folder=t.get_default_base_mount_folder()
         base_mount_folder:str=GeneralUtilities.resolve_relative_path(base_mount_folder,os.getcwd())
         success, _ = t.build_codeunits_in_container(base_mount_folder)
         return 0 if success else 1
@@ -297,11 +297,11 @@ def BuildCodeUnitsC() -> int:
     GeneralUtilities.reconfigure_standard_input_and_outputs()
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
     verbosity=LogLevel(int(args.verbosity))
+    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges,args.addreadytomergeflag,args.fastlane)
     base_mount_folder:str=args.basemountfolder
     if base_mount_folder is None:
-        base_mount_folder=repo
+        base_mount_folder=t.get_default_base_mount_folder()
     base_mount_folder:str=GeneralUtilities.resolve_relative_path(base_mount_folder,os.getcwd())
-    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,args.ispremerge,args.assertnonewchanges,args.addreadytomergeflag,args.fastlane)
     success, _ = t.build_codeunits_in_container(base_mount_folder)
     return 0 if success else 1
 
@@ -323,7 +323,7 @@ def UpdateDependencies() -> int:
     if args.runincontainer:
         base_mount_folder:str=args.basemountfolder
         if base_mount_folder is None:
-            base_mount_folder=repo
+            base_mount_folder=t.get_default_base_mount_folder()
         base_mount_folder:str=GeneralUtilities.resolve_relative_path(base_mount_folder,os.getcwd())
         success, _ = t.update_dependencies_in_container(base_mount_folder)
         return 0 if success else 1
@@ -366,11 +366,11 @@ def UpdateDependenciesC() -> int:
     GeneralUtilities.reconfigure_standard_input_and_outputs()
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
     verbosity=LogLevel(int(args.verbosity))
+    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,False,False)
     base_mount_folder:str=args.basemountfolder
     if base_mount_folder is None:
-        base_mount_folder=repo
+        base_mount_folder=t.get_default_base_mount_folder()
     base_mount_folder:str=GeneralUtilities.resolve_relative_path(base_mount_folder,os.getcwd())
-    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,False,False)
     success, _ = t.update_dependencies_in_container(base_mount_folder)
     return 0 if success else 1
 
