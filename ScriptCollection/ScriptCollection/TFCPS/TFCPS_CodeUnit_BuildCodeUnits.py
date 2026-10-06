@@ -200,6 +200,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.tfcps_tools_general.generate_svg_files_from_plantuml_files_for_repository(self.repository, self.use_cache())
             self.tfcps_tools_general.generate_svg_files_from_vega_files_for_repository(self.repository, self.use_cache())
             self.tfcps_tools_general.generate_svg_files_from_vegalite_files_for_repository(self.repository, self.use_cache())
+            self.__do_project_linting(self.repository)
             self.__normalize_line_endings_of_common_files()
 
             self.sc.log.log(GeneralUtilities.get_line())
@@ -234,6 +235,27 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.sc.log.log(f"Finished building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(end_time,False)}. (Duration: {GeneralUtilities.timedelta_to_simple_string(duration)})")
         self.sc.log.log(GeneralUtilities.get_line())
 
+
+    @GeneralUtilities.check_arguments
+    def __do_project_linting(self, repository_folder: str) -> None:
+        self.sc.log.log("Do project-linting...")
+        self.__do_project_linting_using_codespell(repository_folder)
+
+    @GeneralUtilities.check_arguments
+    def __do_project_linting_using_codespell(self, repository_folder: str) -> None:
+        """Searches for typos in the repository using codespell. Findings are only reported as warnings and do not let the build fail.
+        codespell runs in the repository-folder, so an optional "<repository>/.codespellrc" is used automatically, for example to
+        define words which are no typos in the context of the repository (option "ignore-words-list")."""
+        self.sc.log.log("Search for typos using codespell...")
+        (exit_code, stdout, stderr, _) = self.sc.run_program_argsasarray("codespell", [], repository_folder, throw_exception_if_exitcode_is_not_zero=False)
+        codespell_exitcode_for_found_typos: int = 65
+        if exit_code not in (0, codespell_exitcode_for_found_typos):
+            raise ValueError(f"codespell failed with exit-code {exit_code}: {stderr}")
+        findings: list[str] = [line for line in GeneralUtilities.string_to_lines(stdout) if GeneralUtilities.string_has_content(line)]
+        for finding in findings:
+            self.sc.log.log(f"Possible typo: {finding}", LogLevel.Warning)
+        if 0 < len(findings):
+            self.sc.log.log(f"codespell found {len(findings)} possible typo(s). It is recommended to fix them by running \"codespell -w\" in the repository-folder. Known false positives can be ignored using the file \".codespellrc\" in the repository-folder.", LogLevel.Warning)
 
     @GeneralUtilities.check_arguments
     def __ensure_scriptcollection_gitignore_is_setup(self, repository_folder: str) -> None:
