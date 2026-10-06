@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.4.44"
+version = "4.4.45"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
 license = "GPL-3.0-only"
@@ -28,6 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "build>=1.6.1",
+    "codespell>=2.4.3",
     "CountryInformation>=1.0.12",
     "coverage>=7.16.1",
     "cyclonedx-bom>=7.1.0",
