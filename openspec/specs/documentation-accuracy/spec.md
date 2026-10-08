@@ -62,15 +62,17 @@ an overview of what is planned.
   its topic
 - **THEN** the feature is added to the list
 
-### Requirement: Lists of bugs, findings and technical debts contain only entries which still exist
+### Requirement: Lists of bugs, findings and technical debts state the current state of every entry
 
-Every list of known bugs, known limitations, security-findings, technical debts or open points SHALL contain only entries which
-still exist in the source-code, and every entry SHALL describe the state which the source-code has now.
+Known bugs, known limitations, security-findings, technical debts and open points are collected in the findings-table in
+`Other/Reference/Reference.md` as defined by the findings-specification (`openspec/specs/findings/spec.md`). Every entry of that
+table SHALL state the state which the source-code has now.
 
 #### Scenario: A documented finding was fixed
 
-- **WHEN** a bug, a finding or a technical debt which such a list contains is not present in the source-code anymore
-- **THEN** its entry is removed from that list, so that nobody spends time on a problem which does not exist anymore
+- **WHEN** a bug, a finding or a technical debt which the table contains is not present in the source-code anymore
+- **THEN** its entry stays in the table and is marked as fixed as defined by the findings-specification, so that nobody spends
+  time on a problem which does not exist anymore
 
 #### Scenario: A documented finding is still open but changed
 
