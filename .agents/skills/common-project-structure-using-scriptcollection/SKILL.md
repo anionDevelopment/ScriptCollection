@@ -4,7 +4,7 @@ description: "Contains information about the automations provided by ScriptColle
 metadata:
   purpose: "Information about automation using ScriptCollection."
   tags: information, automation, conventions
-  version: 1.1.0
+  version: 1.2.0
 ---
 
 # General
@@ -96,6 +96,16 @@ Change the source instead.
 | The diagrams which are based on plantuml | the corresponding `.puml`-files             | The generated diagrams are always regenerated, so a change belongs into the `.puml`-file. |
 | The codeunits-overview-diagram           | the codeunits and their dependencies        |                                                                                           |
 
+The following files and folders are also **generated** and must therefore never be edited by hand — a manual change is useless because it is overwritten with the next build:
+
+- `<repository>/AGENTS.md`
+- `<repository>/CLAUDE.md`
+- `<repository>/Contributing.md`
+- `<repository>/ContributorLicenseAgreement.txt`
+- the CI/CD-pipeline-definitions
+- the content of `<repository>/.github`
+- the content of `<repository>/.clinerules`
+
 Additionally the line-endings of all text- and sourcecode-files are normalized to **LF**.
 Do not commit files with CRLF-line-endings: they are changed back, which shows up as a difference nobody made.
 
@@ -103,7 +113,10 @@ Do not commit files with CRLF-line-endings: they are changed back, which shows u
 
 - The folder `<repository>/.agents/skills` is the **single source of truth** for the skills of a repository. Every skill which belongs to the repository is created and changed there.
 - The skill-folders of the other agents are **synchronized from it automatically**. Never edit a skill in one of those folders: the change is lost as soon as the codeunits are built again.
-- The exception are the **openspec-skills**: they are managed by openspec itself, so they are neither written nor changed by hand.
+- Some skills are **generated** and must therefore not be edited by hand even inside `<repository>/.agents/skills`, because a manual change is overwritten with the next build. These are:
+  - `common-project-structure`
+  - `product-knowledge`
+  - the `openspec-*`-skills (these are managed by openspec itself, so they are neither written nor changed by hand).
 
 ## Tasks
 

@@ -41,7 +41,8 @@ If there is a file called HowToBuild.md for the code you changed then you must e
 
 #### Documentation
 
-There must be doc-comments for all functions you write except helper-scripts. The access-modifier does not matter for this rule.
+There must be doc-comments for all functions you write except helper-scripts.
+The access-modifier does not matter for this rule.
 
 #### Tests
 
