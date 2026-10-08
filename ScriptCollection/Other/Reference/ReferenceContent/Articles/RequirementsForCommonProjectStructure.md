@@ -29,7 +29,9 @@ It can be installed using MinGW on a Windows-system.
 
 [codespell](https://github.com/codespell-project/codespell) is used by `scbuildcodeunits` to search the repository for typos. Its findings are reported as warnings only and do not let the build fail.
 It is installed together with ScriptCollection, because codespell is a dependency of ScriptCollection.
-codespell runs in the repository-folder, so an optional `<repository>/.codespellrc` is used. Since codespell does not evaluate `.gitignore`, the git-ignored folders which contain build-results (for example `<codeunit>/Other/Artifacts`) should be listed in its `skip`-option; words which are no typos in the context of the repository can be listed in its `ignore-words-list`-option.
+codespell runs in the repository-folder, so an optional `<repository>/.codespellrc` is used; words which are no typos in the context of the repository can be listed in its `ignore-words-list`-option.
+Only files which are not git-ignored are checked (git-ignored content like `node_modules` or `<codeunit>/Other/Artifacts` is not checked). Hidden files and folders (for example `.github`) are checked too, only `.git` is always excluded. Since codespell does not evaluate `.gitignore` itself, the files to check are written into a file-list which is passed to codespell using `@<file-list>`, so codespell is called only once, even for repositories with a lot of files.
+Folders which are committed but should not be checked can be listed (relative to the repository-root, one per line) in the optional file `<repository>/.ScriptCollection/CodeSpellIgnore.txt`.
 
 #### coverage
 
