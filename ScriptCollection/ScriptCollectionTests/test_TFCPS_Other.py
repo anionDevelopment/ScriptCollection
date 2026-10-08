@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 import unittest
 from contextlib import contextmanager
@@ -161,6 +162,25 @@ def create_tools_with_recorded_certificate_commands() -> tuple[TFCPS_Tools_Gener
     sc.sign_certificate = lambda folder, ca_folder, ca_name, domain, filename: recorded_calls.append(f"sign_certificate:{filename}")
     sc.find_last_file_by_extension = lambda folder, extension: os.path.join(folder, f"TestProductCA.{extension}")
     return (TFCPS_Tools_General(sc), recorded_calls)
+
+
+def create_tools_with_recorded_npm_commands() -> tuple[TFCPS_Tools_General, list[str]]:
+    """Returns a TFCPS_Tools_General whose epew-calls only record the arguments they were called with instead of really
+    running npm, so a test can check whether do_npm_install would install the dependencies without needing npm and network-access.
+    Like the real 'npm clean-install' every call ensures that the node_modules-folder exists."""
+    recorded_calls = []
+    sc = ScriptCollectionCore()
+
+    def run_with_epew(program: str, arguments: str, working_directory: str, *other_arguments, **other_keyword_arguments) -> None:
+        recorded_calls.append(f"{program} {arguments}")
+        GeneralUtilities.ensure_directory_exists(os.path.join(working_directory, "node_modules"))
+    sc.run_with_epew = run_with_epew
+    return (TFCPS_Tools_General(sc), recorded_calls)
+
+
+def write_npm_dependency_files(package_json_folder: str, package_json_content: str, package_lock_json_content: str) -> None:
+    GeneralUtilities.write_text_to_file(os.path.join(package_json_folder, "package.json"), package_json_content)
+    GeneralUtilities.write_text_to_file(os.path.join(package_json_folder, "package-lock.json"), package_lock_json_content)
 
 
 def generate_certificate_for_development_purposes(tools: TFCPS_Tools_General, service_name: str, resources_folder: str, ca_folder: str) -> None:
@@ -1027,3 +1047,91 @@ items:
                 "generate_certificate_sign_request:TestProductDevelopmentCertificate",
                 "sign_certificate:TestProductDevelopmentCertificate",
             ], recorded_calls)
+
+    def test_do_npm_install_installs_when_node_modules_does_not_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as package_json_folder:
+            # arrange
+            write_npm_dependency_files(package_json_folder, '{"version":"1.0.0"}', '{"lockfileVersion":3}')
+            (tools, recorded_calls) = create_tools_with_recorded_npm_commands()
+
+            # act
+            tools.do_npm_install(package_json_folder, True, True)
+
+            # assert
+            self.assertEqual(["npm install --force", "npm install --package-lock-only --force", "npm clean-install --force"], recorded_calls)
+
+    def test_do_npm_install_reuses_node_modules_when_the_dependency_files_are_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as package_json_folder:
+            # arrange
+            write_npm_dependency_files(package_json_folder, '{"version":"1.0.0"}', '{"lockfileVersion":3}')
+            (tools, recorded_calls) = create_tools_with_recorded_npm_commands()
+            tools.do_npm_install(package_json_folder, True, True)
+            recorded_calls.clear()
+
+            # act
+            tools.do_npm_install(package_json_folder, True, True)
+
+            # assert
+            self.assertEqual([], recorded_calls)
+
+    def test_do_npm_install_installs_again_when_package_lock_json_was_changed(self) -> None:
+        with tempfile.TemporaryDirectory() as package_json_folder:
+            # arrange
+            write_npm_dependency_files(package_json_folder, '{"version":"1.0.0"}', '{"lockfileVersion":3,"packages":{"a":"19.2.0"}}')
+            (tools, recorded_calls) = create_tools_with_recorded_npm_commands()
+            tools.do_npm_install(package_json_folder, True, True)
+            recorded_calls.clear()
+            write_npm_dependency_files(package_json_folder, '{"version":"1.0.0"}', '{"lockfileVersion":3,"packages":{"a":"22.1.3"}}')
+
+            # act
+            tools.do_npm_install(package_json_folder, True, True)
+
+            # assert
+            #the cached node_modules contains the packages of the previous lock-file, so it must not be reused.
+            self.assertEqual(["npm install --force", "npm install --package-lock-only --force", "npm clean-install --force"], recorded_calls)
+
+    def test_do_npm_install_installs_again_when_package_json_was_changed(self) -> None:
+        with tempfile.TemporaryDirectory() as package_json_folder:
+            # arrange
+            write_npm_dependency_files(package_json_folder, '{"dependencies":{"a":"19.2.0"}}', '{"lockfileVersion":3}')
+            (tools, recorded_calls) = create_tools_with_recorded_npm_commands()
+            tools.do_npm_install(package_json_folder, True, True)
+            recorded_calls.clear()
+            write_npm_dependency_files(package_json_folder, '{"dependencies":{"a":"22.1.3"}}', '{"lockfileVersion":3}')
+
+            # act
+            tools.do_npm_install(package_json_folder, True, True)
+
+            # assert
+            self.assertEqual(["npm install --force", "npm install --package-lock-only --force", "npm clean-install --force"], recorded_calls)
+
+    def test_do_npm_install_installs_again_when_node_modules_was_installed_for_another_platform(self) -> None:
+        with tempfile.TemporaryDirectory() as package_json_folder:
+            # arrange
+            write_npm_dependency_files(package_json_folder, '{"version":"1.0.0"}', '{"lockfileVersion":3}')
+            (tools, recorded_calls) = create_tools_with_recorded_npm_commands()
+            tools.do_npm_install(package_json_folder, True, True)
+            recorded_calls.clear()
+            fingerprint_marker_file = os.path.join(package_json_folder, "node_modules", ".sc_install_fingerprint")
+            fingerprint_of_another_platform = GeneralUtilities.read_text_from_file(fingerprint_marker_file).replace(f"{sys.platform}-", "otherplatform-", 1)
+            GeneralUtilities.write_text_to_file(fingerprint_marker_file, fingerprint_of_another_platform)
+
+            # act
+            tools.do_npm_install(package_json_folder, True, True)
+
+            # assert
+            self.assertEqual(["npm install --force", "npm install --package-lock-only --force", "npm clean-install --force"], recorded_calls)
+
+    def test_do_npm_install_installs_when_the_cache_must_not_be_used(self) -> None:
+        with tempfile.TemporaryDirectory() as package_json_folder:
+            # arrange
+            write_npm_dependency_files(package_json_folder, '{"version":"1.0.0"}', '{"lockfileVersion":3}')
+            (tools, recorded_calls) = create_tools_with_recorded_npm_commands()
+            tools.do_npm_install(package_json_folder, False, True)
+            recorded_calls.clear()
+
+            # act
+            tools.do_npm_install(package_json_folder, False, False)
+
+            # assert
+            self.assertEqual(["npm install", "npm install --package-lock-only", "npm clean-install"], recorded_calls)

@@ -9,6 +9,7 @@ from ..ScriptCollectionCore import ScriptCollectionCore
 from ..SCLog import  LogLevel
 from .TFCPS_BuildCodeUnitsHook import TFCPS_BuildCodeUnitsHook
 from .TFCPS_CodeUnit_BuildCodeUnit import TFCPS_CodeUnit_BuildCodeUnit
+from .TFCPS_CodeSpellCheck import TFCPS_CodeSpellCheck
 from .TFCPS_OCIImageSecretScan import TFCPS_OCIImageSecretScan
 from .TFCPS_Tools_General import TFCPS_Tools_General
 
@@ -244,29 +245,10 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     @GeneralUtilities.check_arguments
     def __do_project_linting_using_codespell(self, repository_folder: str) -> None:
         """Searches for typos in the repository using codespell. Findings are only reported as warnings and do not let the build fail.
-        codespell runs in the repository-folder, so an optional "<repository>/.codespellrc" is used automatically, for example to
-        define words which are no typos in the context of the repository (option "ignore-words-list").
-        Folders (relative to the repository-root, one per line) which should be ignored can be defined in the optional file "<repository>/.ScriptCollection/CodeSpellIgnore.txt"."""
+        Only files which are not git-ignored are checked. See TFCPS_CodeSpellCheck for details."""
         try:
             self.sc.log.log("Search for typos using codespell...")
-            arguments: list[str] = []
-            ignore_file = os.path.join(repository_folder, ".ScriptCollection", "CodeSpellIgnore.txt")
-            if os.path.isfile(ignore_file):
-                skip_patterns: list[str] = []
-                for line in GeneralUtilities.string_to_lines(GeneralUtilities.read_text_from_file(ignore_file)):
-                    folder = line.strip().replace("\\", "/").strip("/")
-                    if folder.startswith("./"):
-                        folder = folder[2:]
-                    if folder != "" and not folder.startswith("#"):
-                        skip_patterns.append(f"./{folder}")
-                        skip_patterns.append(f"./{folder}/*")
-                if 0 < len(skip_patterns):
-                    arguments.append("--skip=" + ",".join(skip_patterns))
-            (exit_code, stdout, stderr, _) = self.sc.run_program_argsasarray("codespell", arguments, repository_folder, throw_exception_if_exitcode_is_not_zero=False)
-            codespell_exitcode_for_found_typos: int = 65
-            if exit_code not in (0, codespell_exitcode_for_found_typos):
-                raise ValueError(f"codespell failed with exit-code {exit_code}: {stderr}")
-            findings: list[str] = [line for line in GeneralUtilities.string_to_lines(stdout) if GeneralUtilities.string_has_content(line)]
+            findings: list[str] = TFCPS_CodeSpellCheck(self.sc).search_for_typos(repository_folder)
             for finding in findings:
                 self.sc.log.log(f"Possible typo: {finding}", LogLevel.Warning)
             if 0 < len(findings):

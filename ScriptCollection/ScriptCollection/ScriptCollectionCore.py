@@ -40,7 +40,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.48"
+version = "4.4.49"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -1251,6 +1251,8 @@ class ScriptCollectionCore:
         # keeps non-ascii paths unquoted. The resulting paths are relative to 'folder'.
         lines = GeneralUtilities.string_to_lines(self.run_program_argsasarray("git", ["-c", "core.quotePath=false", "ls-files", "--cached", "--others", "--exclude-standard"], folder, throw_exception_if_exitcode_is_not_zero=True)[1], False)
         result: list[str] = []
+        # A set is used for the duplicate-check because a lookup in the result-list would make this quadratic, which is too slow for repositories with a lot of files.
+        already_added: set[str] = set()
         for line in lines:
             if not GeneralUtilities.string_has_content(line):
                 continue
@@ -1259,7 +1261,8 @@ class ScriptCollectionCore:
                 continue
             if not os.path.isfile(absolute_path):  # a tracked-but-deleted file would still be listed by "--cached"
                 continue
-            if absolute_path not in result:
+            if absolute_path not in already_added:
+                already_added.add(absolute_path)
                 result.append(absolute_path)
         return result
 
