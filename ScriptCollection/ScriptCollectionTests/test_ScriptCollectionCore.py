@@ -405,6 +405,26 @@ class ScriptCollectionCoreTests(unittest.TestCase):
         finally:
             GeneralUtilities.ensure_directory_does_not_exist(base_folder)
 
+    def test_run_command_in_folder_passes_actual_folder_with_spaces_as_one_argument(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        base_folder = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
+        executed_calls: list[list[str]] = []
+        try:
+            GeneralUtilities.ensure_directory_exists(base_folder)
+            # An actual_folder which contains spaces must not be able to inject further arguments into the command.
+            actual_folder_with_injected_argument = ". -c core.fsmonitor=injected"
+
+            # act
+            with patch.object(ScriptCollectionCore, "run_program_argsasarray", lambda _, program, arguments, *__, **___: executed_calls.append([program]+arguments) or (0, "", "", 0)):
+                sc.run_command_in_folder(base_folder, "git", "-C {actual_folder} status", actual_folder_with_injected_argument)
+
+            # assert
+            expected_actual_folder = GeneralUtilities.resolve_relative_path(actual_folder_with_injected_argument, base_folder)
+            assert executed_calls == [["git", "-C", expected_actual_folder, "status"]]
+        finally:
+            GeneralUtilities.ensure_directory_does_not_exist(base_folder)
+
     def test_path_is_allowed_within_base_folder(self) -> None:
         # arrange
         sc = ScriptCollectionCore()

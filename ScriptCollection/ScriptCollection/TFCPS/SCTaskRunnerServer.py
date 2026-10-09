@@ -1,6 +1,7 @@
 import os
 import json
 import base64
+import hmac
 import shutil
 import ssl
 import time
@@ -339,7 +340,7 @@ class SCTaskRunnerServer:
                 except Exception:
                     return False
                 expected = f"{outer._SCTaskRunnerServer__username}:{outer._SCTaskRunnerServer__password}"
-                return decoded == expected
+                return hmac.compare_digest(decoded.encode("utf-8"), expected.encode("utf-8"))
 
             def __send(self, status: int, body: bytes, content_type: str = "application/octet-stream") -> None:
                 self.__answer_was_begun = True

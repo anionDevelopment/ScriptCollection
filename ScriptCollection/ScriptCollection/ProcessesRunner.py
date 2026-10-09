@@ -28,16 +28,13 @@ class ProcessesRunner:
     def run(self):
         pids: list[int] = list[int]()
         for processstartinfo in self.processes:
-            pids.append(self.sc.run_program_async(processstartinfo.program, processstartinfo.argumentss, processstartinfo.workingdirectory))
+            pids.append(self.sc.run_program_async(processstartinfo.program, processstartinfo.arguments, processstartinfo.workingdirectory))
         enabled = True
         while enabled:
             for pid in pids:
                 if not psutil.pid_exists(pid):
                     enabled = False
         # one program terminated so exit and terminate all now
-        processes = psutil.process_iter()
         for pid in pids:
             if psutil.pid_exists(pid):
-                for proc in processes:
-                    if proc.pid == pid:
-                        proc.kill()
+                psutil.Process(pid).kill()

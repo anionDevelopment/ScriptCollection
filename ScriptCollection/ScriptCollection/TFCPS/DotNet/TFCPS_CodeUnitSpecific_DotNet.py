@@ -67,7 +67,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
                     arguments.append("--store-password-in-clear-text")
             arguments_for_log = list(arguments)
             if package_source.has_credentials():
-                arguments_for_log[arguments_for_log.index(package_source.password)] = "***"#the password must not be written to the build-log
+                arguments_for_log[arguments_for_log.index("--password")+1] = "***"#the password must not be written to the build-log
             self._protected_sc.log.log(f"Add NuGet-source \"{package_source.name}\" ({package_source.url})..." if name_of_source_with_same_url is None else f"Update the already registered NuGet-source \"{name_of_source_with_same_url}\" ({package_source.url})...", LogLevel.Debug)
             self._protected_sc.run_program_argsasarray("dotnet", arguments, codeunit_folder, arguments_for_log=arguments_for_log, print_live_output=False, env_vars=self.__dotnet_cli_environment_variables)
 
