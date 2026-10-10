@@ -262,6 +262,24 @@ class TFCPS_Tools_General:
         return sorted_codeunits
 
     @GeneralUtilities.check_arguments
+    def update_visual_regression_baselines_of_all_codeunits(self, repository_folder: str) -> None:
+        """Updates the visual-regression-baseline-images of every codeunit of the repository which has them.
+
+        For each codeunit the script "Other/QualityCheck/UpdateVisualRegressionBaselines.py" is run (in that folder)
+        if it exists; a codeunit which does not have that script (because it has no visual-regression-tests) is
+        skipped. This lets a repository update the baselines of all of its codeunits with a single call, without
+        having to list the codeunits anywhere."""
+        codeunits: list[str] = self.get_codeunits(repository_folder)
+        for codeunit_name in codeunits:
+            script_folder: str = os.path.join(repository_folder, codeunit_name, "Other", "QualityCheck")
+            script_file: str = os.path.join(script_folder, "UpdateVisualRegressionBaselines.py")
+            if os.path.isfile(script_file):
+                self.__sc.log.log(f"Update visual-regression-baselines of codeunit {codeunit_name}...")
+                self.__sc.run_program(GeneralUtilities.get_python_executable(), "UpdateVisualRegressionBaselines.py", script_folder, print_live_output=True)
+            else:
+                self.__sc.log.log(f"Codeunit {codeunit_name} has no visual-regression-baselines to update.", LogLevel.Debug)
+
+    @GeneralUtilities.check_arguments
     def repository_has_codeunits(self, repository: str, ignore_disabled_codeunits: bool = True) -> bool:
         return 0<len(self.get_codeunits(repository, ignore_disabled_codeunits))
 
