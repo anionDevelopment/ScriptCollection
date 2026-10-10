@@ -179,6 +179,11 @@ If the section or the table does not exist yet, it SHALL be created.
 - **WHEN** an analysis of this repository produces findings
 - **THEN** every finding is added as a row to the table in the section `## Findings` in `Other/Reference/Reference.md`, and no separate list of findings is written anywhere else
 
+#### Scenario: A specification which is not fulfilled is found
+
+- **WHEN** a specification which is not fulfilled by the repository is found, regardless of whether it was found by a targeted check or by chance during any other work or by an audit which checks if all specs are fulfilled.
+- **THEN** this is added as a finding to the table in the section `## Findings` in `Other/Reference/Reference.md`
+
 #### Scenario: A list of findings is found in another document
 
 - **WHEN** a document of this repository other than `Other/Reference/Reference.md` contains findings
@@ -187,15 +192,17 @@ If the section or the table does not exist yet, it SHALL be created.
 
 ### Requirement: Findings have an id with a prefix and an ascending number
 
-Every finding SHALL have an id of the form `<prefix>-<ascending number>`.
-The prefix SHALL be chosen by the first of the following rules which applies:
+Every finding MUST have an id of the form `<prefix>-<ascending number>`.
+The prefix MUST be chosen by the first of the following rules which applies:
 
 1. `SEC` if the finding is relevant for security.
 2. `BUG` if the finding is a bug.
 3. `PER` if the finding has an impact on performance.
 4. `OTH` for every other finding.
 
-The number SHALL be ascending per prefix, written without leading zeros (for example `SEC-1` or `SEC-12`, but not `SEC-01`), and an id SHALL never be reused for another finding, not even after the finding was fixed.
+The number MUST be ascending per prefix, written without leading zeros (for example `SEC-1` or `SEC-12`, but not `SEC-01`), and an id MUST never be reused for another finding, not even after the finding was fixed.
+
+If there are already findings with another name-pattern then it is allowed to rename them to follow the name-patern apecified here.
 
 #### Scenario: A new finding is added
 
@@ -209,13 +216,18 @@ The number SHALL be ascending per prefix, written without leading zeros (for exa
 
 ### Requirement: The findings-table has fixed columns
 
-The table SHALL have exactly the following columns in this order:
+The table MUST have exactly the following columns in this order:
 
 - `Id`: the id of the finding.
+- `Urgency`: the urgency of the finding, which is `low`, `mid` or `high` or `very high`.
+  - Findings which reveals very important or critical security-problems must be marked as `very high`. 
+  - Findings which reveals very heavy performance-problems must be marked as `high` or `very high`. 
 - `State`: the state of the finding, which is `open`, `partially fixed` or `fixed`; another state is only used if none of these three applies, and the reason for it is written into `Notes`.
 - `Description`: what the finding is.
 - `Impact`: what the finding causes, depending on its topic, for example the security-impact or the performance-impact.
 - `Notes`: every further information, especially the content of further columns which a list of findings had before it was moved into the table.
+
+If there are already tables with another structure then it is allowed to update the table to follow the structure apecified here.
 
 #### Scenario: A list of findings has further columns
 
