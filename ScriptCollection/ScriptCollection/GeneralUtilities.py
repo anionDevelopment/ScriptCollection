@@ -697,14 +697,22 @@ class GeneralUtilities:
     @staticmethod
     @check_arguments
     def ensure_directory_does_not_exist(path: str) -> None:
-        if (os.path.isdir(path)):
+        # Symbolic links are removed themselves without changing permissions, because os.chmod follows them and would change the permissions of their targets outside of the folder.
+        if os.path.islink(path):
+            os.unlink(path)
+        elif (os.path.isdir(path)):
             for root, dirs, files in os.walk(path, topdown=False):
                 for name in files:
                     filename = os.path.join(root, name)
-                    os.chmod(filename, stat.S_IWUSR)
+                    if not os.path.islink(filename):
+                        os.chmod(filename, stat.S_IWUSR)
                     os.remove(filename)
                 for name in dirs:
-                    GeneralUtilities.__rmtree(os.path.join(root, name))
+                    folder = os.path.join(root, name)
+                    if os.path.islink(folder):
+                        os.unlink(folder)
+                    else:
+                        GeneralUtilities.__rmtree(folder)
             GeneralUtilities.__rmtree(path)
 
     @staticmethod
@@ -1324,7 +1332,7 @@ class GeneralUtilities:
     def replace_variable(prefix:str, variable_name:str, suffix:str, value:str, content: str) -> str:
         GeneralUtilities.assert_condition(not "__" in variable_name, f"'{variable_name}' is an invalid variable name because it contains '__' which is treated as control-sequence.")
         pattern = re.escape(GeneralUtilities.str_none_safe( prefix)) + r"\s*" +"__"+ re.escape(variable_name) + "__"+r"\s*" + re.escape(GeneralUtilities.str_none_safe( suffix))
-        result:str= re.sub(pattern, value, content)
+        result:str= re.sub(pattern, lambda _: value, content)
         GeneralUtilities.assert_condition(not f"__{variable_name}__" in result, f"Variable '{variable_name}' was not replaced in the content. This is likely caused by an error in the content or the variable name.")
         return result
 

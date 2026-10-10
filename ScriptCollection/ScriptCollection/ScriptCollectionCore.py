@@ -40,7 +40,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.49"
+version = "4.4.50"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -452,7 +452,7 @@ class ScriptCollectionCore:
             if not (image in images):
                 return False
         
-            if self.get_tags_of_images_from_registry(registry_url,image,registry_username,registry_password)<1:
+            if len(self.__get_tags_of_image_from_registry(registry_url,image,registry_username,registry_password))<1:
                 return False
             
             return True
@@ -491,6 +491,9 @@ class ScriptCollectionCore:
             image=image.rsplit("/", 1)[-1]
         if not self.registry_contains_image(registry_base_url,image,registry_username,registry_password):
             return []
+        return self.__get_tags_of_image_from_registry(registry_base_url,image,registry_username,registry_password)
+
+    def __get_tags_of_image_from_registry(self,registry_base_url:str,image:str,registry_username:str,registry_password:str)->list[str]:
         tags_url = f"{registry_base_url}/v2/{image}/tags/list"
         response = requests.get(tags_url, auth=(registry_username, registry_password),timeout=20)
         response.raise_for_status() # check if statuscode = 200
@@ -517,6 +520,12 @@ class ScriptCollectionCore:
         """Returns True if and only if the message of the given exception indicates that the failed operation ran into a timeout."""
         message = str(exception).lower()
         return any(indicator in message for indicator in ScriptCollectionCore.__timeout_error_indicators)
+
+    @GeneralUtilities.check_arguments
+    def __run_openssl(self, arguments: list[str], folder: str) -> None:
+        # Passwords are passed to openssl as "pass:<password>", so they are masked for the log and for the message of an exception.
+        arguments_for_log = ["pass:***" if argument.startswith("pass:") else argument for argument in arguments]
+        self.run_program_argsasarray("openssl", arguments, folder, arguments_for_log=arguments_for_log)
 
     @GeneralUtilities.check_arguments
     def docker_login(self, registry: str, username: str, password: str) -> None:
@@ -747,9 +756,11 @@ class ScriptCollectionCore:
         nupkg_file_name = os.path.basename(nupkg_file)
         nupkg_file_folder = os.path.dirname(nupkg_file)
         argument = f"nuget push {nupkg_file_name} --force-english-output --source {registry_address}"
+        argument_for_log = argument
         if api_key is not None:
-            argument = f"{argument} --api-key {api_key}" 
-        self.run_program("dotnet", argument, nupkg_file_folder)
+            argument = f"{argument} --api-key {api_key}"
+            argument_for_log = f"{argument_for_log} --api-key ***"
+        self.run_program("dotnet", argument, nupkg_file_folder, arguments_for_log=argument_for_log)
 
     @GeneralUtilities.check_arguments
     def dotnet_build(self, folder: str, projectname: str, configuration: str):
@@ -787,10 +798,12 @@ class ScriptCollectionCore:
         result = self.run_program("git", f"verify-commit {revision_identifier}", repository_folder, throw_exception_if_exitcode_is_not_zero=False)
         if (result[0] != 0):
             return False
-        if (not GeneralUtilities.contains_line(result[1].splitlines(), f"gpg\\:\\ using\\ [A-Za-z0-9]+\\ key\\ [A-Za-z0-9]+{key}")):
+        # "git verify-commit" writes the output of gpg to stderr.
+        gpg_output_lines = result[2].splitlines()
+        if (not GeneralUtilities.contains_line(gpg_output_lines, f"gpg\\:\\ using\\ [A-Za-z0-9]+\\ key\\ [A-Za-z0-9]+{re.escape(key)}")):
             # TODO check whether this works on machines where gpg is installed in another language than english
             return False
-        if (not GeneralUtilities.contains_line(result[1].splitlines(), "gpg\\:\\ Good\\ signature\\ from")):
+        if (not GeneralUtilities.contains_line(gpg_output_lines, "gpg\\:\\ Good\\ signature\\ from")):
             # TODO check whether this works on machines where gpg is installed in another language than english
             return False
         return True
@@ -798,7 +811,7 @@ class ScriptCollectionCore:
     @GeneralUtilities.check_arguments
     def get_parent_commit_ids_of_commit(self, repository_folder: str, commit_id: str) -> str:
         self.is_git_or_bare_git_repository(repository_folder)
-        return self.run_program("git", f'log --pretty=%P -n 1 "{commit_id}"', repository_folder, throw_exception_if_exitcode_is_not_zero=True)[1].replace("\r", GeneralUtilities.empty_string).replace("\n", GeneralUtilities.empty_string).split(" ")
+        return self.run_program_argsasarray("git", ["log", "--pretty=%P", "-n", "1", commit_id], repository_folder, throw_exception_if_exitcode_is_not_zero=True)[1].replace("\r", GeneralUtilities.empty_string).replace("\n", GeneralUtilities.empty_string).split(" ")
 
 
     @GeneralUtilities.check_arguments
@@ -806,7 +819,7 @@ class ScriptCollectionCore:
         self.is_git_or_bare_git_repository(repository_folder)
         since_as_string = self.__datetime_to_string_for_git(since)
         until_as_string = self.__datetime_to_string_for_git(until)
-        result = filter(lambda line: not GeneralUtilities.string_is_none_or_whitespace(line), self.run_program("git", f'log --since "{since_as_string}" --until "{until_as_string}" --pretty=format:"%H" --no-patch', repository_folder, throw_exception_if_exitcode_is_not_zero=True)[1].split("\n").replace("\r", GeneralUtilities.empty_string))
+        result = filter(lambda line: not GeneralUtilities.string_is_none_or_whitespace(line), self.run_program_argsasarray("git", ["log", f"--since={since_as_string}", f"--until={until_as_string}", "--pretty=format:%H", "--no-patch"], repository_folder, throw_exception_if_exitcode_is_not_zero=True)[1].replace("\r", GeneralUtilities.empty_string).split("\n"))
         if ignore_commits_which_are_not_in_history_of_head:
             result = [commit_id for commit_id in result if self.git_commit_is_ancestor(repository_folder, commit_id)]
         return result
@@ -968,7 +981,7 @@ class ScriptCollectionCore:
 
     @GeneralUtilities.check_arguments
     def git_pull_with_retry(self, folder: str, remote: str, localbranchname: str, remotebranchname: str, force: bool = False, amount_of_attempts: int = 5) -> None:
-        GeneralUtilities.retry_action(lambda: self.git_pull(folder, remote, localbranchname, remotebranchname), amount_of_attempts)
+        GeneralUtilities.retry_action(lambda: self.git_pull(folder, remote, localbranchname, remotebranchname, force), amount_of_attempts)
 
     @GeneralUtilities.check_arguments
     def git_branch_is_pullable(self, folder: str, remote: str, localbranchname: str, remotebranchname: str) -> bool:
@@ -1049,7 +1062,7 @@ class ScriptCollectionCore:
     def git_add_or_set_remote_address(self, directory: str, remote_name: str, remote_address: str) -> None:
         self.assert_is_git_repository(directory)
         if (self.repository_has_remote_with_specific_name(directory, remote_name)):
-            self.run_program_argsasarray("git", ['remote', 'set-url', 'remote_name', remote_address], directory, throw_exception_if_exitcode_is_not_zero=True)
+            self.run_program_argsasarray("git", ['remote', 'set-url', remote_name, remote_address], directory, throw_exception_if_exitcode_is_not_zero=True)
         else:
             self.run_program_argsasarray("git", ['remote', 'add', remote_name, remote_address], directory, throw_exception_if_exitcode_is_not_zero=True)
 
@@ -1098,7 +1111,7 @@ class ScriptCollectionCore:
         if commit_message_body is not None:
             argument.extend(['--message', commit_message_body])
         if (GeneralUtilities.string_has_content(author_name)):
-            argument.append(f'--author="{author_name} <{author_email}>"')
+            argument.append(f'--author={author_name} <{author_email}>')
         git_repository_has_uncommitted_changes = self.git_repository_has_uncommitted_changes(directory)
 
         if git_repository_has_uncommitted_changes:
@@ -1125,14 +1138,13 @@ class ScriptCollectionCore:
     
     def search_repository_folder(self,some_file_in_repository:str)->str:
         current_path:str=os.path.dirname(some_file_in_repository)
-        enabled:bool=True
-        while enabled:
-            try:
-                current_path=GeneralUtilities.resolve_relative_path("..",current_path)
-                if self.is_git_repository(current_path):
-                    return current_path
-            except:
-                enabled=False
+        while True:
+            if self.is_git_repository(current_path):
+                return current_path
+            parent_path:str=GeneralUtilities.resolve_relative_path("..",current_path)
+            if parent_path==current_path:
+                break
+            current_path=parent_path
         raise ValueError(f"Can not find git-repository for folder \"{some_file_in_repository}\".")
     
 
@@ -1213,9 +1225,9 @@ class ScriptCollectionCore:
             if self.is_git_repository(subfolder):
                 source_repository = subfolder
                 target_repository = os.path.join(target_directory, foldername)
-                if os.path.isdir(target_directory):
+                if os.path.isdir(target_repository):
                     # fetch
-                    self.git_fetch(target_directory)
+                    self.git_fetch(target_repository)
                 else:
                     # clone
                     self.git_clone(target_repository, source_repository, include_submodules=True, mirror=True)
@@ -2238,8 +2250,8 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         for root, _, files in os.walk(folder):
             for file in files:
                 full_path = os.path.join(root, file)
-                with (open(full_path, "rb").read()) as text_io_wrapper:
-                    content = text_io_wrapper
+                with open(full_path, "rb") as file_stream:
+                    content = file_stream.read()
                     path_in_iso = '/' + files_directory + \
                         self.__adjust_folder_name(full_path[len(folder)::1]).upper()
                     if path_in_iso not in created_directories:
@@ -2345,7 +2357,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         #docker run --rm -it debian bash -c "apt update && apt list -a tor"
         image_address, image_tag = ScriptCollectionCore.split_image_address_and_tag(image)
         self.docker_pull(image_address, image_tag)
-        output=self.run_with_epew("docker", f"run --rm -it {image} bash -c \"apt --color=false update && apt --color=false list -a tor\"",os.getcwd(),encode_argument_in_base64=True)
+        output=self.run_with_epew("docker", f"run --rm -it {image} bash -c \"apt --color=false update && apt --color=false list -a {package}\"",os.getcwd(),encode_argument_in_base64=True)
         stdout=output[1]
         version_lines=[line.strip() for line in GeneralUtilities.string_to_lines(stdout) if GeneralUtilities.string_has_nonwhitespace_content(line) and line.startswith(package+"/")]
         GeneralUtilities.assert_condition(0<len(version_lines), f"No version found for package '{package}' in image '{image}'.")
@@ -2428,7 +2440,8 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
 
     @GeneralUtilities.check_arguments
     def __get_file_permission_helper(self, permissions: str) -> str:
-        return str(self.__to_octet(permissions[0:3])) + str(self.__to_octet(permissions[3:6]))+str(self.__to_octet(permissions[6:9]))
+        # The first character of the output of "ls -ld" is the file-type, so the permission-triples start at index 1.
+        return str(self.__to_octet(permissions[1:4])) + str(self.__to_octet(permissions[4:7]))+str(self.__to_octet(permissions[7:10]))
 
     @GeneralUtilities.check_arguments
     def __to_octet(self, string: str) -> int:
@@ -2497,7 +2510,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         args = []
         if recursive:
             args.append("--recursive")
-        if follow_symlinks:
+        if not follow_symlinks:
             args.append("--no-dereference")
         args.append(owner)
         args.append(file_or_folder)
@@ -2778,8 +2791,10 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         resolved_actual_folder = GeneralUtilities.resolve_relative_path(actual_folder, resolved_base_folder)
         if not self.path_is_allowed_within_base_folder(actual_folder, base_folder, excluded_folders):
             raise ValueError(f"The folder '{resolved_actual_folder}' is not allowed: it must be equal to or a subfolder of the base-folder '{resolved_base_folder}' and must not be located inside one of the excluded folders.")
-        effective_arguments = arguments.replace(ScriptCollectionCore.run_command_in_folder_actual_folder_placeholder, resolved_actual_folder)
-        result = self.run_program(command, effective_arguments, resolved_base_folder,print_live_output=True)
+        # The arguments are split before the placeholder is replaced, so that actual_folder always stays exactly one argument.
+        # Otherwise an actual_folder which contains spaces could inject further arguments which were not checked.
+        effective_arguments = [argument.replace(ScriptCollectionCore.run_command_in_folder_actual_folder_placeholder, resolved_actual_folder) for argument in GeneralUtilities.arguments_to_array(arguments)]
+        result = self.run_program_argsasarray(command, effective_arguments, resolved_base_folder, print_live_output=True)
         return result[0]
 
     # Return-values program_runner: Exitcode, StdOut, StdErr, Pid
@@ -2912,12 +2927,16 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         password_set = not password is None
         file_name = Path(zip_file).name
         file_folder = os.path.dirname(zip_file)
-        argument = "x"
+        arguments = ["x"]
+        arguments_for_log = ["x"]
         if password_set:
-            argument = f"{argument} -p\"{password}\""
-        argument = f"{argument} -o {output_directory}"
-        argument = f"{argument} {file_name}"
-        return self.run_program(unzip_program_file, argument, file_folder)
+            arguments.append(f"-p{password}")
+            arguments_for_log.append("-p***")
+        arguments.append(f"-o{output_directory}")
+        arguments.append(file_name)
+        arguments_for_log.append(f"-o{output_directory}")
+        arguments_for_log.append(file_name)
+        return self.run_program_argsasarray(unzip_program_file, arguments, file_folder, arguments_for_log=arguments_for_log)
 
     @GeneralUtilities.check_arguments
     def get_internet_time(self) -> datetime:
@@ -3116,7 +3135,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         if password is None:
             password = GeneralUtilities.generate_password()
         GeneralUtilities.ensure_directory_exists(folder)
-        self.run_program_argsasarray("openssl", ['req', '-new', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-days', str(days_until_expire), '-nodes', '-x509', '-subj', f'/C={subj_c}/ST={subj_st}/L={subj_l}/O={subj_o}/CN={name}/OU={subj_ou}', '-passout', f'pass:{password}', '-keyout', f'{name}.key', '-out', f'{name}.crt'], folder)
+        self.__run_openssl(['req', '-new', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-days', str(days_until_expire), '-nodes', '-x509', '-subj', f'/C={subj_c}/ST={subj_st}/L={subj_l}/O={subj_o}/CN={name}/OU={subj_ou}', '-passout', f'pass:{password}', '-keyout', f'{name}.key', '-out', f'{name}.crt'], folder)
 
     @GeneralUtilities.check_arguments
     def generate_certificate(self, folder: str,  domain: str, filename: str, subj_c: str, subj_st: str, subj_l: str, subj_o: str, subj_ou: str, days_until_expire: int = None, password: str = None) -> None:
@@ -3133,7 +3152,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         rsa_key_length = 4096
         self.run_program_argsasarray("openssl", ['genrsa', '-out', f'{filename}.key', f'{rsa_key_length}'], folder)
         self.run_program_argsasarray("openssl", ['req', '-new', '-subj', f'/C={subj_c}/ST={subj_st}/L={subj_l}/O={subj_o}/CN={domain}/OU={subj_ou}', '-x509', '-key', f'{filename}.key', '-out', f'{filename}.unsigned.crt', '-days', f'{days_until_expire}'], folder)
-        self.run_program_argsasarray("openssl", ['pkcs12', '-export', '-out', f'{filename}.selfsigned.pfx', '-password', f'pass:{password}', '-inkey', f'{filename}.key', '-in', f'{filename}.unsigned.crt'], folder)
+        self.__run_openssl(['pkcs12', '-export', '-out', f'{filename}.selfsigned.pfx', '-password', f'pass:{password}', '-inkey', f'{filename}.key', '-in', f'{filename}.unsigned.crt'], folder)
         GeneralUtilities.write_text_to_file(os.path.join(folder, f"{filename}.password"), password)
         GeneralUtilities.write_text_to_file(os.path.join(folder, f"{filename}.san.conf"), f"""[ req ]
 default_bits        = {rsa_key_length}
@@ -3170,7 +3189,7 @@ DNS                 = {domain}
         password_file = os.path.join(folder, f"{filename}.password")
         password = GeneralUtilities.read_text_from_file(password_file)
         self.run_program_argsasarray("openssl", ['x509', '-req', '-in', f'{filename}.csr', '-CA', f'{ca}.crt', '-CAkey', f'{ca}.key', '-CAcreateserial', '-CAserial', f'{ca}.srl', '-out', f'{filename}.crt', '-days', str(days_until_expire),  '-sha256', '-extensions', 'v3_req', '-extfile', f'{filename}.san.conf'], folder)
-        self.run_program_argsasarray("openssl", ['pkcs12', '-export', '-out', f'{filename}.pfx', f'-inkey', f'{filename}.key', '-in', f'{filename}.crt', '-password', f'pass:{password}'], folder)
+        self.__run_openssl(['pkcs12', '-export', '-out', f'{filename}.pfx', f'-inkey', f'{filename}.key', '-in', f'{filename}.crt', '-password', f'pass:{password}'], folder)
 
     @GeneralUtilities.check_arguments
     def update_dependencies_of_python_in_requirementstxt_file(self, file: str, ignored_dependencies: list[str]):
@@ -3387,7 +3406,6 @@ chmod {permission} {link_file}
 
     @GeneralUtilities.check_arguments
     def generate_arc42_reference_template(self, repository: str, productname: str = None, subfolder: str = None):
-        productname: str = None
         if productname is None:
             productname = os.path.basename(repository)
         if subfolder is None:
@@ -4453,7 +4471,7 @@ OCR-content:
                 command_with_args = command
                 if "args" in task:
                     args = task["args"]
-                    if len(args) > 1:
+                    if len(args) > 0:
                         command_with_args = f"{command_with_args} {' '.join(args)}"
 
                 description: str =None
@@ -4790,7 +4808,7 @@ OCR-content:
         language_files_with_content:dict[str,ET.ElementTree]=dict()
         for language_file in language_files_list:
             GeneralUtilities.assert_file_exists(language_file)
-            GeneralUtilities.assert_condition(self.is_xliff2_file(language_file), f"The base file '{base_file}' is not a valid XLIFF 2.0 file.")
+            GeneralUtilities.assert_condition(self.is_xliff2_file(language_file), f"The language file '{language_file}' is not a valid XLIFF 2.0 file.")
             language_files_with_content[language_file]=ET.parse(language_file)
 
         #sync existing files
@@ -4936,7 +4954,7 @@ OCR-content:
 
     @GeneralUtilities.check_arguments
     def write_commit_list_for_repository(self,repository_folder:str,target_file:str,include_all_heads:bool=False) -> None:
-        if os.path.isabs(target_file):
+        if not os.path.isabs(target_file):
             target_file=GeneralUtilities.resolve_relative_path(target_file,repository_folder)
         target_file=GeneralUtilities.normalize_path(target_file)
         commits=self.get_all_commits_in_git_repository(repository_folder, include_all_heads)

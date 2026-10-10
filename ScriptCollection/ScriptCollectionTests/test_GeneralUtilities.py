@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from datetime import datetime, date, timezone, timedelta
 import unittest
-from ..ScriptCollection.GeneralUtilities import GeneralUtilities, VersionEcholon
+from ..ScriptCollection.GeneralUtilities import GeneralUtilities, VersionEcholon, Dependency
 
 
 class GeneralUtilitiesTests(unittest.TestCase):
@@ -856,3 +856,204 @@ class GeneralUtilitiesTests(unittest.TestCase):
 
         # assert
         assert first != second
+
+    def test_filter_versions_by_prefix_keeps_only_versions_which_start_with_the_prefix(self) -> None:
+        # arrange
+        # "1.10.5" shares the textual prefix "1.1" but not "1.1.", so it must not be kept for prefix "1.1.".
+        versions = ["1.1.2", "1.1.9", "1.10.5", "1.2.0", "2.0.0"]
+
+        # act
+        actual = GeneralUtilities.filter_versions_by_prefix(versions, "1.1.")
+
+        # assert
+        assert actual == ["1.1.2", "1.1.9"]
+
+    def test_filter_versions_by_prefix_returns_an_empty_list_when_nothing_matches(self) -> None:
+        # arrange
+        versions = ["1.1.2", "2.0.0"]
+
+        # act
+        actual = GeneralUtilities.filter_versions_by_prefix(versions, "3.")
+
+        # assert
+        assert actual == []
+
+    def test_filter_versions_by_prefix_returns_all_versions_for_an_empty_prefix(self) -> None:
+        # arrange
+        versions = ["1.1.2", "2.0.0"]
+
+        # act
+        actual = GeneralUtilities.filter_versions_by_prefix(versions, "")
+
+        # assert
+        assert actual == versions
+
+    def test_merge_dependency_lists_groups_versions_per_dependency_and_deduplicates_them(self) -> None:
+        # arrange
+        first_list = [Dependency("a", "1.0.0"), Dependency("b", "2.0.0")]
+        second_list = [Dependency("a", "1.1.0"), Dependency("a", "1.0.0")]
+
+        # act
+        actual = GeneralUtilities.merge_dependency_lists([first_list, second_list])
+
+        # assert
+        # "a" occurs three times (once with a duplicated version), so the set must collapse the duplicate.
+        assert actual == {"a": {"1.0.0", "1.1.0"}, "b": {"2.0.0"}}
+
+    def test_merge_dependency_lists_returns_an_empty_dict_for_no_lists(self) -> None:
+        # act
+        actual = GeneralUtilities.merge_dependency_lists([])
+
+        # assert
+        assert len(actual) == 0, actual
+
+    def test_contains_line_matches_at_the_beginning_of_a_line(self) -> None:
+        # arrange
+        lines = ["hello world", "foo bar"]
+
+        # act
+        actual = GeneralUtilities.contains_line(lines, "hello")
+
+        # assert
+        assert actual is True
+
+    def test_contains_line_does_not_match_in_the_middle_of_a_line_because_the_match_is_anchored_at_the_start(self) -> None:
+        # arrange
+        # re.match anchors at the start of the string, so "world" does not match "hello world".
+        lines = ["hello world"]
+
+        # act
+        actual = GeneralUtilities.contains_line(lines, "world")
+
+        # assert
+        assert actual is False
+
+    def test_contains_line_returns_false_for_an_empty_line_list(self) -> None:
+        # act
+        actual = GeneralUtilities.contains_line([], "anything")
+
+        # assert
+        assert actual is False
+
+    def test_string_has_content_distinguishes_real_content_from_none_and_whitespace(self) -> None:
+        # act & assert
+        assert GeneralUtilities.string_has_content(None) is False
+        assert GeneralUtilities.string_has_content("") is False
+        assert GeneralUtilities.string_has_content("   ") is False
+        assert GeneralUtilities.string_has_content("x") is True
+        assert GeneralUtilities.string_has_content("  x  ") is True
+
+    def test_str_none_safe_converts_none_to_an_empty_string_and_otherwise_uses_str(self) -> None:
+        # act & assert
+        assert GeneralUtilities.str_none_safe(None) == ""
+        assert GeneralUtilities.str_none_safe(123) == "123"
+        assert GeneralUtilities.str_none_safe("already a string") == "already a string"
+
+    def test_trim_newlines_removes_only_leading_and_trailing_newlines(self) -> None:
+        # arrange
+        value = "\n\nabc\n\n"
+
+        # act
+        actual = GeneralUtilities.trim_newlines(value)
+
+        # assert
+        assert actual == "abc"
+
+    def test_trim_newlines_keeps_internal_newlines_and_surrounding_spaces(self) -> None:
+        # arrange
+        # strip("\n") removes newline-characters only, so spaces and internal newlines must survive.
+        value = " a\nb "
+
+        # act
+        actual = GeneralUtilities.trim_newlines(value)
+
+        # assert
+        assert actual == " a\nb "
+
+    def test_bytes_to_string_decodes_utf8_and_ignores_invalid_bytes(self) -> None:
+        # act & assert
+        assert GeneralUtilities.bytes_to_string(b"abc") == "abc"
+        # 0xff is not a valid utf-8 byte on its own and is dropped because the decoding uses errors="ignore".
+        assert GeneralUtilities.bytes_to_string(b"a\xffb") == "ab"
+
+    def test_string_to_bytes_encodes_utf8_and_ignores_characters_the_encoding_can_not_represent(self) -> None:
+        # act & assert
+        assert GeneralUtilities.string_to_bytes("abc") == b"abc"
+        # "é" can not be represented in ascii and is dropped because the encoding uses errors="ignore".
+        assert GeneralUtilities.string_to_bytes("aé", "ascii") == b"a"
+
+    def test_string_to_bytes_and_bytes_to_string_roundtrip_for_non_ascii_utf8(self) -> None:
+        # arrange
+        value = "héllo wörld"
+
+        # act
+        actual = GeneralUtilities.bytes_to_string(GeneralUtilities.string_to_bytes(value))
+
+        # assert
+        assert actual == value
+
+    def test_timedelta_to_simple_string_formats_as_hours_minutes_seconds(self) -> None:
+        # act & assert
+        assert GeneralUtilities.timedelta_to_simple_string(timedelta(0)) == "00:00:00"
+        assert GeneralUtilities.timedelta_to_simple_string(timedelta(hours=1, minutes=2, seconds=3)) == "01:02:03"
+
+    def test_timedelta_to_simple_string_does_not_represent_whole_days(self) -> None:
+        # arrange
+        # The implementation formats an offset from a fixed date with "%H:%M:%S", so the day-part is not shown.
+        delta = timedelta(days=1, hours=1)
+
+        # act
+        actual = GeneralUtilities.timedelta_to_simple_string(delta)
+
+        # assert
+        assert actual == "01:00:00"
+
+    def test_read_nonempty_lines_from_file_skips_empty_and_whitespace_only_lines(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as folder:
+            file = os.path.join(folder, "file.txt")
+            GeneralUtilities.write_text_to_file(file, "a\n\n   \nb\n")
+
+            # act
+            actual = GeneralUtilities.read_nonempty_lines_from_file(file)
+
+        # assert
+        assert actual == ["a", "b"]
+
+    def test_file_is_empty_distinguishes_an_empty_file_from_a_non_empty_one(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as folder:
+            empty_file = os.path.join(folder, "empty.txt")
+            non_empty_file = os.path.join(folder, "nonempty.txt")
+            GeneralUtilities.write_text_to_file(empty_file, GeneralUtilities.empty_string)
+            GeneralUtilities.write_text_to_file(non_empty_file, "content")
+
+            # act
+            empty_result = GeneralUtilities.file_is_empty(empty_file)
+            non_empty_result = GeneralUtilities.file_is_empty(non_empty_file)
+
+        # assert
+        assert empty_result is True
+        assert non_empty_result is False
+
+    def test_folder_is_empty_is_true_only_when_there_is_neither_a_file_nor_a_subfolder(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as folder:
+            empty_folder = os.path.join(folder, "empty")
+            folder_with_file = os.path.join(folder, "with_file")
+            folder_with_subfolder = os.path.join(folder, "with_subfolder")
+            GeneralUtilities.ensure_directory_exists(empty_folder)
+            GeneralUtilities.ensure_directory_exists(folder_with_file)
+            GeneralUtilities.ensure_directory_exists(folder_with_subfolder)
+            GeneralUtilities.write_text_to_file(os.path.join(folder_with_file, "file.txt"), "x")
+            GeneralUtilities.ensure_directory_exists(os.path.join(folder_with_subfolder, "sub"))
+
+            # act
+            empty_result = GeneralUtilities.folder_is_empty(empty_folder)
+            file_result = GeneralUtilities.folder_is_empty(folder_with_file)
+            subfolder_result = GeneralUtilities.folder_is_empty(folder_with_subfolder)
+
+        # assert
+        assert empty_result is True
+        assert file_result is False
+        assert subfolder_result is False

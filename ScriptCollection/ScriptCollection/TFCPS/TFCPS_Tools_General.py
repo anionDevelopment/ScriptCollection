@@ -1735,8 +1735,9 @@ class TFCPS_Tools_General:
             verbose_argument = GeneralUtilities.empty_string
 
         twine_argument = f"upload{gpg_identity_argument} --repository {repository} --non-interactive {filename} --disable-progress-bar"
-        twine_argument = f"{twine_argument} --username __token__ --password {api_key}{verbose_argument}"
-        self.__sc.run_program("twine", twine_argument, folder, throw_exception_if_exitcode_is_not_zero=True)
+        twine_argument = f"{twine_argument}{verbose_argument}"
+        # The credentials are passed as environment-variables and not as arguments, because the arguments are written to the log and to the message of the exception when the upload fails.
+        self.__sc.run_program("twine", twine_argument, folder, throw_exception_if_exitcode_is_not_zero=True, env_vars={"TWINE_USERNAME": "__token__", "TWINE_PASSWORD": api_key})
 
     @GeneralUtilities.check_arguments
     def push_nuget_build_artifact(self, push_script_file: str, repository_folder_name: str,  codeunitname: str, registry_address: str,api_key: str):
