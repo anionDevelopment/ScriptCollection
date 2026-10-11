@@ -187,8 +187,7 @@ If the section or the table does not exist yet, it SHALL be created.
 #### Scenario: A list of findings is found in another document
 
 - **WHEN** a document of this repository other than `Other/Reference/Reference.md` contains findings
-- **THEN** these findings are moved into the table and removed from the place where they were
-- **AND** if that document has no actual content left afterwards, it is deleted together with every reference to it, unless it is `ReadMe.md` of the repository, the `ReadMe.md` of a codeunit, `<codeunit>/Other/Reference/ReferenceContent/Hints.md` or `<codeunit>/Other/Reference/ReferenceContent/index.md`, which stay even when they are empty
+- **THEN** these findings are moved into the table and removed from the place where they were and if that document has no actual content left afterwards, it is deleted together with every reference to it, unless it is `ReadMe.md` of the repository, the `ReadMe.md` of a codeunit, `<codeunit>/Other/Reference/ReferenceContent/Hints.md` or `<codeunit>/Other/Reference/ReferenceContent/index.md`, which stay even when they are empty
 
 ### Requirement: Findings have an id with a prefix and an ascending number
 
@@ -219,10 +218,10 @@ If there are already findings with another name-pattern then it is allowed to re
 The table MUST have exactly the following columns in this order:
 
 - `Id`: the id of the finding.
-- `Urgency`: the urgency of the finding, which is `low`, `mid` or `high` or `very high`.
+- `Priority`: the priority of the finding, which is `low`, `mid` or `high` or `very high`.
   - Findings which reveals very important or critical security-problems must be marked as `very high`. 
   - Findings which reveals very heavy performance-problems must be marked as `high` or `very high`. 
-- `State`: the state of the finding, which is `open`, `partially fixed` or `fixed`; another state is only used if none of these three applies, and the reason for it is written into `Notes`.
+- `State`: the state of the finding, which is `open`, `accepted`, `not verifiable` or `fixed`. Another state is only used if none of these three applies, and the reason for it is written into `Notes`. If an issue is fixed partially then this MUST be treated as `open`.
 - `Description`: what the finding is.
 - `Impact`: what the finding causes, depending on its topic, for example the security-impact or the performance-impact.
 - `Notes`: every further information, especially the content of further columns which a list of findings had before it was moved into the table.
