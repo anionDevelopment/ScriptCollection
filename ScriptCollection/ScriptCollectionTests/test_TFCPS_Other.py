@@ -638,6 +638,36 @@ items:
                 #because on windows it is a ".cmd"-file, which the direct process-start can not resolve.
                 run_program.assert_called_once_with("openspec", "update --force", repository)
 
+    def test_build_codeunits_in_container_passes_the_target_environment_type_into_the_container(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as repository:
+            GeneralUtilities.ensure_directory_exists(os.path.join(repository, ".git"))
+            build_codeunits = TFCPS_CodeUnit_BuildCodeUnits(repository, LogLevel.Information, "Productive", None, True, False, False)
+            with patch.object(build_codeunits, "_TFCPS_CodeUnit_BuildCodeUnits__run_scriptcollection_executable_in_container", return_value=(True, "")) as run_in_container:
+
+                # act
+                build_codeunits.build_codeunits_in_container(repository)
+
+                # assert
+                #without "-e" the build inside the container would silently use the default "QualityCheck".
+                executable_arguments: list[str] = run_in_container.call_args.args[3]
+                self.assertEqual("Productive", executable_arguments[executable_arguments.index("-e")+1])
+
+    def test_update_dependencies_in_container_passes_the_target_environment_type_into_the_container(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as repository:
+            GeneralUtilities.ensure_directory_exists(os.path.join(repository, ".git"))
+            build_codeunits = TFCPS_CodeUnit_BuildCodeUnits(repository, LogLevel.Information, "Productive", None, True, False, False)
+            with patch.object(build_codeunits, "_TFCPS_CodeUnit_BuildCodeUnits__run_scriptcollection_executable_in_container", return_value=(True, "")) as run_in_container:
+
+                # act
+                build_codeunits.update_dependencies_in_container(repository)
+
+                # assert
+                #without "--targetenvironment" the update inside the container would silently use the default "QualityCheck".
+                executable_arguments: list[str] = run_in_container.call_args.args[3]
+                self.assertEqual("Productive", executable_arguments[executable_arguments.index("--targetenvironment")+1])
+
     def test_get_expected_schemalocation_references_the_xsd_of_the_given_version(self) -> None:
         # act
         actual_result = TFCPS_CodeUnitSpecific_Base.get_expected_schemalocation("3.0.0")

@@ -411,7 +411,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         container_base_mount_folder, container_repository_folder = self.__get_folders_inside_container(base_mount_folder)
 
         #build the scbuildcodeunits-arguments based on the current state (analogous to the arguments accepted by the scbuildcodeunits-executable). each token must be a separate argument because run_program_argsasarray passes every list-element verbatim and does not split on spaces.
-        scbuildcodeunits_arguments = ["scbuildcodeunits", "-r", container_repository_folder, "-v", "4"]
+        scbuildcodeunits_arguments = ["scbuildcodeunits", "-r", container_repository_folder, "-v", "4", "-e", self.target_environment_type]
         if not self.__use_cache:
             scbuildcodeunits_arguments.append("-n")
         if self.__is_pre_merge:
@@ -438,7 +438,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         #only the arguments which scupdatedependencies really accepts are passed. It has no equivalent of the
         #pre-merge-, assert-no-new-changes-, ready-to-merge- and fastlane-flags of scbuildcodeunits, so passing one
         #of them would make the argument-parsing fail inside the container.
-        scupdatedependencies_arguments = ["scupdatedependencies", "-r", container_repository_folder, "-v", "4"]
+        scupdatedependencies_arguments = ["scupdatedependencies", "-r", container_repository_folder, "-v", "4", "--targetenvironment", self.target_environment_type]
         if not self.__use_cache:
             scupdatedependencies_arguments.append("-n")
         if GeneralUtilities.string_has_content(self.additionalargumentsfile):
