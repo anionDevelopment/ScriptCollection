@@ -275,3 +275,4 @@ The changelog-filename in the changelog-folder is then `v<version>.md`, where `<
 - Do not implement automation-logic redundantly in a repository if ScriptCollection already provides it. If something is missing or wrong in the automation, the fix usually belongs into the ScriptCollection-repository, not into the repository in which the problem was noticed.
 - Do not edit generated files (`Taskfile.yml`, generated diagrams, generated references, the synchronized skill-folders) manually. Change their source and regenerate them. See "Files which are generated and synchronized automatically".
 - Never bypass a failing script (for example by lowering the code-coverage-threshold or by regenerating baselines) without having understood the failure first.
+- The File `.ScriptCollection/.IsReadyToMerge` is not allowed to be created manually. It is managed automatically by the ScriptCollection system to indicate when a project is ready to be merged.
