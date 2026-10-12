@@ -622,6 +622,72 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
         self.run_testcases_common_post_task(repository_folder, codeunit_name, True, self.get_target_environment_type())
 
     @GeneralUtilities.check_arguments
+    def run_visual_regression_tests_in_container(self, package_name: str, update_baselines: bool, visual_regression_tests_relative_path: str = "test/visual_regression") -> None:
+        """Runs the visual-regression-tests of a flutter-codeunit inside a sibling-container of the "SCBuilder"-image.
+
+        A rendered image depends on the operating-system (the version of the flutter-sdk and therefore of the fonts
+        it ships, the font-rendering and the antialiasing), so a baseline-image is only reproducible when the tests
+        which generate and the tests which compare it both run in the same, fixed image. The tests are therefore
+        never run directly on a developer's or build-agent's host but always in this container.
+
+        'package_name' is the name of the dart-package inside the codeunit (the folder which contains the
+        "pubspec.yaml"). 'visual_regression_tests_relative_path' is the folder - relative to that package - which
+        contains the visual-regression-tests; only that folder is passed to "flutter test" so that the normal
+        (non-visual) testcases are not re-run here. The visual-regression-tests have to be tagged with
+        "visual-regression" and skipped by default (see the "dart_test.yaml" of such a package), which is why they
+        are run explicitly with "--tags visual-regression --run-skipped".
+
+        If 'update_baselines' is true the baseline-images are (re-)generated ("--update-goldens") instead of being
+        compared against."""
+        codeunit_folder: str = self.get_codeunit_folder()
+        repository_folder: str = self.get_repository_folder()
+        image: str = self.tfcps_Tools_General.oci_image_manager.get_registry_address_for_image_with_default_tag(repository_folder, "SCBuilder")
+        image_address, image_tag = ScriptCollectionCore.split_image_address_and_tag(image)
+        self.__assert_docker_daemon_is_reachable()
+        self._protected_sc.docker_pull(image_address, image_tag)
+        # If this process already runs inside a container (for example a "scbuildcodeunits -c"-run) whose
+        # docker-socket is forwarded to the daemon of the host, a bind-mount of the codeunit-folder would be
+        # resolved by that host-daemon, where the path of this container does not exist: the daemon would silently
+        # create and mount an empty directory, so the sibling-container would find no pubspec.yaml ("Expected to
+        # find project root in current working directory."). Sharing the own volumes via "--volumes-from" instead
+        # exposes the codeunit to the sibling-container under the very same path it has here. Directly on a host the
+        # bind-mount is correct and is therefore kept. This mirrors __build_linux_in_container and
+        # TFCPS_VisualRegressionTests, which handle the identical situation the same way.
+        if self.__is_running_in_container():
+            mount_arguments: list[str] = ["--volumes-from", self.__get_own_container_id()]
+            codeunit_folder_in_container: str = codeunit_folder.replace("\\", "/")
+        else:
+            codeunit_folder_in_container = "/codeunit"
+            mount_arguments = ["-v", f"{codeunit_folder}:{codeunit_folder_in_container}"]
+        package_folder_in_container: str = f"{codeunit_folder_in_container}/{package_name}"
+        # The ".dart_tool"-folders are hidden behind own volumes, so that "flutter pub get" (which has to run inside
+        # the container, because a ".dart_tool"-folder records host-specific absolute paths into the pub-cache and
+        # the flutter-sdk) neither uses nor overwrites the ones of the host. The volumes are reused by the following
+        # runs, so only the first run has to download the packages again. The example-application (if the package has
+        # one) gets one of its own because "flutter pub get" of the package resolves it as well.
+        dart_tool_volume_name: str = f"{self.get_codeunit_name().lower()}-visual-regression-tests-dart-tool"
+        volume_arguments: list[str] = ["-v", f"{dart_tool_volume_name}:{package_folder_in_container}/.dart_tool"]
+        if os.path.isdir(os.path.join(codeunit_folder, package_name, "example")):
+            volume_arguments = volume_arguments+["-v", f"{dart_tool_volume_name}-example:{package_folder_in_container}/example/.dart_tool"]
+        command: str = "flutter pub get && flutter test"
+        if update_baselines:
+            command = f"{command} --update-goldens"
+        command = f"{command} --tags visual-regression --run-skipped {visual_regression_tests_relative_path}"
+        arguments: list[str] = ["run", "--rm"]+mount_arguments+volume_arguments+["-w", package_folder_in_container, image, "/bin/sh", "-c", command]
+        result = self._protected_sc.run_program_argsasarray("docker", arguments, throw_exception_if_exitcode_is_not_zero=False, print_live_output=True, print_errors_as_information=True)
+        if result[0] != 0:
+            verb: str = "updating the baseline-images of" if update_baselines else "running"
+            raise ValueError(f"The visual-regression-tests of the codeunit \"{self.get_codeunit_name()}\" failed while {verb} them (docker exit-code {result[0]}).")
+
+    @GeneralUtilities.check_arguments
+    def __assert_docker_daemon_is_reachable(self) -> None:
+        # Without this check an unreachable daemon would look like a failed testcase, because "docker run" returns a
+        # non-zero exit-code in both cases.
+        result = self._protected_sc.run_program_argsasarray("docker", ["version", "--format", "{{.Server.Version}}"], throw_exception_if_exitcode_is_not_zero=False, print_live_output=False)
+        if result[0] != 0:
+            raise ValueError(f"The visual-regression-tests can not be executed because the docker-daemon is not reachable (exit-code {result[0]}: {result[2].strip()}). They are executed via \"docker run\", which requires a running docker-daemon (inside a build-container its socket must be forwarded to the host-daemon). This is an infrastructure-problem and not a failed testcase.")
+
+    @GeneralUtilities.check_arguments
     def __build_linux_in_container(self, codeunit_folder: str, src_folder: str) -> None:
         """Runs "flutter build linux" inside a sibling-container of the "SCBuilder"-image (see the "linux"-branch of
         build() for why). If this process itself already runs inside a container (e.g. a "scbuildcodeunits -c"-run),
