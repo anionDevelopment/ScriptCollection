@@ -511,12 +511,21 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if os.path.isdir(tfcps_configuration_folder):
             mount_arguments += ["-v", f"{tfcps_configuration_folder}:{self.sc.get_tfcps_configuration_folder_in_container()}:ro"]
 
+        #install the host-declared trusted root-CA-certificates into the container (needed when the build pulls packages from a privately
+        #hosted registry whose certificate-chain is not publicly rooted - for example an internally hosted gitlab-nuget-source). The
+        #three env-var forms are detected automatically; see __collect_trusted_root_ca_arguments. _Path-variables add file-mounts, the
+        #inline forms (_Content/_ContentBase64) are returned as a name->value dict that gets merged into required_environment_variables
+        #below so their values flow through the docker-client's own environment (not through argv) just like a required secret does.
+        trusted_root_ca_mount_arguments, trusted_root_ca_inline_env_vars = self.__collect_trusted_root_ca_arguments()
+        mount_arguments += trusted_root_ca_mount_arguments
+
         #pass the environment-variables which are declared as required in <repository>/.ScriptCollection/ProductInformation.xml into the container
         #so they do not have to be specified explicitly on every call. Their values are resolved from the user-specific
         #configuration-file (see TFCPS_Tools_General.get_environment_variables_configuration_file), which only exists on the host.
         #only the names are passed as arguments; the values are given to the docker-client through its own environment, because arguments
         #are written to the log and are visible in the process-list of this host, which must not happen for a value which is typically a secret.
         required_environment_variables: dict[str, str] = self.tfcps_tools_general.get_required_environment_variables(self.repository)
+        required_environment_variables.update(trusted_root_ca_inline_env_vars)
         env_arguments: list[str] = []
         for env_variable_name in required_environment_variables:
             env_arguments += ["-e", env_variable_name]
@@ -540,6 +549,56 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         stderr:str=result[2] or GeneralUtilities.empty_string
         return (exit_code==0,f"{stdout}\n{stderr}")
     
+    @GeneralUtilities.check_arguments
+    def __collect_trusted_root_ca_arguments(self) -> tuple[list[str], dict[str, str]]:
+        """Resolves the TrustedRootCA_<name>_Path, TrustedRootCA_<name>_Content and TrustedRootCA_<name>_ContentBase64 environment-variables
+        of the current host into docker-arguments which install those certificates into the trust-store of the build-container. Returns
+        (mount_arguments, inline_env_vars):
+        - mount_arguments: '-v <host-path>:/Workspace/RootCAs/<name>.crt:ro' entries for each _Path-variable.
+        - inline_env_vars: a name->value dict for each _Content/_ContentBase64-variable; the caller merges it into
+          required_environment_variables so the values flow through the docker-client's own environment, not through argv.
+        The actual trust-store update happens in SCBuilder's EntryPoint.sh, which scans /Workspace/RootCAs and the TrustedRootCA_*
+        environment-variables and runs update-ca-certificates once before any build-step. The <name>-part becomes the filename inside
+        /usr/local/share/ca-certificates/ and must therefore be unique across the three env-var-forms; a duplicate is rejected here with
+        a clear error, before the container is started."""
+        path_pattern = re.compile(r"^TrustedRootCA_(.+)_Path$", re.IGNORECASE)
+        content_pattern = re.compile(r"^TrustedRootCA_(.+)_Content$", re.IGNORECASE)
+        content_b64_pattern = re.compile(r"^TrustedRootCA_(.+)_ContentBase64$", re.IGNORECASE)
+        seen_names: dict[str, str] = {}#lower-case name -> originating env-var-name, used only to produce an informative error on duplicate <name>.
+        mount_arguments: list[str] = []
+        inline_env_vars: dict[str, str] = {}
+        #sorted so the log-output (and therefore the order of "-v"-/"-e"-arguments) stays deterministic across runs.
+        for env_name, env_value in sorted(os.environ.items()):
+            if not GeneralUtilities.string_has_content(env_value):
+                continue
+            path_match = path_pattern.match(env_name)
+            if path_match is not None:
+                ca_name = path_match.group(1)
+                self.__check_trusted_root_ca_name_is_unique(seen_names, ca_name, env_name)
+                host_path = env_value.strip()
+                if not os.path.isfile(host_path):
+                    raise ValueError(f"Environment-variable \"{env_name}\" points to a file which does not exist on this host: \"{host_path}\".")
+                with open(host_path, "r", encoding="utf-8", errors="replace") as pem_file:
+                    head = pem_file.read(64)
+                if "-----BEGIN CERTIFICATE-----" not in head:
+                    raise ValueError(f"Environment-variable \"{env_name}\" (\"{host_path}\") does not look like a PEM-encoded certificate (missing \"-----BEGIN CERTIFICATE-----\"-header).")
+                mount_arguments += ["-v", f"{host_path}:/Workspace/RootCAs/{ca_name}.crt:ro"]
+                continue
+            inline_match = content_pattern.match(env_name) or content_b64_pattern.match(env_name)
+            if inline_match is not None:
+                ca_name = inline_match.group(1)
+                self.__check_trusted_root_ca_name_is_unique(seen_names, ca_name, env_name)
+                inline_env_vars[env_name] = env_value
+                continue
+        return mount_arguments, inline_env_vars
+
+    @GeneralUtilities.check_arguments
+    def __check_trusted_root_ca_name_is_unique(self, seen_names: dict[str, str], ca_name: str, env_name: str) -> None:
+        key = ca_name.lower()
+        if key in seen_names:
+            raise ValueError(f"Multiple TrustedRootCA-definitions for name \"{ca_name}\" found (\"{seen_names[key]}\" and \"{env_name}\"). The <name>-part becomes the filename in the trust-store and must therefore be unique across _Path, _Content and _ContentBase64.")
+        seen_names[key] = env_name
+
     @GeneralUtilities.check_arguments
     def __translate_path_into_container(self, host_path: str, container_repository_folder: str) -> str:
         normalized_repository = os.path.normpath(self.repository)

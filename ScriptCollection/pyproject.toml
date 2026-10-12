@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.4.53"
+version = "4.4.54"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
 license = "GPL-3.0-only"
@@ -140,6 +140,8 @@ scsearchforsecrets = "ScriptCollection.Executables:SearchForSecrets"
 scsearchforsecretsinimage = "ScriptCollection.Executables:SearchForSecretsInImage"
 scgeneratetaskfilefromworkspacefile = "ScriptCollection.Executables:GenerateTaskfileFromWorkspacefile"
 scruncommandinfolder = "ScriptCollection.Executables:RunCommandInFolder"
+sctrustedrootcatobase64 = "ScriptCollection.Executables:TrustedRootCAToBase64"
+sctrustedrootcas = "ScriptCollection.Executables:ShowTrustedRootCAs"
 
 [tool.setuptools]
 zip-safe = false

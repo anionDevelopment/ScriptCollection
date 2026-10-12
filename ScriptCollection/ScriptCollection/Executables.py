@@ -1337,3 +1337,35 @@ def SyncXlfFiles()->int:
     folder=GeneralUtilities.resolve_relative_path(args.folder, os.getcwd())
     sc.sync_xlf2_files(args.prefix, languages, folder)
     return 0
+
+
+def TrustedRootCAToBase64() -> int:
+    parser = argparse.ArgumentParser(description="Reads a PEM-encoded certificate-file (typically a .crt/.pem of a root-CA) and prints its content as a single base64-string. Use the result as the value of a TrustedRootCA_<name>_ContentBase64-environment-variable, which SCBuilder's container-build-mechanism installs into the trust-store of the build-container (see the \"TrustedRootCAs\"-section of the ScriptCollection-reference). The base64-form is intended for CI-secret-stores which do not support multiline values; for a plain .crt-file on disk use TrustedRootCA_<name>_Path instead.")
+    parser.add_argument('-p', '--path', required=True, help="Path to the PEM-file.")
+    args = parser.parse_args()
+    if not os.path.isfile(args.path):
+        GeneralUtilities.write_message_to_stderr(f"File '{args.path}' does not exist.")
+        return 1
+    with open(args.path, "rb") as pem_file:
+        content = pem_file.read()
+    if b"-----BEGIN CERTIFICATE-----" not in content:
+        GeneralUtilities.write_message_to_stderr(f"File '{args.path}' does not look like a PEM-encoded certificate (missing \"-----BEGIN CERTIFICATE-----\"-header).")
+        return 2
+    GeneralUtilities.write_message_to_stdout(base64.b64encode(content).decode("ascii"))
+    return 0
+
+
+def ShowTrustedRootCAs() -> int:
+    parser = argparse.ArgumentParser(description="Lists the trusted root-CA-certificates which were injected into this build-container through the TrustedRootCA_<name>_*-mechanism. Prints the filenames in /usr/local/share/ca-certificates/, which is the location SCBuilder's EntryPoint.sh writes injected CAs to (see the \"TrustedRootCAs\"-section of the ScriptCollection-reference). Intended to be run inside a build-container; outside a container the result is only meaningful on hosts which use the same system-wide trust-store-layout as Debian.")
+    parser.parse_args()
+    trusted_root_ca_folder = "/usr/local/share/ca-certificates"
+    if not os.path.isdir(trusted_root_ca_folder):
+        GeneralUtilities.write_message_to_stdout("No trusted root-CA-certificates are installed through the TrustedRootCA-mechanism (folder /usr/local/share/ca-certificates/ does not exist).")
+        return 0
+    entries = sorted(entry for entry in os.listdir(trusted_root_ca_folder) if os.path.isfile(os.path.join(trusted_root_ca_folder, entry)))
+    if not entries:
+        GeneralUtilities.write_message_to_stdout("No trusted root-CA-certificates are installed through the TrustedRootCA-mechanism (folder /usr/local/share/ca-certificates/ is empty).")
+        return 0
+    for entry in entries:
+        GeneralUtilities.write_message_to_stdout(entry)
+    return 0
