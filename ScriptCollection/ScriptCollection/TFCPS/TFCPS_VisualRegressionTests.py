@@ -2,6 +2,7 @@ import json
 import os
 import re
 import socket
+from typing import Callable
 from PIL import Image, ImageChops
 from ..GeneralUtilities import GeneralUtilities
 from ..ScriptCollectionCore import ScriptCollectionCore
@@ -76,7 +77,7 @@ class TFCPS_VisualRegressionTests:
         self.__sc.log.loglevel = tfcps_codeunit.get_verbosity()
 
     @GeneralUtilities.check_arguments
-    def run(self, update_baselines: bool, playwright_project_folder_relative_path: str = ".", domain_of_externally_started_application: str = None, environment_variables: dict[str, str] = None, playwright_project: str = None) -> None:
+    def run(self, update_baselines: bool, playwright_project_folder_relative_path: str = ".", domain_of_externally_started_application: str = None, environment_variables: dict[str, str] = None, playwright_project: str = None, restart_application_under_test: Callable = None) -> None:
         """Executes the visual-regression-tests of the codeunit.
         If 'update_baselines' is false the screenshots are compared with the baselines and a difference fails the
         run. If 'update_baselines' is true the baseline-screenshots are regenerated instead: missing ones are
@@ -96,7 +97,17 @@ class TFCPS_VisualRegressionTests:
         'playwright_project' restricts the run to one project of the playwright-configuration (which is one
         browser). It is required by codeunits whose testcases change the state of the application under test:
         those have to start the application newly for every browser, because otherwise the second browser would
-        find the state which the first one left behind and would therefore see other pages than the first one."""
+        find the state which the first one left behind and would therefore see other pages than the first one.
+        'restart_application_under_test' is only relevant in the update-mode and only for an application which the
+        caller started itself (see the documentation of this class). That mode runs the testcases twice (see the
+        construction of the command below): once to write the baselines and once to verify that every screenshot
+        could really be produced. An application which the playwright-configuration starts itself is restarted by
+        every "npx playwright test" and therefore begins the verify-pass with a fresh state, but an application
+        which the caller started keeps its state for the lifetime of its process, so a testcase which changes that
+        state (by registering a user or by creating an entity for example) would find in the verify-pass the state
+        which it created in the update-pass and would fail although its screenshot could be produced. The caller
+        therefore passes this callback, which restarts the application between the two passes; when it is not given
+        the two passes share one application, which is correct for an application that restarts itself."""
         codeunit_folder: str = self.__tfcps_codeunit.get_codeunit_folder()
         repository_folder: str = self.__tfcps_codeunit.get_repository_folder()
         playwright_project_folder: str = self.__get_folder_in_codeunit(codeunit_folder, playwright_project_folder_relative_path)
@@ -119,6 +130,21 @@ class TFCPS_VisualRegressionTests:
         # contain packages for another operating-system. "--no-save" is required so that the installation does not
         # modify "package.json" or "package-lock.json".
         install_command: str = "npm install --no-audit --no-fund --no-save"
+        base_arguments: list[str] = ["run", "--rm"]
+        # Playwright recommends this because the default-size of the shared memory of a container is too small for
+        # chromium, which makes chromium crash on pages which are not trivial.
+        base_arguments = base_arguments+["--ipc=host"]
+        base_arguments = base_arguments+self.__get_mount_arguments(codeunit_folder, codeunit_folder_in_container, playwright_project_folder_relative_path)
+        if domain_of_externally_started_application is not None:
+            base_arguments = base_arguments+self.__get_network_arguments(domain_of_externally_started_application)
+        if environment_variables is not None:
+            for name, value in environment_variables.items():
+                base_arguments = base_arguments+["-e", f"{name}={value}"]
+        base_arguments = base_arguments+["-w", working_folder, image]
+
+        def run_in_container(command_to_run: str) -> tuple:
+            return self.__sc.run_program_argsasarray("docker", base_arguments+["/bin/sh", "-c", command_to_run], throw_exception_if_exitcode_is_not_zero=False, print_live_output=True, print_errors_as_information=True)
+
         if update_baselines:
             # The update-run writes the baseline-screenshots (it creates the missing ones and overwrites the
             # changed ones). Since playwright 1.50 that run reports every testcase whose screenshot it created or
@@ -129,22 +155,26 @@ class TFCPS_VisualRegressionTests:
             # captured stabilizes and therefore matches its own new baseline, while a testcase which can not
             # produce a screenshot keeps failing (a missing baseline is regenerated by the second run and still
             # fails it). The exit-code of the second run therefore decides about success, so the one of the
-            # update-run is discarded by separating the two runs with ";" instead of "&&".
-            command = f"{install_command} && ( {test_command} --update-snapshots ; {test_command} )"
+            # update-run is discarded.
+            update_command: str = f"{install_command} && {test_command} --update-snapshots"
+            verify_command: str = f"{install_command} && {test_command}"
+            if restart_application_under_test is None:
+                # The application restarts itself between the two passes (for example because the
+                # playwright-configuration starts it through its "webServer"-setting), so both passes can share one
+                # invocation. They are separated by ";" and not by "&&" so that the discarded exit-code of the
+                # update-run does not skip the verify-run.
+                result = run_in_container(f"{install_command} && ( {test_command} --update-snapshots ; {test_command} )")
+            else:
+                # The application was started by the caller and keeps its state for the lifetime of its process, so
+                # the two passes must not share one application: the verify-pass would otherwise find the state
+                # which a testcase created in the update-pass (a registered user or a created entity for example)
+                # and would fail although its screenshot could be produced. The passes are therefore two separate
+                # invocations and the caller restarts the application in between through the callback.
+                run_in_container(update_command)
+                restart_application_under_test()
+                result = run_in_container(verify_command)
         else:
-            command = f"{install_command} && {test_command}"
-        arguments: list[str] = ["run", "--rm"]
-        # Playwright recommends this because the default-size of the shared memory of a container is too small for
-        # chromium, which makes chromium crash on pages which are not trivial.
-        arguments = arguments+["--ipc=host"]
-        arguments = arguments+self.__get_mount_arguments(codeunit_folder, codeunit_folder_in_container, playwright_project_folder_relative_path)
-        if domain_of_externally_started_application is not None:
-            arguments = arguments+self.__get_network_arguments(domain_of_externally_started_application)
-        if environment_variables is not None:
-            for name, value in environment_variables.items():
-                arguments = arguments+["-e", f"{name}={value}"]
-        arguments = arguments+["-w", working_folder, image, "/bin/sh", "-c", command]
-        result = self.__sc.run_program_argsasarray("docker", arguments, throw_exception_if_exitcode_is_not_zero=False, print_live_output=True, print_errors_as_information=True)
+            result = run_in_container(f"{install_command} && {test_command}")
         if result[0] != 0:
             if update_baselines:
                 # A non-zero exit-code of the second run means a screenshot could not be produced even against its
