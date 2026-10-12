@@ -140,6 +140,8 @@ scsearchforsecrets = "ScriptCollection.Executables:SearchForSecrets"
 scsearchforsecretsinimage = "ScriptCollection.Executables:SearchForSecretsInImage"
 scgeneratetaskfilefromworkspacefile = "ScriptCollection.Executables:GenerateTaskfileFromWorkspacefile"
 scruncommandinfolder = "ScriptCollection.Executables:RunCommandInFolder"
+sctrustedrootcatobase64 = "ScriptCollection.Executables:TrustedRootCAToBase64"
+sctrustedrootcas = "ScriptCollection.Executables:ShowTrustedRootCAs"
 
 [tool.setuptools]
 zip-safe = false
