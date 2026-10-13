@@ -513,9 +513,10 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
         #install the host-declared trusted root-CA-certificates into the container (needed when the build pulls packages from a privately
         #hosted registry whose certificate-chain is not publicly rooted - for example an internally hosted gitlab-nuget-source). The
-        #three env-var forms are detected automatically; see __collect_trusted_root_ca_arguments. _Path-variables add file-mounts, the
-        #inline forms (_Content/_ContentBase64) are returned as a name->value dict that gets merged into required_environment_variables
-        #below so their values flow through the docker-client's own environment (not through argv) just like a required secret does.
+        #two env-var forms are detected automatically from both the machine-wide environment-variables-configuration-file and the
+        #environment of the current process; see __collect_trusted_root_ca_arguments. _Path-variables add file-mounts, the inline
+        #_ContentBase64-form is returned as a name->value dict that gets merged into required_environment_variables below so its
+        #value flows through the docker-client's own environment (not through argv) just like a required secret does.
         trusted_root_ca_mount_arguments, trusted_root_ca_inline_env_vars = self.__collect_trusted_root_ca_arguments()
         mount_arguments += trusted_root_ca_mount_arguments
 
@@ -551,24 +552,46 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     
     @GeneralUtilities.check_arguments
     def __collect_trusted_root_ca_arguments(self) -> tuple[list[str], dict[str, str]]:
-        """Resolves the TrustedRootCA_<name>_Path, TrustedRootCA_<name>_Content and TrustedRootCA_<name>_ContentBase64 environment-variables
-        of the current host into docker-arguments which install those certificates into the trust-store of the build-container. Returns
-        (mount_arguments, inline_env_vars):
+        """Resolves the TrustedRootCA_<name>_Path and TrustedRootCA_<name>_ContentBase64 environment-variables of the current host into
+        docker-arguments which install those certificates into the trust-store of the build-container. Returns (mount_arguments, inline_env_vars):
         - mount_arguments: '-v <host-path>:/Workspace/RootCAs/<name>.crt:ro' entries for each _Path-variable.
-        - inline_env_vars: a name->value dict for each _Content/_ContentBase64-variable; the caller merges it into
-          required_environment_variables so the values flow through the docker-client's own environment, not through argv.
-        The actual trust-store update happens in SCBuilder's EntryPoint.sh, which scans /Workspace/RootCAs and the TrustedRootCA_*
-        environment-variables and runs update-ca-certificates once before any build-step. The <name>-part becomes the filename inside
-        /usr/local/share/ca-certificates/ and must therefore be unique across the three env-var-forms; a duplicate is rejected here with
-        a clear error, before the container is started."""
+        - inline_env_vars: a name->value dict for each _ContentBase64-variable; the caller merges it into required_environment_variables
+          so the values flow through the docker-client's own environment, not through argv.
+        Candidate-names are collected from two sources (identical to the OCI-registry-credentials, see
+        ScriptCollectionCore.__get_defined_oci_registry_names): the machine-wide environment-variables-configuration-file and the
+        environment of the current process. The value is then resolved through ScriptCollectionCore.resolve_environment_variable, so a
+        CSV-entry takes precedence over an environment-variable of the same name - consistent with every other environment-variable
+        this script-collection resolves. If a name is declared in the file but its value can not be determined there (for example a
+        'file'-entry pointing to a missing file), the resolver falls back to the environment and fails only if neither source yields a
+        value. The actual trust-store update happens in SCBuilder's EntryPoint.sh, which scans /Workspace/RootCAs and the
+        TrustedRootCA_*-environment-variables and runs update-ca-certificates once before any build-step. The <name>-part becomes the
+        filename inside /usr/local/share/ca-certificates/ and must therefore be unique across the two env-var-forms; a duplicate is
+        rejected here with a clear error, before the container is started."""
         path_pattern = re.compile(r"^TrustedRootCA_(.+)_Path$", re.IGNORECASE)
-        content_pattern = re.compile(r"^TrustedRootCA_(.+)_Content$", re.IGNORECASE)
         content_b64_pattern = re.compile(r"^TrustedRootCA_(.+)_ContentBase64$", re.IGNORECASE)
-        seen_names: dict[str, str] = {}#lower-case name -> originating env-var-name, used only to produce an informative error on duplicate <name>.
+        #collect every candidate-variable-name from both sources before any value is resolved; this way a secret-value is read only for
+        #a name that is actually declared and the discovery is identical to the OCI-registry-credential-discovery. The configuration-
+        #file is scanned before the environment and a name found in both is kept with the casing of the file: on Windows, os.environ
+        #normalizes a variable-name to uppercase as soon as it is set, so without this preference the same declaration in both places
+        #would be treated as two different names and resolution would silently pick the environment-value instead of the file-value.
+        candidate_names: dict[str, str] = {}#lower-case variable-name -> canonical variable-name (file-casing preferred)
+        configuration_file = self.sc.get_environment_variables_configuration_file()
+        if os.path.isfile(configuration_file):
+            for entry in GeneralUtilities.read_csv_file(configuration_file, True):
+                if 0 == len(entry):
+                    continue
+                env_name = entry[0]
+                if path_pattern.match(env_name) is not None or content_b64_pattern.match(env_name) is not None:
+                    candidate_names.setdefault(env_name.lower(), env_name)
+        for env_name in os.environ.keys():
+            if path_pattern.match(env_name) is not None or content_b64_pattern.match(env_name) is not None:
+                candidate_names.setdefault(env_name.lower(), env_name)
+        seen_names: dict[str, str] = {}#lower-case <name>-part -> originating variable-name, used only to produce an informative error on duplicate <name>.
         mount_arguments: list[str] = []
         inline_env_vars: dict[str, str] = {}
         #sorted so the log-output (and therefore the order of "-v"-/"-e"-arguments) stays deterministic across runs.
-        for env_name, env_value in sorted(os.environ.items()):
+        for env_name in sorted(candidate_names.values(), key=str.lower):
+            env_value = self.sc.resolve_environment_variable(env_name, f"the TrustedRootCA-mechanism (declared via \"{env_name}\")")
             if not GeneralUtilities.string_has_content(env_value):
                 continue
             path_match = path_pattern.match(env_name)
@@ -584,9 +607,9 @@ class TFCPS_CodeUnit_BuildCodeUnits:
                     raise ValueError(f"Environment-variable \"{env_name}\" (\"{host_path}\") does not look like a PEM-encoded certificate (missing \"-----BEGIN CERTIFICATE-----\"-header).")
                 mount_arguments += ["-v", f"{host_path}:/Workspace/RootCAs/{ca_name}.crt:ro"]
                 continue
-            inline_match = content_pattern.match(env_name) or content_b64_pattern.match(env_name)
-            if inline_match is not None:
-                ca_name = inline_match.group(1)
+            content_b64_match = content_b64_pattern.match(env_name)
+            if content_b64_match is not None:
+                ca_name = content_b64_match.group(1)
                 self.__check_trusted_root_ca_name_is_unique(seen_names, ca_name, env_name)
                 inline_env_vars[env_name] = env_value
                 continue
@@ -596,7 +619,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     def __check_trusted_root_ca_name_is_unique(self, seen_names: dict[str, str], ca_name: str, env_name: str) -> None:
         key = ca_name.lower()
         if key in seen_names:
-            raise ValueError(f"Multiple TrustedRootCA-definitions for name \"{ca_name}\" found (\"{seen_names[key]}\" and \"{env_name}\"). The <name>-part becomes the filename in the trust-store and must therefore be unique across _Path, _Content and _ContentBase64.")
+            raise ValueError(f"Multiple TrustedRootCA-definitions for name \"{ca_name}\" found (\"{seen_names[key]}\" and \"{env_name}\"). The <name>-part becomes the filename in the trust-store and must therefore be unique across _Path and _ContentBase64.")
         seen_names[key] = env_name
 
     @GeneralUtilities.check_arguments
