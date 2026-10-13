@@ -18,13 +18,15 @@ def create_repository(folder: str, image_definition_lines: list[str]) -> str:
     return repository
 
 
-def create_oci_image_manager(configuration_folder: str, mounted_registries_file: str, image_is_available_locally: bool, image_is_available_in_custom_registry: bool) -> tuple[OCIImageManager, list[tuple[str, str]]]:
+def create_oci_image_manager(configuration_folder: str, mounted_registries_file: str, image_is_available_locally: bool, image_is_available_in_custom_registry: bool, login_fails: bool = False) -> tuple[OCIImageManager, list[tuple[str, str]]]:
     """Returns an OCIImageManager which reads its machine-wide configuration from the given folder instead of from the
     configuration-folder of the user who runs the test, and which looks for the file mounted by the host at the given
     path instead of at the path a real build-container has.
     The login to the registries, the lookup in the local image-store and the check whether an image is available in the
     custom registry are replaced by the given answers, because all of them would need a docker-installation (and a
     reachable registry), which a testcase must not depend on.
+    If 'login_fails' is True then the replaced login raises an exception, which simulates a registry that is not reachable,
+    wrong credentials or a docker-daemon which is not available.
     Returns the manager and the list of the checks which were done with the replaced check (as image-address and tag),
     so a testcase can also verify which registry was asked and how often."""
     sc = ScriptCollectionCore()
@@ -32,7 +34,11 @@ def create_oci_image_manager(configuration_folder: str, mounted_registries_file:
     #behaviour in some of the tests below and therefore must not appear in the output of the testrun.
     sc.log.loglevel = LogLevel.Quiet
     setattr(sc, "get_global_cache_folder", lambda: configuration_folder)
-    setattr(sc, "login_to_defined_docker_registries", lambda: None)
+
+    def login_to_defined_docker_registries() -> None:
+        if login_fails:
+            raise ValueError("Simulated failure of the login to the defined docker-registries.")
+    setattr(sc, "login_to_defined_docker_registries", login_to_defined_docker_registries)
     setattr(sc, "local_docker_image_exists", lambda image, tag: image_is_available_locally)
     availability_checks: list[tuple[str, str]] = []
 
@@ -116,6 +122,26 @@ class OCIImageManagerTests(unittest.TestCase):
             self.assertEqual("docker.io/library/mariadb:12.2.2", actual_result)
             #the availability is checked for the address of the custom registry with the tag which the repository defines.
             self.assertEqual([("myregistry.example.com/mariadb", "12.2.2")], availability_checks)
+
+    def test_fallback_registry_is_used_when_the_login_to_the_custom_registry_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            #the custom registry is defined and would provide the image, but the login fails (for example because the registry
+            #is not reachable, because the credentials are wrong or because the docker-daemon is not available). This must not
+            #abort the build: a warning is logged and the fallback-registry of the repository is used instead.
+            repository = create_repository(temporary_folder, ["MariaDB;docker.io/library/mariadb;12.2.2"])
+            mounted_registries_file = os.path.join(temporary_folder, "Mounted.csv")
+            GeneralUtilities.write_lines_to_file(mounted_registries_file, ["ImageName;RegistryAddress", "MariaDB;myregistry.example.com/mariadb"])
+            oci_image_manager, availability_checks = create_oci_image_manager(temporary_folder, mounted_registries_file, False, True, login_fails=True)
+
+            # act
+            actual_result = oci_image_manager.get_registry_address_for_image_with_default_tag(repository, "MariaDB")
+
+            # assert
+            self.assertEqual("docker.io/library/mariadb:12.2.2", actual_result)
+            #when the login fails the custom registry is not asked whether it provides the image, because that request would
+            #fail for the same reason.
+            self.assertEqual([], availability_checks)
 
     def test_availability_of_an_image_in_the_custom_registry_is_only_checked_once(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_folder:
