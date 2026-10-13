@@ -153,13 +153,22 @@ class OCIImageManager:
         any download depend on a reachable registry.
         A custom registry is typically not publicly readable, so the login to the registries which are defined for this machine is done
         before the registry is asked; without it the answer would be that the image is not available although it only is not readable
-        without credentials."""
+        without credentials. A failed login does not break the build: the login can fail because the registry is not reachable, because
+        the credentials are missing or wrong, or because the docker-daemon is not available at all, and in each of these cases the image
+        can not be taken from the custom registry. The login-failure is therefore treated like an image which is not available in the
+        custom registry, so that a warning is logged and the fallback-registry is used (see get_registry_address_for_image) instead of
+        aborting the build."""
         image_with_tag=f"{custom_registry_address}:{tag}"
         if image_with_tag not in self.__availability_of_image:
             if self.__sc.local_docker_image_exists(custom_registry_address,tag):
                 self.__availability_of_image[image_with_tag]=True
             else:
-                self.__sc.login_to_defined_docker_registries()
+                try:
+                    self.__sc.login_to_defined_docker_registries()
+                except Exception as exception:
+                    self.__sc.log.log(f"The login to the defined docker-registries failed, so the image \"{image_with_tag}\" is treated as not available in the custom registry \"{custom_registry_address}\" and the fallback-registry is used instead. Reason: {exception}",LogLevel.Warning)
+                    self.__availability_of_image[image_with_tag]=False
+                    return self.__availability_of_image[image_with_tag]
                 self.__availability_of_image[image_with_tag]=self.__sc.image_is_available_in_registry(custom_registry_address,tag)
         return self.__availability_of_image[image_with_tag]
 
