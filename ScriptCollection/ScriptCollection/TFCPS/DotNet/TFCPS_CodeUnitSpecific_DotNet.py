@@ -6,6 +6,7 @@ import uuid
 import json
 from lxml import etree
 import yaml
+from packaging.version import Version
 from .CertificateGeneratorInformationBase import CertificateGeneratorInformationBase
 from ...GeneralUtilities import GeneralUtilities, VersionEcholon
 from ...SCLog import  LogLevel
@@ -843,12 +844,38 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         return f'filename="{filename_relative}"'
 
     
-    def get_dependencies(self)->dict[str,set[str]]:
-        return dict[str,set[str]]()#TODO
-    
     @GeneralUtilities.check_arguments
-    def get_available_versions(self,dependencyname:str)->list[str]:
-        return []#TODO
+    def get_dependencies(self)->dict[str,set[str]]:
+        csproj_file: str = self.csproj_file
+        root: etree._ElementTree = etree.parse(csproj_file)
+        result: dict[str, set[str]] = {}
+        for package_reference in root.xpath("//PackageReference"):
+            attributes: dict[str, str] = {name.lower(): value for name, value in package_reference.attrib.items()}
+            package_name: str = attributes.get("include")
+            if package_name:
+                version: str = attributes.get("version")
+                if version:
+                    version_clean = version.strip().strip("[]")
+                    if package_name not in result:
+                        result[package_name] = set()
+                    result[package_name].add(version_clean)
+        return result
+
+    @GeneralUtilities.check_arguments
+    def get_available_versions(self, dependencyname: str) -> list[str]:
+        result = self._protected_sc.run_program("dotnet", f"package search {dependencyname} --exact --format json", self.get_codeunit_folder(), throw_exception_if_exitcode_is_not_zero=False)
+        if result[0] != 0:
+            return []
+        try:
+            import json
+            data = json.loads(result[1])
+            if "searchResult" in data and len(data["searchResult"]) > 0:
+                package = data["searchResult"][0]
+                versions: list[str] = package.get("versions", [])
+                return sorted([v.get("version", "") for v in versions if "version" in v], key=lambda v: Version(v), reverse=True)[:20]
+        except Exception:
+            return []
+        return []
 
     @GeneralUtilities.check_arguments
     def update_dependencies_with_specific_echolon(self, echolon: VersionEcholon) -> None:
