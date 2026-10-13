@@ -4,6 +4,7 @@ import re
 import shutil
 import uuid
 import json
+import requests
 from lxml import etree
 import yaml
 from packaging.version import Version
@@ -863,19 +864,18 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def get_available_versions(self, dependencyname: str) -> list[str]:
-        result = self._protected_sc.run_program("dotnet", f"package search {dependencyname} --exact --format json", self.get_codeunit_folder(), throw_exception_if_exitcode_is_not_zero=False)
-        if result[0] != 0:
-            return []
         try:
-            import json
-            data = json.loads(result[1])
-            if "searchResult" in data and len(data["searchResult"]) > 0:
-                package = data["searchResult"][0]
-                versions: list[str] = package.get("versions", [])
-                return sorted([v.get("version", "") for v in versions if "version" in v], key=lambda v: Version(v), reverse=True)[:20]
+            url = f"https://api.nuget.org/v3/flatcontainer/{dependencyname.lower()}/index.json"
+            response = requests.get(url, timeout=10)
+            if response.status_code != 200:
+                return []
+            data = response.json()
+            versions: list[str] = data.get("versions", [])
+            if not versions:
+                return []
+            return sorted([v for v in versions if re.match(r"^\d+\.\d+\.\d+", v)], key=lambda v: Version(v), reverse=True)
         except Exception:
             return []
-        return []
 
     @GeneralUtilities.check_arguments
     def update_dependencies_with_specific_echolon(self, echolon: VersionEcholon) -> None:
