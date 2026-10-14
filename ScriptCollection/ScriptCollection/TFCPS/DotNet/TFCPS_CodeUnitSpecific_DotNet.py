@@ -888,7 +888,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         the caller turns into an empty version-list and therefore into the misleading error "Version-list can not be empty"
         for a dependency whose registry actually offers usable versions."""
         three_part_versions = [version for version in versions if re.match(r"^\d+\.\d+\.\d+$", version)]
-        return sorted(three_part_versions, key=lambda version: Version(version), reverse=True)
+        return sorted(three_part_versions, key=Version, reverse=True)
 
     @GeneralUtilities.check_arguments
     def update_dependencies_with_specific_echolon(self, echolon: VersionEcholon) -> None:
