@@ -7,6 +7,7 @@ from ..ScriptCollection.TFCPS.NpmDependencies import NpmDependencies
 from ..ScriptCollection.TFCPS.PubDependencies import PubDependencies
 from ..ScriptCollection.TFCPS.Flutter.TFCPS_CodeUnitSpecific_Flutter import TFCPS_CodeUnitSpecific_Flutter_Functions
 from ..ScriptCollection.TFCPS.NodeJS.TFCPS_CodeUnitSpecific_NodeJS import TFCPS_CodeUnitSpecific_NodeJS_Functions
+from ..ScriptCollection.TFCPS.DotNet.TFCPS_CodeUnitSpecific_DotNet import TFCPS_CodeUnitSpecific_DotNet_Functions
 
 
 def create_codeunit_functions(codeunit_type: type, codeunit_folder: str):
@@ -350,6 +351,162 @@ class FlutterCodeUnitDependenciesTests(unittest.TestCase):
             # act & assert
             with self.assertRaises(ValueError):
                 codeunit_functions.set_dependency_version("a_package_which_is_not_used", "1.0.0")
+
+
+def get_csproj_content_which_uses_several_kinds_of_package_reference() -> str:
+    """Returns the content of a .csproj-file which declares its dependencies the way a real .NET-codeunit does:
+    an unbracketed version and a version which is pinned exactly with brackets, so that a test can state how each of
+    them has to be updated."""
+    return """<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DNTCaptcha.Core" Version="5.3.2" />
+    <PackageReference Include="CommandLineParser" Version="[2.9.1]" />
+  </ItemGroup>
+
+</Project>
+"""
+
+
+class DotNetCodeUnitSetDependencyVersionTests(unittest.TestCase):
+
+    def test_set_dependency_version_updates_an_unbracketed_version_without_adding_brackets(self) -> None:
+        # arrange
+        content = get_csproj_content_which_uses_several_kinds_of_package_reference()
+
+        # act
+        actual_result = TFCPS_CodeUnitSpecific_DotNet_Functions.set_dependency_version_in_csproj_content(content, "DNTCaptcha.Core", "5.3.4")
+
+        # assert
+        self.assertIn('<PackageReference Include="DNTCaptcha.Core" Version="5.3.4" />', actual_result)
+
+    def test_set_dependency_version_keeps_the_brackets_of_an_exactly_pinned_dependency(self) -> None:
+        # A version which is pinned exactly with brackets stays an exact pin after the update, so the brackets have to
+        # be preserved.
+        # arrange
+        content = get_csproj_content_which_uses_several_kinds_of_package_reference()
+
+        # act
+        actual_result = TFCPS_CodeUnitSpecific_DotNet_Functions.set_dependency_version_in_csproj_content(content, "CommandLineParser", "2.9.2")
+
+        # assert
+        self.assertIn('<PackageReference Include="CommandLineParser" Version="[2.9.2]" />', actual_result)
+
+    def test_set_dependency_version_changes_nothing_but_the_declaration_of_the_updated_dependency(self) -> None:
+        # arrange
+        content = get_csproj_content_which_uses_several_kinds_of_package_reference()
+
+        # act
+        actual_result = TFCPS_CodeUnitSpecific_DotNet_Functions.set_dependency_version_in_csproj_content(content, "DNTCaptcha.Core", "5.3.4")
+
+        # assert
+        changed_lines = [(former_line, new_line) for former_line, new_line in zip(content.splitlines(), actual_result.splitlines()) if former_line != new_line]
+        self.assertEqual([('    <PackageReference Include="DNTCaptcha.Core" Version="5.3.2" />', '    <PackageReference Include="DNTCaptcha.Core" Version="5.3.4" />')], changed_lines)
+
+    def test_set_dependency_version_leaves_the_content_unchanged_when_the_dependency_is_not_declared(self) -> None:
+        # arrange
+        content = get_csproj_content_which_uses_several_kinds_of_package_reference()
+
+        # act
+        actual_result = TFCPS_CodeUnitSpecific_DotNet_Functions.set_dependency_version_in_csproj_content(content, "A.Package.Which.Is.Not.Used", "1.0.0")
+
+        # assert
+        self.assertEqual(content, actual_result)
+
+    def test_set_dependency_version_writes_the_new_version_into_the_project_file(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory(dir=GeneralUtilities.get_temp_folder()) as folder:
+            csproj_file = os.path.join(folder, "Demo.csproj")
+            GeneralUtilities.write_text_to_file(csproj_file, get_csproj_content_which_uses_several_kinds_of_package_reference())
+            codeunit_functions = TFCPS_CodeUnitSpecific_DotNet_Functions.__new__(TFCPS_CodeUnitSpecific_DotNet_Functions)
+            codeunit_functions.csproj_file = csproj_file
+
+            # act
+            codeunit_functions.set_dependency_version("DNTCaptcha.Core", "5.3.4")
+
+            # assert
+            self.assertIn('<PackageReference Include="DNTCaptcha.Core" Version="5.3.4" />', GeneralUtilities.read_text_from_file(csproj_file))
+
+
+class DotNetCodeUnitSynchronizeVersionsTests(unittest.TestCase):
+
+    def test_synchronize_pins_a_shared_dependency_in_the_test_project_to_the_library_version_and_keeps_its_brackets(self) -> None:
+        # The library-project uses NSwag.AspNetCore in version 14.7.1 and the test-project still pins it exactly to the
+        # older 14.6.3. A shared dependency has to be pinned to the same version in both, because NuGet rejects a restore
+        # in which the test-project pins it lower than the library-project requires (error NU1605).
+        # arrange
+        with tempfile.TemporaryDirectory(dir=GeneralUtilities.get_temp_folder()) as repository_folder:
+            codeunit_folder = os.path.join(repository_folder, "Demo")
+            main_csproj = os.path.join(codeunit_folder, "Demo", "Demo.csproj")
+            test_csproj = os.path.join(codeunit_folder, "DemoTests", "DemoTests.csproj")
+            GeneralUtilities.ensure_directory_exists(os.path.dirname(main_csproj))
+            GeneralUtilities.ensure_directory_exists(os.path.dirname(test_csproj))
+            GeneralUtilities.write_text_to_file(main_csproj, '<Project Sdk="Microsoft.NET.Sdk">\n  <ItemGroup>\n    <PackageReference Include="NSwag.AspNetCore" Version="14.7.1" />\n  </ItemGroup>\n</Project>\n')
+            GeneralUtilities.write_text_to_file(test_csproj, '<Project Sdk="Microsoft.NET.Sdk">\n  <ItemGroup>\n    <PackageReference Include="NSwag.AspNetCore" Version="[14.6.3]" />\n    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />\n  </ItemGroup>\n</Project>\n')
+            codeunit_functions = create_codeunit_functions(TFCPS_CodeUnitSpecific_DotNet_Functions, codeunit_folder)
+            codeunit_functions.csproj_file = main_csproj
+
+            # act
+            codeunit_functions.synchronize_dependency_versions_across_project_files()
+
+            # assert
+            test_content = GeneralUtilities.read_text_from_file(test_csproj)
+            self.assertIn('<PackageReference Include="NSwag.AspNetCore" Version="[14.7.1]" />', test_content)
+            # a package which only the test-project uses stays untouched, because the library-project does not declare it.
+            self.assertIn('<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />', test_content)
+
+    def test_get_csproj_files_of_codeunit_returns_the_source_projects_and_excludes_build_output_and_the_other_folder(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory(dir=GeneralUtilities.get_temp_folder()) as repository_folder:
+            codeunit_folder = os.path.join(repository_folder, "Demo")
+            main_csproj = os.path.join(codeunit_folder, "Demo", "Demo.csproj")
+            test_csproj = os.path.join(codeunit_folder, "DemoTests", "DemoTests.csproj")
+            build_output_csproj = os.path.join(codeunit_folder, "Demo", "obj", "Demo.csproj")
+            artifact_csproj = os.path.join(codeunit_folder, "Other", "Artifacts", "Copy.csproj")
+            for csproj_file in [main_csproj, test_csproj, build_output_csproj, artifact_csproj]:
+                GeneralUtilities.ensure_directory_exists(os.path.dirname(csproj_file))
+                GeneralUtilities.write_text_to_file(csproj_file, "<Project />")
+            codeunit_functions = create_codeunit_functions(TFCPS_CodeUnitSpecific_DotNet_Functions, codeunit_folder)
+
+            # act
+            actual_result = codeunit_functions.get_csproj_files_of_codeunit()
+
+            # assert
+            self.assertEqual(sorted([main_csproj, test_csproj]), sorted(actual_result))
+
+
+class DotNetCodeUnitAvailableVersionsTests(unittest.TestCase):
+
+    def test_select_updatable_versions_keeps_only_three_part_versions_sorted_from_latest_to_oldest(self) -> None:
+        # NuGet lists the versions of a package in exactly this shape: besides the plain three-part-versions it also
+        # contains four-part-versions and pre-release-versions. The four-part- and pre-release-versions must be dropped,
+        # because the rest of the update-logic only handles three-part-versions.
+        # arrange
+        nuget_versions = ["2.7.0", "2.8.0-preview4", "2.8.0", "1.8.0.7", "2.9.1-preview1", "2.9.1", "2.9.2-ci-210"]
+
+        # act
+        actual_result = TFCPS_CodeUnitSpecific_DotNet_Functions.select_updatable_versions_from_nuget_versions(nuget_versions)
+
+        # assert
+        self.assertEqual(["2.9.1", "2.8.0", "2.7.0"], actual_result)
+
+    def test_select_updatable_versions_does_not_discard_the_whole_list_because_of_an_unparseable_version(self) -> None:
+        # The version-string "2.9.2-ci-210" (which the CommandLineParser-package really publishes) passes a loose
+        # three-part-prefix-check but can not be parsed by packaging.version.Version. Sorting the list with that version
+        # as a key would raise and - because the caller catches every exception - discard every version, which made the
+        # update fail with "Version-list can not be empty" although usable versions existed.
+        # arrange
+        nuget_versions = ["2.9.1", "2.9.2-ci-210"]
+
+        # act
+        actual_result = TFCPS_CodeUnitSpecific_DotNet_Functions.select_updatable_versions_from_nuget_versions(nuget_versions)
+
+        # assert
+        self.assertEqual(["2.9.1"], actual_result)
 
 
 class NodeJSCodeUnitDependenciesTests(unittest.TestCase):

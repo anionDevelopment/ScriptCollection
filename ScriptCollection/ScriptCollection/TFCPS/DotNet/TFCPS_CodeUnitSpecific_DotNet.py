@@ -873,9 +873,22 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             versions: list[str] = data.get("versions", [])
             if not versions:
                 return []
-            return sorted([v for v in versions if re.match(r"^\d+\.\d+\.\d+", v)], key=lambda v: Version(v), reverse=True)
+            return TFCPS_CodeUnitSpecific_DotNet_Functions.select_updatable_versions_from_nuget_versions(versions)
         except Exception:
             return []
+
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def select_updatable_versions_from_nuget_versions(versions: list[str]) -> list[str]:
+        """Returns the versions from a raw NuGet-version-list which the dependency-update can handle, sorted from the
+        latest to the oldest. Only plain three-part-versions (major.minor.patch) are kept: NuGet also lists four-part-
+        versions (for example "1.8.0.7") and pre-release-versions (for example "2.8.0-preview4" or "2.9.2-ci-210"), which
+        the rest of the update-logic does not support (it asserts a three-part-format) and which "packaging.version.Version"
+        can not always parse. Without this strict filter such an unparseable string would let the sorting below raise, which
+        the caller turns into an empty version-list and therefore into the misleading error "Version-list can not be empty"
+        for a dependency whose registry actually offers usable versions."""
+        three_part_versions = [version for version in versions if re.match(r"^\d+\.\d+\.\d+$", version)]
+        return sorted(three_part_versions, key=lambda version: Version(version), reverse=True)
 
     @GeneralUtilities.check_arguments
     def update_dependencies_with_specific_echolon(self, echolon: VersionEcholon) -> None:
@@ -885,12 +898,81 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         resolved before. Writing them again is part of the update: without it the next build fails with NU1004, and the
         state of the dependencies of the codeunit would be spread over two places which do not agree."""
         super().update_dependencies_with_specific_echolon(echolon)
+        self.synchronize_dependency_versions_across_project_files()
         self.tfcps_Tools_General.update_lock_files_of_dotnet_codeunit(self.get_codeunit_folder())
 
-    def set_dependency_version(self,name:str,new_version:str)->None:
-        raise ValueError(f"Operation is not implemented.")
-        #csproj_file:str=os.path.join(self.get_codeunit_folder(), self.get_codeunit_name(), self.get_codeunit_name() + ".csproj")
-        #self._protected_sc.update_dependencies_of_dotnet_project(csproj_file,[])#TODO set ignored codeunits
+    @GeneralUtilities.check_arguments
+    def get_csproj_files_of_codeunit(self) -> list[str]:
+        """Returns the project-files of this codeunit (the project-file of the library/application and the project-file of
+        its tests). Build-output (`bin`, `obj`) and the `Other`-folder (which holds scripts and build-artifacts, not the
+        source-projects) are excluded, so only the project-files which declare the dependencies of the codeunit remain."""
+        codeunit_folder = self.get_codeunit_folder()
+        ignored_folder_names = {"bin", "obj", "Other", ".vs", "node_modules"}
+        result: list[str] = []
+        for csproj_file in glob.glob(os.path.join(codeunit_folder, "**", "*.csproj"), recursive=True):
+            relative_parts = os.path.relpath(csproj_file, codeunit_folder).split(os.sep)
+            if not any(part in ignored_folder_names for part in relative_parts):
+                result.append(csproj_file)
+        return sorted(result)
+
+    @GeneralUtilities.check_arguments
+    def synchronize_dependency_versions_across_project_files(self) -> None:
+        """Pins every dependency which the project-file of this codeunit declares to the same version in the other
+        project-files of the codeunit (typically the test-project). The test-project references the library-project, so
+        NuGet rejects a restore in which the test-project pins a shared dependency lower than the version the library-
+        project requires (error NU1605). The library-project is the source of truth, because its dependencies are the ones
+        the update resolves. This runs after every update (and is idempotent when the versions already agree), so a shared
+        dependency stays consistent even when the library-project did not have to be changed in this update but the test-
+        project was still pinned to an older version from a previous, only partially applied update. The notation of each
+        project-file is preserved by set_dependency_version_in_csproj_content (an exact pin keeps its brackets)."""
+        main_csproj_file = self.csproj_file
+        main_dependencies = self.get_dependencies()
+        other_csproj_files = [csproj_file for csproj_file in self.get_csproj_files_of_codeunit() if os.path.abspath(csproj_file) != os.path.abspath(main_csproj_file)]
+        for other_csproj_file in other_csproj_files:
+            former_content = GeneralUtilities.read_text_from_file(other_csproj_file)
+            new_content = former_content
+            for dependency_name, dependency_versions in main_dependencies.items():
+                new_content = TFCPS_CodeUnitSpecific_DotNet_Functions.set_dependency_version_in_csproj_content(new_content, dependency_name, next(iter(dependency_versions)))
+            if new_content != former_content:
+                GeneralUtilities.write_text_to_file(other_csproj_file, new_content)
+
+    @GeneralUtilities.check_arguments
+    def set_dependency_version(self, name: str, new_version: str) -> None:
+        """Sets the version of the given dependency in the project-file of this codeunit (the same project-file from which
+        get_dependencies reads the dependencies)."""
+        csproj_file: str = self.csproj_file
+        former_content: str = GeneralUtilities.read_text_from_file(csproj_file)
+        new_content: str = TFCPS_CodeUnitSpecific_DotNet_Functions.set_dependency_version_in_csproj_content(former_content, name, new_version)
+        GeneralUtilities.assert_condition(new_content != former_content, f"The dependency \"{name}\" could not be set to version \"{new_version}\" because the project-file \"{csproj_file}\" does not declare it with a version-attribute.")
+        GeneralUtilities.write_text_to_file(csproj_file, new_content)
+
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def set_dependency_version_in_csproj_content(content: str, name: str, new_version: str) -> str:
+        """Returns the content of a .csproj-file in which the version of the given dependency is set to the new version.
+        The version is written into the "Version"-attribute of every "PackageReference" whose "Include"-attribute names
+        the dependency; the rest of the file (formatting, order and every other dependency) stays untouched, the same way
+        the pub- and npm-updaters change only the declaration of the dependency they update. The notation of the former
+        version is preserved: a version which was pinned exactly with brackets (for example "[2.9.1]") keeps its brackets
+        ("[2.9.2]") and an unbracketed version stays unbracketed, so that the meaning the project-file assigns to the
+        declaration (an exact pin stays an exact pin) is not changed by the update. A project-file which does not declare
+        the dependency with a version-attribute is returned unchanged."""
+        package_reference_tag = re.compile(r"<PackageReference\b[^>]*?/?>", re.IGNORECASE)
+        include_attribute = re.compile(r'\bInclude\s*=\s*"([^"]*)"', re.IGNORECASE)
+        version_attribute = re.compile(r'(\bVersion\s*=\s*")(\[?)([^"]*?)(\]?)(")', re.IGNORECASE)
+
+        def replace_version_in_tag(tag_match: re.Match) -> str:
+            tag: str = tag_match.group(0)
+            include_match = include_attribute.search(tag)
+            if include_match is None or include_match.group(1) != name:
+                return tag
+
+            def replace_version(version_match: re.Match) -> str:
+                keeps_brackets: bool = version_match.group(2) == "[" and version_match.group(4) == "]"
+                replacement_version: str = f"[{new_version}]" if keeps_brackets else new_version
+                return f"{version_match.group(1)}{replacement_version}{version_match.group(5)}"
+            return version_attribute.sub(replace_version, tag, count=1)
+        return package_reference_tag.sub(replace_version_in_tag, content)
     
 
 class TFCPS_CodeUnitSpecific_DotNet_CLI:
