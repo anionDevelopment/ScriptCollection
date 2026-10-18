@@ -11,7 +11,7 @@ from .TFCPS_BuildCodeUnitsHook import TFCPS_BuildCodeUnitsHook
 from .TFCPS_CodeUnit_BuildCodeUnit import TFCPS_CodeUnit_BuildCodeUnit
 from .TFCPS_CodeSpellCheck import TFCPS_CodeSpellCheck
 from .TFCPS_OCIImageSecretScan import TFCPS_OCIImageSecretScan
-from .TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureXSDBaseURL
+from .TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureVersion
 
 
 class TFCPS_UpdateDependenciesHook(TFCPS_BuildCodeUnitsHook):
@@ -158,7 +158,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.__run_custom_pre_codeunit_build_script()
 
             try:
-                xmlschema.validate(product_information_file, f"{CommonProjectStructureXSDBaseURL}/productinformation.xsd")
+                xmlschema.validate(product_information_file, f"{TFCPS_Tools_General.get_common_project_structure_xsd_base_url(CommonProjectStructureVersion)}/productinformation.xsd")
             except Exception as exception:
                 self.sc.log.log_exception(f"'{product_information_file}' could not be validated against the XSD:", exception, LogLevel.Warning)
 

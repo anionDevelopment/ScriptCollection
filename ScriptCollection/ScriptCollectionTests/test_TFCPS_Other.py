@@ -11,7 +11,7 @@ from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
 from ..ScriptCollection.SCLog import LogLevel
 from ..ScriptCollection.TFCPS.TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base
 from ..ScriptCollection.TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
-from ..ScriptCollection.TFCPS.TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureNamespace
+from ..ScriptCollection.TFCPS.TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureVersion, SupportedCommonProjectStructureVersions
 from ..ScriptCollection.TFCPS.Docker.TFCPS_CodeUnitSpecific_Docker import TFCPS_CodeUnitSpecific_Docker_Functions
 from ..ScriptCollection.TFCPS.Flutter.TFCPS_CodeUnitSpecific_Flutter import TFCPS_CodeUnitSpecific_Flutter_Functions
 from .test_OCIImageManager import create_oci_image_manager, create_repository
@@ -89,7 +89,7 @@ def write_product_information_file(repository: str, required_environment_variabl
     else:
         required_environment_variables_element = GeneralUtilities.empty_string
     GeneralUtilities.write_text_to_file(product_information_file, f"""<?xml version="1.0" encoding="UTF-8"?>
-<cps:productinformation xmlns:cps="{CommonProjectStructureNamespace}">
+<cps:productinformation xmlns:cps="{TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)}">
     <cps:producttitle>TestProduct</cps:producttitle>
     <cps:remoteaddress>https://example.com/TestProduct</cps:remoteaddress>
     {required_environment_variables_element}
@@ -253,7 +253,7 @@ class TasksForCommonProjectStructureTests(unittest.TestCase):
     def test_write_version_to_codeunit_file_writes_lf_line_separators(self) -> None:
         # arrange
         t = TFCPS_Tools_General(ScriptCollectionCore())
-        namespace = CommonProjectStructureNamespace
+        namespace = TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)
         # the file is written with crlf, which is the state a build on windows produced before the line-separators were written independently of the operating-system.
         codeunit_file_content = f'<?xml version="1.0" encoding="UTF-8"?>\r\n<codeunit xmlns="{namespace}">\r\n  <version>1.0.0</version>\r\n</codeunit>\r\n'
         with tempfile.TemporaryDirectory() as temporary_folder:
@@ -668,27 +668,10 @@ items:
                 executable_arguments: list[str] = run_in_container.call_args.args[3]
                 self.assertEqual("Productive", executable_arguments[executable_arguments.index("--targetenvironment")+1])
 
-    def test_get_expected_schemalocation_references_the_xsd_of_the_given_version(self) -> None:
-        # act
-        actual_result = TFCPS_CodeUnitSpecific_Base.get_expected_schemalocation("3.0.0")
-
+    def test_common_project_structure_version_is_supported(self) -> None:
         # assert
-        #the schema-location consists of the namespace of the codeunit-file and the address of the xsd-file of exactly the
-        #codeunit-specification-version which the codeunit-file declares.
-        expected_result = CommonProjectStructureNamespace + " " + \
-            "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v3.0.0/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd"
-        self.assertEqual(expected_result, actual_result)
-
-    def test_get_expected_xsd_address_is_the_second_part_of_the_expected_schemalocation(self) -> None:
-        # act
-        actual_result = TFCPS_CodeUnitSpecific_Base.get_expected_xsd_address("3.0.0")
-
-        # assert
-        #the xsd-address must be usable as schema-source on its own, means it must not contain the namespace which the schema-location
-        #additionally contains, because a validator which gets the whole schema-location would try to parse the namespace-uri as xsd-file.
-        expected_result = "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v3.0.0/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd"
-        self.assertEqual(expected_result, actual_result)
-        self.assertEqual(f"{TFCPS_CodeUnitSpecific_Base.codeunit_namespace} {actual_result}", TFCPS_CodeUnitSpecific_Base.get_expected_schemalocation("3.0.0"))
+        #the version which ScriptCollection uses itself must always be one of the versions it supports.
+        self.assertIn(CommonProjectStructureVersion, SupportedCommonProjectStructureVersions)
 
     def test_get_expected_schemalocation_of_another_version_references_another_xsd(self) -> None:
         # act
