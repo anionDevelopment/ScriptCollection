@@ -2,25 +2,19 @@
 
 ## Purpose
 
-Records the architectural and documentation-related constraints which every change to a product that uses the common project
-structure has to respect. They are not derivable from the source-code itself:
+Records the architectural and documentation-related constraints which every change to a product that uses the common project structure has to respect.
+They are not derivable from the source-code itself:
 
-- They state what decides whether the product is in a healthy state and how the codeunits of the repository may depend on each
-  other.
-- They require that the documentation which describes the current state of the product agrees with what the source-code actually
-  does. A document which describes an older state of the product is still a syntactically valid document, and neither the
-  compiler nor the pipeline notices it. Without this a reader can not decide whether a sentence of the documentation is a fact
-  about the product or a leftover of a state which does not exist anymore.
-- They state how findings of code-reviews, security-checks, bug-searches, performance-analyses and similar analyses are
-  documented. Without a single place and a single form for findings, every analysis writes its own list into its own document,
-  the same finding is listed several times under different names, and nobody can tell which findings are still open.
+- They state what decides whether the product is in a healthy state and how the codeunits of the repository may depend on each other.
+- They require that the documentation which describes the current state of the product agrees with what the source-code actually does. A document which describes an older state of the product is still a syntactically valid document, and neither the compiler nor the pipeline notices it. Without this a reader can not decide whether a sentence of the documentation is a fact about the product or a leftover of a state which does not exist anymore.
+- They state how findings of code-reviews, security-checks, bug-searches, performance-analyses and similar analyses are documented. Without a single place and a single form for findings, every analysis writes its own list into its own document, the same finding is listed several times under different names, and nobody can tell which findings are still open.
 
 ## Requirements
 
 ### Requirement: "scbuildcodeunits" is the single source of truth for the state of the pipeline
 
-The command `scbuildcodeunits` SHALL always be executable in this repository, and it SHALL succeed whenever the repository
-is in a healthy state. Whether the pipeline of this product is green SHALL be decided by that command and by nothing else.
+The command `scbuildcodeunits` SHALL always be executable in this repository, and it SHALL succeed whenever the repository is in a healthy state.
+Whether the pipeline of this product is green SHALL be decided by that command and by nothing else.
 
 #### Scenario: A change is considered finished
 
@@ -29,69 +23,58 @@ is in a healthy state. Whether the pipeline of this product is green SHALL be de
 
 #### Scenario: Another tool reports a different result
 
-- **WHEN** an IDE, a single manually executed step or any other tool reports a result which differs from the result of
-  `scbuildcodeunits`
-- **THEN** the result of `scbuildcodeunits` is the one which counts, and the deviation is treated as a defect of the other
-  tool or of its configuration
+- **WHEN** an IDE, a single manually executed step or any other tool reports a result which differs from the result of `scbuildcodeunits`
+- **THEN** the result of `scbuildcodeunits` is the one which counts, and the deviation is treated as a defect of the other tool or of its configuration
 
 ### Requirement: A codeunit only accesses codeunits which it declares as its dependencies
 
-A codeunit SHALL NOT access the source-code of another codeunit unless that other codeunit is declared as a dependent
-codeunit in its `<codeunit-name>.codeunit.xml`. The codeunits of this repository are the folders which contain such a
-codeunit-file.
+A codeunit SHALL NOT access the source-code of another codeunit unless that other codeunit is declared as a dependent codeunit in its `<codeunit-name>.codeunit.xml`.
+The codeunits of this repository are the folders which contain such a codeunit-file.
 
 #### Scenario: A codeunit needs functionality of another codeunit
 
 - **WHEN** a codeunit needs functionality which another codeunit of this repository provides
-- **THEN** that other codeunit is declared under `dependentcodeunits` in the codeunit-file, and its functionality is used
-  through its build-result instead of through its source-code
+- **THEN** that other codeunit is declared under `dependentcodeunits` in the codeunit-file, and its functionality is used through its build-result instead of through its source-code
 
 #### Scenario: An undeclared access exists
 
-- **WHEN** a codeunit reads, includes, compiles or references source-code of a codeunit which is not declared as its
-  dependency
+- **WHEN** a codeunit reads, includes, compiles or references source-code of a codeunit which is not declared as its dependency
 - **THEN** this is a defect, which is resolved either by declaring the dependency or by removing the access
 
 ### Requirement: Documentation which describes the current state agrees with the source-code
 
-Every document of this repository which describes the current state of the product SHALL describe it the way the source-code of
-the current branch implements it. The documents which this applies to are at least:
+Every document of this repository which describes the current state of the product SHALL describe it the way the source-code of the current branch implements it.
 
-- `ReadMe.md` in the repository-root
-- the `ReadMe.md` of every codeunit (the codeunits of this repository are the folders which contain a
-  `<codeunit-name>.codeunit.xml`)
-- `Contributing.md`
-- everything below `Other/Reference`
-- everything below `<codeunit>/Other/Reference/ReferenceContent`, especially `Hints.md`, `HowToBuild.md` and the articles
-- the doc-comments in the source-code
+#### Scenario: The documents to which this requirement applies
+
+- **WHEN** it is checked which documents the requirement applies to
+- **THEN** these documents are at least:
+  - `ReadMe.md` in the repository-root
+  - the `ReadMe.md` of every codeunit (the codeunits of this repository are the folders which contain a `<codeunit-name>.codeunit.xml`)
+  - `Contributing.md`
+  - everything below `Other/Reference`
+  - everything below `<codeunit>/Other/Reference/ReferenceContent`, especially `Hints.md`, `HowToBuild.md` and the articles
+  - the doc-comments in the source-code
 
 #### Scenario: A document states something which the source-code does not do
 
-- **WHEN** a document states a behaviour, a feature, a limitation, a default-value, a name or a path which the source-code does
-  not implement that way
-- **THEN** this is a defect of the same weight as a defect in the source-code, and it is resolved by correcting the document to
-  the state which the source-code implements
+- **WHEN** a document states a behaviour, a feature, a limitation, a default-value, a name or a path which the source-code does not implement that way
+- **THEN** this is a defect of the same weight as a defect in the source-code, and it is resolved by correcting the document to the state which the source-code implements
 
 #### Scenario: The documented state is the wanted state and the source-code is the wrong side
 
-- **WHEN** the document describes what the product is supposed to do and the deviation is a defect of the source-code and not of
-  the document
-- **THEN** the document stays as it is and the deviation is reported as a defect of the source-code, because rewriting the
-  document would hide that defect instead of documenting the product
+- **WHEN** the document describes what the product is supposed to do and the deviation is a defect of the source-code and not of the document
+- **THEN** the document stays as it is and the deviation is reported as a defect of the source-code, because rewriting the document would hide that defect instead of documenting the product
 
 ### Requirement: Lists of features state the implemented state
 
-Every list of features, capabilities, supported formats, supported platforms or supported options SHALL state for every entry
-whether it is implemented, and that statement SHALL be the one which the source-code implements. An entry which is not
-implemented SHALL stay in the list and be marked as not implemented instead of being removed, so that the list keeps working as
-an overview of what is planned.
+Every list of features, capabilities, supported formats, supported platforms or supported options SHALL state for every entry whether it is implemented, and that statement SHALL be the one which the source-code implements.
+An entry which is not implemented SHALL stay in the list and be marked as not implemented instead of being removed, so that the list keeps working as an overview of what is planned.
 
 #### Scenario: A feature became implemented
 
-- **WHEN** a feature which the documentation marks as not implemented - for example with "❌", with "planned", with "not
-  implemented yet" or with a link to its issue - is implemented in the source-code
-- **THEN** its entry is changed to the marking which this repository uses for an implemented feature, in the same shape as the
-  other implemented entries of that list
+- **WHEN** a feature which the documentation marks as not implemented - for example with "X", with "planned", with "not implemented yet" or with a link to its issue - is implemented in the source-code
+- **THEN** its entry is changed to the marking which this repository uses for an implemented feature, in the same shape as the other implemented entries of that list
 
 #### Scenario: A feature was removed or never existed
 
@@ -100,73 +83,67 @@ an overview of what is planned.
 
 #### Scenario: A feature exists but is not listed
 
-- **WHEN** the source-code implements a feature which such a list does not contain although the list claims to be complete for
-  its topic
+- **WHEN** the source-code implements a feature which such a list does not contain although the list claims to be complete for its topic
 - **THEN** the feature is added to the list
 
 ### Requirement: Lists of bugs, findings and technical debts contain only entries which still exist
 
-Every list of known bugs, known limitations, security-findings, technical debts or open points SHALL contain only entries which
-still exist in the source-code, and every entry SHALL describe the state which the source-code has now.
+Every list of known bugs, known limitations, security-findings, technical debts or open points SHALL contain only entries which still exist in the source-code, and every entry SHALL describe the state which the source-code has now.
 
-The findings-table in the section `## Findings` in `Other/Reference/Reference.md` is the exception: it is maintained as
-specified in the requirements on findings below, which keep fixed findings and mark them as fixed.
+The findings-table in the section `## Findings` in `Other/Reference/Reference.md` is the exception: it is maintained as specified in the requirements on findings below, which keep fixed findings and mark them as fixed.
 
 #### Scenario: A documented finding was fixed
 
 - **WHEN** a bug, a finding or a technical debt which such a list contains is not present in the source-code anymore
 - **THEN** its entry is removed from that list, so that nobody spends time on a problem which does not exist anymore
-- **AND** if the entry is a row of the findings-table, it is not removed but its state is set to `fixed`, as the
-  requirements on findings below require
+- **AND** if the entry is a row of the findings-table, it is not removed but its state is set to `fixed`, as the requirements on findings below require
 
 #### Scenario: A documented finding is still open but changed
 
-- **WHEN** an entry of such a list is still present in the source-code, but the source-code changed in a way which makes the
-  description, the named location or the named severity of the entry wrong
+- **WHEN** an entry of such a list is still present in the source-code, but the source-code changed in a way which makes the description, the named location or the named severity of the entry wrong
 - **THEN** the entry stays and its description is corrected
 
 ### Requirement: Instructions and references of the documentation resolve
 
-Every command, task, path, file-name, class-name, configuration-key and cross-reference which a document names SHALL exist and
-SHALL work in the state of the repository which that document belongs to.
+Every command, task, path, file-name, class-name, configuration-key and cross-reference which a document names SHALL exist and SHALL work in the state of the repository which that document belongs to.
 
 #### Scenario: A document names something which does not exist
 
-- **WHEN** a document names a file, a folder, a command, a task, a class or a configuration-key which does not exist or which was
-  renamed
-- **THEN** the document is corrected to the name which exists, or the statement is removed if the named thing does not exist
-  anymore at all
+- **WHEN** a document names a file, a folder, a command, a task, a class or a configuration-key which does not exist or which was renamed
+- **THEN** the document is corrected to the name which exists, or the statement is removed if the named thing does not exist anymore at all
 
 ### Requirement: Checking the specifications includes checking this documentation
 
-Whenever it is checked whether the specifications of this repository are still up to date, the documents named in this
-specification SHALL be checked against the source-code in the same run, and every deviation which is found SHALL be corrected in
-that run.
+Whenever it is checked whether the specifications of this repository are still up to date, the documents named in this specification SHALL be checked against the source-code in the same run, and every deviation which is found SHALL be corrected in that run.
 
 #### Scenario: The specifications are checked
 
 - **WHEN** it is checked whether the specifications below `openspec/specs` still agree with the source-code
-- **THEN** the documents named in this specification are checked against the source-code as well and the deviating ones are
-  adjusted, so that after such a check the documentation is up to date and not only the specifications
+- **THEN** the documents named in this specification are checked against the source-code as well and the deviating ones are adjusted, so that after such a check the documentation is up to date and not only the specifications
 
 #### Scenario: A change is considered finished
 
 - **WHEN** a change of the source-code is considered finished
-- **THEN** the documents which describe what that change touched have been updated together with it and not in a later separate
-  step
+- **THEN** the documents which describe what that change touched have been updated together with it and not in a later separate step
+
+### Requirement: Specifications of business-logic are named "business-logic"
+
+If business-logic of this repository is defined by a specification, the name of that specification SHALL be `business-logic` or SHALL begin with `business-logic-`, for example `openspec/specs/business-logic/spec.md` or `openspec/specs/business-logic-invoicing/spec.md`.
+
+#### Scenario: A specification of business-logic has another name
+
+- **WHEN** a specification which defines business-logic has a name which is neither `business-logic` nor begins with `business-logic-`
+- **THEN** this is a defect, resolved by renaming the specification and every reference to it
 
 ### Requirement: Documents which record the past are not adjusted
 
-A document which records what was true at a point in time SHALL NOT be adjusted to the current state. This applies to the
-changelog-files below `Other/Resources/Changelog`, to the log-files below `Other/Logs` and to the archived changes below
-`openspec/changes/archive`.
+A document which records what was true at a point in time SHALL NOT be adjusted to the current state.
+This applies to the changelog-files below `Other/Resources/Changelog`, to the log-files below `Other/Logs` and to the archived changes below `openspec/changes/archive`.
 
 #### Scenario: A record of the past does not describe the current state
 
-- **WHEN** an entry of a changelog, of a log-file or of an archived change describes a state which the product does not have
-  anymore
-- **THEN** the entry stays unchanged, because it documents what was true when it was written, and changing it would destroy the
-  history instead of documenting the product
+- **WHEN** an entry of a changelog, of a log-file or of an archived change describes a state which the product does not have anymore
+- **THEN** the entry stays unchanged, because it documents what was true when it was written, and changing it would destroy the history instead of documenting the product
 
 ### Requirement: Findings are collected in one table
 
@@ -181,7 +158,7 @@ If the section or the table does not exist yet, it SHALL be created.
 
 #### Scenario: A specification which is not fulfilled is found
 
-- **WHEN** a specification which is not fulfilled by the repository is found, regardless of whether it was found by a targeted check or by chance during any other work or by an audit which checks if all specs are fulfilled.
+- **WHEN** a specification which is not fulfilled by the repository is found, regardless of whether it was found by a targeted check or by chance during any other work or by an audit which checks if all specs are fulfilled
 - **THEN** this is added as a finding to the table in the section `## Findings` in `Other/Reference/Reference.md`
 
 #### Scenario: A list of findings is found in another document
@@ -192,16 +169,27 @@ If the section or the table does not exist yet, it SHALL be created.
 ### Requirement: Findings have an id with a prefix and an ascending number
 
 Every finding MUST have an id of the form `<prefix>-<ascending number>`.
-The prefix MUST be chosen by the first of the following rules which applies:
 
-1. `SEC` if the finding is relevant for security.
-2. `BUG` if the finding is a bug.
-3. `PER` if the finding has an impact on performance.
-4. `OTH` for every other finding.
+#### Scenario: The prefix of a new finding is chosen
 
-The number MUST be ascending per prefix, written without leading zeros (for example `SEC-1` or `SEC-12`, but not `SEC-01`), and an id MUST never be reused for another finding, not even after the finding was fixed.
+- **WHEN** a new finding gets a prefix
+- **THEN** the prefix is chosen by the first of the following rules which applies:
+  1. `SEC` if the finding is relevant for security
+  2. `BUS` if the finding is about incorrectly implemented business-logic
+  3. `PER` if the finding has an impact on performance
+  4. `BUG` if the finding is any kind of bug
+  5. `OTH` for every other finding
 
-If there are already findings with another name-pattern then it is allowed to rename them to follow the name-patern apecified here.
+#### Scenario: The number of a new finding is chosen
+
+- **WHEN** a new finding gets a number
+- **THEN** the number is ascending per prefix, written without leading zeros (for example `SEC-1` or `SEC-12`, but not `SEC-01`)
+- **AND** the id is never reused for another finding, not even after the finding was fixed
+
+#### Scenario: Existing findings follow another name-pattern
+
+- **WHEN** findings already exist with another name-pattern
+- **THEN** they may be renamed to follow the name-pattern specified here
 
 #### Scenario: A new finding is added
 
@@ -215,18 +203,43 @@ If there are already findings with another name-pattern then it is allowed to re
 
 ### Requirement: The findings-table has fixed columns
 
-The table MUST have exactly the following columns in this order:
+The findings-table MUST have a fixed set of columns in a fixed order.
 
-- `Id`: the id of the finding.
-- `Priority`: the priority of the finding, which is `low`, `mid` or `high` or `very high`.
-  - Findings which reveals very important or critical security-problems must be marked as `very high`. 
-  - Findings which reveals very heavy performance-problems must be marked as `high` or `very high`. 
-- `State`: the state of the finding, which is `open`, `accepted`, `not verifiable` or `fixed`. Another state is only used if none of these three applies, and the reason for it is written into `Notes`. If an issue is fixed partially then this MUST be treated as `open`.
-- `Description`: what the finding is.
-- `Impact`: what the finding causes, depending on its topic, for example the security-impact or the performance-impact.
-- `Notes`: every further information, especially the content of further columns which a list of findings had before it was moved into the table.
+#### Scenario: The columns of the findings-table
 
-If there are already tables with another structure then it is allowed to update the table to follow the structure apecified here.
+- **WHEN** the findings-table is created or checked
+- **THEN** it has exactly these columns in this order:
+  - `Id`: the id of the finding
+  - `Priority`: the priority of the finding, which is `low`, `mid`, `high` or `very high`
+  - `State`: the state of the finding, which is `open`, `accepted`, `not verifiable` or `fixed`
+  - `Description`: what the finding is
+  - `Impact`: what the finding causes, depending on its topic, for example the security-impact or the performance-impact
+  - `Notes`: every further information, especially the content of further columns which a list of findings had before it was moved into the table
+
+#### Scenario: A finding reveals a critical security-problem
+
+- **WHEN** a finding reveals very important or critical security-problems
+- **THEN** its `Priority` is marked as `very high`
+
+#### Scenario: A finding reveals a severe performance-problem
+
+- **WHEN** a finding reveals very heavy performance-problems
+- **THEN** its `Priority` is marked as `high` or `very high`
+
+#### Scenario: The state of a finding does not fit the standard set
+
+- **WHEN** none of `open`, `accepted`, `not verifiable` or `fixed` applies to a finding
+- **THEN** another state is used and the reason for it is written into `Notes`
+
+#### Scenario: A finding is only fixed partially
+
+- **WHEN** an issue is fixed partially
+- **THEN** its state is treated as `open`
+
+#### Scenario: An existing table has another structure
+
+- **WHEN** tables already exist with another structure
+- **THEN** they may be updated to follow the structure specified here
 
 #### Scenario: A list of findings has further columns
 
@@ -237,7 +250,7 @@ If there are already tables with another structure then it is allowed to update 
 
 The state of a finding SHALL be determined by checking the source-code itself, not by documentation or comments.
 A fixed finding SHALL NOT be removed from the table; its state SHALL be set to `fixed` instead.
-The id of a finding SHALL be struck through (for example `~~SEC-2~~`) if and only if its state is `fixed`, and no other cell of the table SHALL ever be struck through.
+The id of a finding SHALL be struck through for example `~~SEC-2~~` if and only if its state is `fixed`, and no other cell of the table SHALL ever be struck through.
 
 #### Scenario: A finding was fixed
 
