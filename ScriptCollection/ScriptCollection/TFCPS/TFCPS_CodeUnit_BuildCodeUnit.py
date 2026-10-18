@@ -3,7 +3,7 @@ import re
 from ..GeneralUtilities import GeneralUtilities
 from ..ScriptCollectionCore import ScriptCollectionCore
 from ..SCLog import LogLevel
-from .TFCPS_Tools_General import TFCPS_Tools_General
+from .TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureNamespace, CommonProjectStructureXSDBaseURL
 
 
 class TFCPS_CodeUnit_BuildCodeUnit:
@@ -106,8 +106,8 @@ class TFCPS_CodeUnit_BuildCodeUnit:
         commit_id = self.sc.git_get_commit_id(self.repository_folder)  # the actual commit-id (not the branch-name) which was checked-out while building this codeunit
         # TODO implement usage of reference_latest_version_of_xsd_when_generating_xml
         GeneralUtilities.write_text_to_file(artifactsinformation_file, f"""<?xml version="1.0" encoding="UTF-8" ?>
-<cps:artifactsinformation xmlns:cps="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure" artifactsinformationspecificationversion="1.0.0"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/main/Conventions/RepositoryStructure/CommonProjectStructure/artifactsinformation.xsd">
+<cps:artifactsinformation xmlns:cps="{CommonProjectStructureNamespace}" artifactsinformationspecificationversion="1.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="{CommonProjectStructureNamespace} {CommonProjectStructureXSDBaseURL}/artifactsinformation.xsd">
     <cps:name>{self.codeunit_name}</cps:name>
     <cps:version>{codeunit_version}</cps:version>
     <cps:timestamp>{moment}</cps:timestamp>

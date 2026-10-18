@@ -25,6 +25,13 @@ from ..OCIImages.OCIImageManager import OCIImageManager
 from .PackageSource import PackageSource
 from .PlantUMLRenderer import PlantUMLRenderer
 
+# Central definition of the common-project-structure-version. This is the single place which has to be updated to bump the
+# whole repository (and all common-project-structure-files which are generated or validated by ScriptCollection) to a new
+# common-project-structure-version. Both the namespace and the xsd-base-url are derived from this version.
+CommonProjectStructureVersion: str = "3.0.4"
+CommonProjectStructureNamespace: str = f"https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/v{CommonProjectStructureVersion}/Conventions/RepositoryStructure/CommonProjectStructure"
+CommonProjectStructureXSDBaseURL: str = f"https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v{CommonProjectStructureVersion}/Conventions/RepositoryStructure/CommonProjectStructure"
+
 class TFCPS_Tools_General:
 
     __sc:ScriptCollectionCore=None
@@ -45,7 +52,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def codeunit_is_enabled(self, codeunit_file: str) -> bool:
         root: etree._ElementTree = etree.parse(codeunit_file)
-        return GeneralUtilities.string_to_boolean(str(root.xpath('//cps:codeunit/@enabled', namespaces={'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'})[0]))
+        return GeneralUtilities.string_to_boolean(str(root.xpath('//cps:codeunit/@enabled', namespaces={'cps': CommonProjectStructureNamespace})[0]))
 
     @GeneralUtilities.check_arguments
     def ensure_cyclonedxcli_is_available(self,enforce_update:bool) -> str:
@@ -286,7 +293,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def get_dependent_code_units(self, codeunit_file: str) -> list[str]:
         root: etree._ElementTree = etree.parse(codeunit_file)
-        result = set(root.xpath('//cps:dependentcodeunit/text()', namespaces={'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'}))
+        result = set(root.xpath('//cps:dependentcodeunit/text()', namespaces={'cps': CommonProjectStructureNamespace}))
         result = sorted(result)
         return result
 
@@ -393,7 +400,7 @@ class TFCPS_Tools_General:
         versiononlyregex = f"^{versionregex}$"
         if re.match(versiononlyregex, current_version) is None:
             raise ValueError(f"Version '{current_version}' does not match version-regex '{versiononlyregex}'.")
-        namespace = 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'
+        namespace = CommonProjectStructureNamespace
         #the namespace is registered as default-namespace, otherwise every tag of the file would be written with an invented prefix ("ns0:version") instead of the form the file uses.
         ET.register_namespace("", namespace)
         tree: ET.ElementTree = ET.parse(codeunit_file)
@@ -473,7 +480,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def get_version_of_codeunit_filecontent(self,file_content:str) -> None:
         root: etree._ElementTree = etree.fromstring(file_content.encode("utf-8"))
-        result = str(root.xpath('//cps:version/text()',  namespaces={'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'})[0])
+        result = str(root.xpath('//cps:version/text()',  namespaces={'cps': CommonProjectStructureNamespace})[0])
         return result
     
     @GeneralUtilities.check_arguments
@@ -486,14 +493,14 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def get_codeunit_description(self,codeunit_file:str) -> bool:
         root: etree._ElementTree = etree.parse(codeunit_file)
-        return str(root.xpath('//cps:properties/@description', namespaces={'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'})[0])
+        return str(root.xpath('//cps:properties/@description', namespaces={'cps': CommonProjectStructureNamespace})[0])
 
     @GeneralUtilities.check_arguments
     def get_product_name(self, repository_folder: str) -> str:
         product_information_file = os.path.join(repository_folder, ".ScriptCollection", "ProductInformation.xml")
         GeneralUtilities.assert_file_exists(product_information_file)
         root: etree._ElementTree = etree.parse(product_information_file)
-        return str(root.xpath('/cps:productinformation/cps:producttitle/text()', namespaces={'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'})[0])
+        return str(root.xpath('/cps:productinformation/cps:producttitle/text()', namespaces={'cps': CommonProjectStructureNamespace})[0])
 
     @GeneralUtilities.check_arguments
     def get_required_environment_variable_names(self, repository: str) -> list[str]:
@@ -510,7 +517,7 @@ class TFCPS_Tools_General:
         product_information_file = os.path.join(repository, ".ScriptCollection", "ProductInformation.xml")
         GeneralUtilities.assert_file_exists(product_information_file)
         root: etree._ElementTree = etree.parse(product_information_file)
-        namespaces = {'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'}
+        namespaces = {'cps': CommonProjectStructureNamespace}
         declaration_elements = root.xpath('/cps:productinformation/cps:requiredenvironmentvariables', namespaces=namespaces)
         GeneralUtilities.assert_condition(1 == len(declaration_elements), f"'{product_information_file}' must contain exactly one 'requiredenvironmentvariables'-element but it contains {len(declaration_elements)}. Add '<cps:requiredenvironmentvariables></cps:requiredenvironmentvariables>' (empty if the build of this product does not need any environment-variable) to that file.")
         result: list[str] = []
@@ -687,8 +694,8 @@ class TFCPS_Tools_General:
 
         # TODO implement usage of self.reference_latest_version_of_xsd_when_generating_xml
         GeneralUtilities.write_text_to_file(constants_metafile, f"""<?xml version="1.0" encoding="UTF-8" ?>
-<cps:constant xmlns:cps="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure" constantspecificationversion="1.1.0"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/main/Conventions/RepositoryStructure/CommonProjectStructure/constant.xsd">
+<cps:constant xmlns:cps="{CommonProjectStructureNamespace}" constantspecificationversion="1.1.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="{CommonProjectStructureNamespace} {CommonProjectStructureXSDBaseURL}/constant.xsd">
     <cps:name>{constantname}</cps:name>
     <cps:documentationsummary>{documentationsummary}</cps:documentationsummary>
     <cps:path>{constants_valuefiler_reference}</cps:path>
@@ -713,7 +720,7 @@ class TFCPS_Tools_General:
         self.assert_is_codeunit_folder(source_codeunit_folder)
         root: etree._ElementTree = etree.parse(os.path.join(source_codeunit_folder, "Other", "Resources", "Constants", f"{constant_name}.constant.xml"))
         results = root.xpath(f'//cps:{propertyname}/text()', namespaces={
-            'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'
+            'cps': CommonProjectStructureNamespace
         })
         length = len(results)
         if (length == 0):
@@ -822,18 +829,18 @@ class TFCPS_Tools_General:
     def codeunit_has_testable_sourcecode(self,codeunit_file:str) -> bool:
         self.assert_is_codeunit_folder(os.path.dirname(codeunit_file))
         root: etree._ElementTree = etree.parse(codeunit_file)
-        return GeneralUtilities.string_to_boolean(str(root.xpath('//cps:properties/@codeunithastestablesourcecode', namespaces={'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'})[0]))
+        return GeneralUtilities.string_to_boolean(str(root.xpath('//cps:properties/@codeunithastestablesourcecode', namespaces={'cps': CommonProjectStructureNamespace})[0]))
 
     @GeneralUtilities.check_arguments
     def codeunit_has_updatable_dependencies(self,codeunit_file:str) -> bool:
         self.assert_is_codeunit_folder(os.path.dirname(codeunit_file))
         root: etree._ElementTree = etree.parse(codeunit_file)
-        return GeneralUtilities.string_to_boolean(str(root.xpath('//cps:properties/@codeunithasupdatabledependencies', namespaces={'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'})[0]))
+        return GeneralUtilities.string_to_boolean(str(root.xpath('//cps:properties/@codeunithasupdatabledependencies', namespaces={'cps': CommonProjectStructureNamespace})[0]))
 
     @GeneralUtilities.check_arguments
     def get_codeunit_owner_emailaddress(self,codeunit_file:str) -> None:
         self.assert_is_codeunit_folder(os.path.dirname(codeunit_file))
-        namespaces = {'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure', 'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
+        namespaces = {'cps': CommonProjectStructureNamespace, 'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
         root: etree._ElementTree = etree.parse(codeunit_file)
         result = root.xpath('//cps:codeunit/cps:codeunitowneremailaddress/text()', namespaces=namespaces)[0]
         return result
@@ -841,7 +848,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def get_codeunit_owner_name(self,codeunit_file:str) -> None:
         self.assert_is_codeunit_folder(os.path.dirname(codeunit_file))
-        namespaces = {'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure',  'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
+        namespaces = {'cps': CommonProjectStructureNamespace,  'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
         root: etree._ElementTree = etree.parse(codeunit_file)
         result = root.xpath('//cps:codeunit/cps:codeunitownername/text()', namespaces=namespaces)[0]
         return result
@@ -2085,7 +2092,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def get_dependencies_which_are_ignored_from_updates(self, codeunit_folder: str) -> list[str]:
         self.assert_is_codeunit_folder(codeunit_folder)
-        namespaces = {'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure', 'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
+        namespaces = {'cps': CommonProjectStructureNamespace, 'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
         codeunit_name = os.path.basename(codeunit_folder)
         codeunit_file = os.path.join(codeunit_folder, f"{codeunit_name}.codeunit.xml")
         root: etree._ElementTree = etree.parse(codeunit_file)
