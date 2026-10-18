@@ -12,7 +12,7 @@ from lxml import etree
 from ..GeneralUtilities import GeneralUtilities, VersionEcholon
 from ..ScriptCollectionCore import ScriptCollectionCore
 from ..SCLog import  LogLevel
-from .TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureNamespace, CommonProjectStructureVersion
+from .TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureVersion
 from .TFCPS_RemoteBuild import TFCPS_RemoteBuild, RunnerOperatingSystem
 
 
@@ -30,7 +30,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
     _protected_sc:ScriptCollectionCore = None
     __is_pre_merge:bool=False
     __validate_developers_of_repository:bool=True#TODO must be settable to false
-    codeunit_namespace:str=CommonProjectStructureNamespace
+    codeunit_namespace:str= TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)
 
     def __init__(self,current_file:str,verbosity:LogLevel,target_envionment_type:str,use_cache:bool,is_pre_merge:bool):
         self.__verbosity=verbosity
@@ -401,7 +401,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         product_information_file = os.path.join(self.get_repository_folder(), ".ScriptCollection", "ProductInformation.xml")
         GeneralUtilities.assert_file_exists(product_information_file)
         root: etree._ElementTree = etree.parse(product_information_file)
-        return str(root.xpath(f'/cps:productinformation/cps:{property_name}/text()', namespaces={'cps': CommonProjectStructureNamespace})[0])
+        return str(root.xpath(f'/cps:productinformation/cps:{property_name}/text()', namespaces={'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)})[0])
     
     @GeneralUtilities.check_arguments
     def get_current_folder(self)->str:
@@ -562,7 +562,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
     @GeneralUtilities.check_arguments
     def get_testcoverage_threshold_from_codeunit_file(self):
         root: etree._ElementTree = etree.parse(self.get_codeunit_file())
-        return float(str(root.xpath('//cps:properties/cps:testsettings/@minimalcodecoverageinpercent', namespaces={'cps': CommonProjectStructureNamespace})[0]))
+        return float(str(root.xpath('//cps:properties/cps:testsettings/@minimalcodecoverageinpercent', namespaces={'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)})[0]))
 
 
     @GeneralUtilities.check_arguments

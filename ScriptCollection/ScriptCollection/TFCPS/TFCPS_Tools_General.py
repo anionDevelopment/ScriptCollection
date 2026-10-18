@@ -27,10 +27,10 @@ from .PlantUMLRenderer import PlantUMLRenderer
 
 # Central definition of the common-project-structure-version. This is the single place which has to be updated to bump the
 # whole repository (and all common-project-structure-files which are generated or validated by ScriptCollection) to a new
-# common-project-structure-version. Both the namespace and the xsd-base-url are derived from this version.
+# common-project-structure-version. Both the namespace and the xsd-base-url are derived from this version (see
+# TFCPS_Tools_General.get_common_project_structure_namespace and TFCPS_Tools_General.get_common_project_structure_xsd_base_url).
 CommonProjectStructureVersion: str = "3.0.4"
-CommonProjectStructureNamespace: str = f"https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/v{CommonProjectStructureVersion}/Conventions/RepositoryStructure/CommonProjectStructure"
-CommonProjectStructureXSDBaseURL: str = f"https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v{CommonProjectStructureVersion}/Conventions/RepositoryStructure/CommonProjectStructure"
+SupportedCommonProjectStructureVersions: list[str] = ["3.0.4"]
 
 class TFCPS_Tools_General:
 
@@ -44,6 +44,16 @@ class TFCPS_Tools_General:
     # own version in '<repo>/Other/Resources/Dependencies/JRE/Version.txt'. The file contains a build like "21.0.6+7".
     __jre_version_resource_relative_path:str="Dependencies/JRE/Version.txt"
 
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def get_common_project_structure_namespace(common_project_structure_version: str) -> str:
+        return f"https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/v{common_project_structure_version}/Conventions/RepositoryStructure/CommonProjectStructure"
+
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def get_common_project_structure_xsd_base_url(common_project_structure_version: str) -> str:
+        return f"https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v{common_project_structure_version}/Conventions/RepositoryStructure/CommonProjectStructure"
+
     def __init__(self,sc:ScriptCollectionCore):
         self.__sc=sc
         self.oci_image_manager=OCIImageManager(self.__sc)
@@ -52,7 +62,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def codeunit_is_enabled(self, codeunit_file: str) -> bool:
         root: etree._ElementTree = etree.parse(codeunit_file)
-        return GeneralUtilities.string_to_boolean(str(root.xpath('//cps:codeunit/@enabled', namespaces={'cps': CommonProjectStructureNamespace})[0]))
+        return GeneralUtilities.string_to_boolean(str(root.xpath('//cps:codeunit/@enabled', namespaces={'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)})[0]))
 
     @GeneralUtilities.check_arguments
     def ensure_cyclonedxcli_is_available(self,enforce_update:bool) -> str:
@@ -185,12 +195,7 @@ class TFCPS_Tools_General:
                 version_to_download = pinned_version
                 self.__sc.log.log(f"Using pinned version '{version_to_download}' for {local_resource_name}.", LogLevel.Debug)
             else:
-                url = f"https://api.github.com/repos/{githubuser}/{githubprojectname}/releases/latest"
-                self.__sc.log.log(f"Download \"{url}\"...", LogLevel.Debug)
-                time.sleep(2)
-                response = requests.get(url, headers=headers, allow_redirects=True, timeout=(10, 10))
-                response_json=response.json()
-                version_to_download = response_json["tag_name"]
+                version_to_download = self.get_tag_of_latest_github_release(githubuser, githubprojectname)
             filename_on_github = get_filename_on_github(version_to_download)
             link = f"https://github.com/{githubuser}/{githubprojectname}/releases/download/{version_to_download}/{filename_on_github}"
             time.sleep(2)
@@ -218,6 +223,19 @@ class TFCPS_Tools_General:
             GeneralUtilities.write_text_to_file(version_file, recorded_version)
         GeneralUtilities.assert_file_exists(file)
         return file
+
+    @GeneralUtilities.check_arguments
+    def get_tag_of_latest_github_release(self, githubuser: str, githubprojectname: str) -> str:
+        """Returns the tag-name (for example "v1.2.3") of the latest release of the given GitHub-repository."""
+        headers = { 'User-Agent': 'Mozilla/5.0'}
+        self.__add_github_api_key_if_available(headers)
+        url = f"https://api.github.com/repos/{githubuser}/{githubprojectname}/releases/latest"
+        self.__sc.log.log(f"Download \"{url}\"...", LogLevel.Debug)
+        time.sleep(2)
+        response = requests.get(url, headers=headers, allow_redirects=True, timeout=(10, 10))
+        response.raise_for_status()
+        response_json=response.json()
+        return response_json["tag_name"]
 
     def __add_github_api_key_if_available(self, headers: dict):
         token = os.getenv("GITHUB_TOKEN")
@@ -293,7 +311,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def get_dependent_code_units(self, codeunit_file: str) -> list[str]:
         root: etree._ElementTree = etree.parse(codeunit_file)
-        result = set(root.xpath('//cps:dependentcodeunit/text()', namespaces={'cps': CommonProjectStructureNamespace}))
+        result = set(root.xpath('//cps:dependentcodeunit/text()', namespaces={'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)}))
         result = sorted(result)
         return result
 
@@ -400,7 +418,7 @@ class TFCPS_Tools_General:
         versiononlyregex = f"^{versionregex}$"
         if re.match(versiononlyregex, current_version) is None:
             raise ValueError(f"Version '{current_version}' does not match version-regex '{versiononlyregex}'.")
-        namespace = CommonProjectStructureNamespace
+        namespace = TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)
         #the namespace is registered as default-namespace, otherwise every tag of the file would be written with an invented prefix ("ns0:version") instead of the form the file uses.
         ET.register_namespace("", namespace)
         tree: ET.ElementTree = ET.parse(codeunit_file)
@@ -476,11 +494,11 @@ class TFCPS_Tools_General:
     def get_version_of_codeunit(self,codeunit_file:str) -> None:
         codeunit_file_content:str=GeneralUtilities.read_text_from_file(codeunit_file)
         return self.get_version_of_codeunit_filecontent(codeunit_file_content)
-    
+
     @GeneralUtilities.check_arguments
     def get_version_of_codeunit_filecontent(self,file_content:str) -> None:
         root: etree._ElementTree = etree.fromstring(file_content.encode("utf-8"))
-        result = str(root.xpath('//cps:version/text()',  namespaces={'cps': CommonProjectStructureNamespace})[0])
+        result = str(root.xpath('//cps:version/text()',  namespaces={'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)})[0])
         return result
     
     @GeneralUtilities.check_arguments
@@ -493,14 +511,14 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def get_codeunit_description(self,codeunit_file:str) -> bool:
         root: etree._ElementTree = etree.parse(codeunit_file)
-        return str(root.xpath('//cps:properties/@description', namespaces={'cps': CommonProjectStructureNamespace})[0])
+        return str(root.xpath('//cps:properties/@description', namespaces={'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)})[0])
 
     @GeneralUtilities.check_arguments
     def get_product_name(self, repository_folder: str) -> str:
         product_information_file = os.path.join(repository_folder, ".ScriptCollection", "ProductInformation.xml")
         GeneralUtilities.assert_file_exists(product_information_file)
         root: etree._ElementTree = etree.parse(product_information_file)
-        return str(root.xpath('/cps:productinformation/cps:producttitle/text()', namespaces={'cps': CommonProjectStructureNamespace})[0])
+        return str(root.xpath('/cps:productinformation/cps:producttitle/text()', namespaces={'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)})[0])
 
     @GeneralUtilities.check_arguments
     def get_required_environment_variable_names(self, repository: str) -> list[str]:
@@ -517,7 +535,7 @@ class TFCPS_Tools_General:
         product_information_file = os.path.join(repository, ".ScriptCollection", "ProductInformation.xml")
         GeneralUtilities.assert_file_exists(product_information_file)
         root: etree._ElementTree = etree.parse(product_information_file)
-        namespaces = {'cps': CommonProjectStructureNamespace}
+        namespaces = {'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)}
         declaration_elements = root.xpath('/cps:productinformation/cps:requiredenvironmentvariables', namespaces=namespaces)
         GeneralUtilities.assert_condition(1 == len(declaration_elements), f"'{product_information_file}' must contain exactly one 'requiredenvironmentvariables'-element but it contains {len(declaration_elements)}. Add '<cps:requiredenvironmentvariables></cps:requiredenvironmentvariables>' (empty if the build of this product does not need any environment-variable) to that file.")
         result: list[str] = []
@@ -694,8 +712,8 @@ class TFCPS_Tools_General:
 
         # TODO implement usage of self.reference_latest_version_of_xsd_when_generating_xml
         GeneralUtilities.write_text_to_file(constants_metafile, f"""<?xml version="1.0" encoding="UTF-8" ?>
-<cps:constant xmlns:cps="{CommonProjectStructureNamespace}" constantspecificationversion="1.1.0"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="{CommonProjectStructureNamespace} {CommonProjectStructureXSDBaseURL}/constant.xsd">
+<cps:constant xmlns:cps="{TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)}" constantspecificationversion="1.1.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="{TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)} {TFCPS_Tools_General.get_common_project_structure_xsd_base_url(CommonProjectStructureVersion)}/constant.xsd">
     <cps:name>{constantname}</cps:name>
     <cps:documentationsummary>{documentationsummary}</cps:documentationsummary>
     <cps:path>{constants_valuefiler_reference}</cps:path>
@@ -720,7 +738,7 @@ class TFCPS_Tools_General:
         self.assert_is_codeunit_folder(source_codeunit_folder)
         root: etree._ElementTree = etree.parse(os.path.join(source_codeunit_folder, "Other", "Resources", "Constants", f"{constant_name}.constant.xml"))
         results = root.xpath(f'//cps:{propertyname}/text()', namespaces={
-            'cps': CommonProjectStructureNamespace
+            'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)
         })
         length = len(results)
         if (length == 0):
@@ -829,18 +847,18 @@ class TFCPS_Tools_General:
     def codeunit_has_testable_sourcecode(self,codeunit_file:str) -> bool:
         self.assert_is_codeunit_folder(os.path.dirname(codeunit_file))
         root: etree._ElementTree = etree.parse(codeunit_file)
-        return GeneralUtilities.string_to_boolean(str(root.xpath('//cps:properties/@codeunithastestablesourcecode', namespaces={'cps': CommonProjectStructureNamespace})[0]))
+        return GeneralUtilities.string_to_boolean(str(root.xpath('//cps:properties/@codeunithastestablesourcecode', namespaces={'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)})[0]))
 
     @GeneralUtilities.check_arguments
     def codeunit_has_updatable_dependencies(self,codeunit_file:str) -> bool:
         self.assert_is_codeunit_folder(os.path.dirname(codeunit_file))
         root: etree._ElementTree = etree.parse(codeunit_file)
-        return GeneralUtilities.string_to_boolean(str(root.xpath('//cps:properties/@codeunithasupdatabledependencies', namespaces={'cps': CommonProjectStructureNamespace})[0]))
+        return GeneralUtilities.string_to_boolean(str(root.xpath('//cps:properties/@codeunithasupdatabledependencies', namespaces={'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)})[0]))
 
     @GeneralUtilities.check_arguments
     def get_codeunit_owner_emailaddress(self,codeunit_file:str) -> None:
         self.assert_is_codeunit_folder(os.path.dirname(codeunit_file))
-        namespaces = {'cps': CommonProjectStructureNamespace, 'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
+        namespaces = {'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion), 'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
         root: etree._ElementTree = etree.parse(codeunit_file)
         result = root.xpath('//cps:codeunit/cps:codeunitowneremailaddress/text()', namespaces=namespaces)[0]
         return result
@@ -848,7 +866,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def get_codeunit_owner_name(self,codeunit_file:str) -> None:
         self.assert_is_codeunit_folder(os.path.dirname(codeunit_file))
-        namespaces = {'cps': CommonProjectStructureNamespace,  'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
+        namespaces = {'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion),  'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
         root: etree._ElementTree = etree.parse(codeunit_file)
         result = root.xpath('//cps:codeunit/cps:codeunitownername/text()', namespaces=namespaces)[0]
         return result
@@ -1379,23 +1397,23 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def __ensure_grylibrary_is_available(self, use_cache:bool) -> None:
         grylibrary_folder =os.path.join( self.__sc.get_global_cache_folder(),"Tools","GRYLibrary")
-        grylibrary_dll_file = os.path.join(grylibrary_folder, "BuildResult_DotNet_win-x64", "GRYLibrary.dll")
+        #the artifacts-archive of a GRYLibrary-release contains the folder "GRYLibrary" as root-folder
+        grylibrary_dll_file = os.path.join(grylibrary_folder, "GRYLibrary", "BuildResult_DotNet_win-x64", "GRYLibrary.dll")
         grylibrary_dll_file_exists = os.path.isfile(grylibrary_dll_file)
         if not os.path.isfile(grylibrary_dll_file):
             self.__sc.log.log("Download GRYLibrary to global cache...",LogLevel.Information)
-            #TODO make version configurable instead of always using "latest"
-            grylibrary_latest_codeunit_file = "https://raw.githubusercontent.com/anionDevelopment/GRYLibrary/stable/GRYLibrary/GRYLibrary.codeunit.xml"
-            with urllib.request.urlopen(grylibrary_latest_codeunit_file) as url_result:
-                grylibrary_latest_version = self.get_version_of_codeunit_filecontent(url_result.read().decode("utf-8"))
+            grylibrary_latest_tag = self.get_tag_of_latest_github_release("anionDevelopment", "GRYLibrary")
+            GeneralUtilities.assert_condition(grylibrary_latest_tag.startswith("v"), f"The tag '{grylibrary_latest_tag}' of the latest GRYLibrary-release does not have the expected format 'v<version>'.")
+            grylibrary_latest_version = grylibrary_latest_tag[1:]
             if grylibrary_dll_file_exists:
-                grylibrary_existing_codeunit_file = os.path.join(grylibrary_folder, "SourceCode", "GRYLibrary.codeunit.xml")
+                grylibrary_existing_codeunit_file = os.path.join(grylibrary_folder, "GRYLibrary", "SourceCode", "GRYLibrary.codeunit.xml")
                 grylibrary_existing_codeunit_version = self.get_version_of_codeunit(grylibrary_existing_codeunit_file)
                 if grylibrary_existing_codeunit_version != grylibrary_latest_version:
                     GeneralUtilities.ensure_directory_does_not_exist(grylibrary_folder)
             GeneralUtilities.ensure_directory_does_not_exist(grylibrary_folder)
             GeneralUtilities.ensure_directory_exists(grylibrary_folder)
-            archive_name = f"GRYLibrary.v{grylibrary_latest_version}.Artifacts.zip"
-            archive_download_link = f"https://github.com/anionDevelopment/GRYLibrary/releases/download/v{grylibrary_latest_version}/{archive_name}"
+            archive_name = f"GRYLibrary_Artifacts_v{grylibrary_latest_version}.zip"
+            archive_download_link = f"https://github.com/anionDevelopment/GRYLibrary/releases/download/{grylibrary_latest_tag}/{archive_name}"
             archive_file = os.path.join(grylibrary_folder, archive_name)
             urllib.request.urlretrieve(archive_download_link, archive_file)
             with zipfile.ZipFile(archive_file, 'r') as zip_ref:
@@ -2092,7 +2110,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def get_dependencies_which_are_ignored_from_updates(self, codeunit_folder: str) -> list[str]:
         self.assert_is_codeunit_folder(codeunit_folder)
-        namespaces = {'cps': CommonProjectStructureNamespace, 'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
+        namespaces = {'cps': TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion), 'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
         codeunit_name = os.path.basename(codeunit_folder)
         codeunit_file = os.path.join(codeunit_folder, f"{codeunit_name}.codeunit.xml")
         root: etree._ElementTree = etree.parse(codeunit_file)
@@ -2260,3 +2278,9 @@ class TFCPS_Tools_General:
         languages_file = os.path.join(languages_folder, "Languages.txt")
         GeneralUtilities.ensure_file_exists(languages_file)
         GeneralUtilities.write_lines_to_file(languages_file, languages)
+
+# Kept for compatibility with callers outside of ScriptCollection which use these values directly. Both are derived from
+# CommonProjectStructureVersion via TFCPS_Tools_General.get_common_project_structure_namespace and
+# TFCPS_Tools_General.get_common_project_structure_xsd_base_url, so the version still has to be updated only in one place.
+CommonProjectStructureNamespace: str = TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)
+CommonProjectStructureXSDBaseURL: str = TFCPS_Tools_General.get_common_project_structure_xsd_base_url(CommonProjectStructureVersion)
