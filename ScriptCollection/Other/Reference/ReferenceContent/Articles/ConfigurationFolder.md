@@ -252,7 +252,7 @@ A repository declares which environment-variables its build needs in `<repositor
 
 ```xml
 <cps:productinformation
-    xmlns:cps="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure"
+    xmlns:cps="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/v3.0.4/Conventions/RepositoryStructure/CommonProjectStructure"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <cps:producttitle>MyProduct</cps:producttitle>
     <cps:remoteaddress>https://example.com/MyProduct</cps:remoteaddress>

@@ -12,7 +12,7 @@ from lxml import etree
 from ..GeneralUtilities import GeneralUtilities, VersionEcholon
 from ..ScriptCollectionCore import ScriptCollectionCore
 from ..SCLog import  LogLevel
-from .TFCPS_Tools_General import TFCPS_Tools_General
+from .TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureNamespace, CommonProjectStructureVersion
 from .TFCPS_RemoteBuild import TFCPS_RemoteBuild, RunnerOperatingSystem
 
 
@@ -30,7 +30,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
     _protected_sc:ScriptCollectionCore = None
     __is_pre_merge:bool=False
     __validate_developers_of_repository:bool=True#TODO must be settable to false
-    codeunit_namespace:str="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure"
+    codeunit_namespace:str=CommonProjectStructureNamespace
 
     def __init__(self,current_file:str,verbosity:LogLevel,target_envionment_type:str,use_cache:bool,is_pre_merge:bool):
         self.__verbosity=verbosity
@@ -141,7 +141,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         GeneralUtilities.assert_condition(len(codeunit_files_in_folder) == 1, f'The codeunit-folder "{codeunit_folder}" must contain exactly one codeunit-file (matching "*{codeunit_filename_suffix}") but contains {len(codeunit_files_in_folder)}.')
         codeunit_name_in_codeunit_filename = codeunit_files_in_folder[0][:-len(codeunit_filename_suffix)]
         GeneralUtilities.assert_condition(codeunit_name_in_codeunit_filename == codeunit_name, f'The codeunit-file "{codeunit_files_in_folder[0]}" must be named "{codeunit_name}{codeunit_filename_suffix}" to match its folder-name ("{codeunit_name}").')
-        supported_codeunitspecificationversion = "3.0.0"  # should always be the latest version of the ProjectTemplates-repository
+        supported_codeunitspecificationversion = CommonProjectStructureVersion  # should always be the latest version of the ProjectTemplates-repository
         codeunit_file = os.path.join(codeunit_folder, f"{codeunit_name}{codeunit_filename_suffix}")
         if not os.path.isfile(codeunit_file):
             raise ValueError(f'Codeunitfile "{codeunit_file}" does not exist.')
@@ -401,7 +401,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         product_information_file = os.path.join(self.get_repository_folder(), ".ScriptCollection", "ProductInformation.xml")
         GeneralUtilities.assert_file_exists(product_information_file)
         root: etree._ElementTree = etree.parse(product_information_file)
-        return str(root.xpath(f'/cps:productinformation/cps:{property_name}/text()', namespaces={'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'})[0])
+        return str(root.xpath(f'/cps:productinformation/cps:{property_name}/text()', namespaces={'cps': CommonProjectStructureNamespace})[0])
     
     @GeneralUtilities.check_arguments
     def get_current_folder(self)->str:
@@ -562,7 +562,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
     @GeneralUtilities.check_arguments
     def get_testcoverage_threshold_from_codeunit_file(self):
         root: etree._ElementTree = etree.parse(self.get_codeunit_file())
-        return float(str(root.xpath('//cps:properties/cps:testsettings/@minimalcodecoverageinpercent', namespaces={'cps': 'https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure'})[0]))
+        return float(str(root.xpath('//cps:properties/cps:testsettings/@minimalcodecoverageinpercent', namespaces={'cps': CommonProjectStructureNamespace})[0]))
 
 
     @GeneralUtilities.check_arguments

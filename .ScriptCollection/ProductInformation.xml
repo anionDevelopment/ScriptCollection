@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<productinformation xmlns="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure">
+<productinformation xmlns="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/v3.0.4/Conventions/RepositoryStructure/CommonProjectStructure">
   <producttitle>ScriptCollection</producttitle>
   <remoteaddress>https://github.com/anionDevelopment/ScriptCollection</remoteaddress>
   <requiredenvironmentvariables />

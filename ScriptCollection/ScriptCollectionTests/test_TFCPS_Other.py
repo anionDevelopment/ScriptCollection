@@ -11,7 +11,7 @@ from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
 from ..ScriptCollection.SCLog import LogLevel
 from ..ScriptCollection.TFCPS.TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base
 from ..ScriptCollection.TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
-from ..ScriptCollection.TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
+from ..ScriptCollection.TFCPS.TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureNamespace
 from ..ScriptCollection.TFCPS.Docker.TFCPS_CodeUnitSpecific_Docker import TFCPS_CodeUnitSpecific_Docker_Functions
 from ..ScriptCollection.TFCPS.Flutter.TFCPS_CodeUnitSpecific_Flutter import TFCPS_CodeUnitSpecific_Flutter_Functions
 from .test_OCIImageManager import create_oci_image_manager, create_repository
@@ -89,7 +89,7 @@ def write_product_information_file(repository: str, required_environment_variabl
     else:
         required_environment_variables_element = GeneralUtilities.empty_string
     GeneralUtilities.write_text_to_file(product_information_file, f"""<?xml version="1.0" encoding="UTF-8"?>
-<cps:productinformation xmlns:cps="https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure">
+<cps:productinformation xmlns:cps="{CommonProjectStructureNamespace}">
     <cps:producttitle>TestProduct</cps:producttitle>
     <cps:remoteaddress>https://example.com/TestProduct</cps:remoteaddress>
     {required_environment_variables_element}
@@ -253,7 +253,7 @@ class TasksForCommonProjectStructureTests(unittest.TestCase):
     def test_write_version_to_codeunit_file_writes_lf_line_separators(self) -> None:
         # arrange
         t = TFCPS_Tools_General(ScriptCollectionCore())
-        namespace = "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure"
+        namespace = CommonProjectStructureNamespace
         # the file is written with crlf, which is the state a build on windows produced before the line-separators were written independently of the operating-system.
         codeunit_file_content = f'<?xml version="1.0" encoding="UTF-8"?>\r\n<codeunit xmlns="{namespace}">\r\n  <version>1.0.0</version>\r\n</codeunit>\r\n'
         with tempfile.TemporaryDirectory() as temporary_folder:
@@ -675,7 +675,7 @@ items:
         # assert
         #the schema-location consists of the namespace of the codeunit-file and the address of the xsd-file of exactly the
         #codeunit-specification-version which the codeunit-file declares.
-        expected_result = "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/tree/main/Conventions/RepositoryStructure/CommonProjectStructure "\
+        expected_result = CommonProjectStructureNamespace + " " + \
             "https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v3.0.0/Conventions/RepositoryStructure/CommonProjectStructure/codeunit.xsd"
         self.assertEqual(expected_result, actual_result)
 
