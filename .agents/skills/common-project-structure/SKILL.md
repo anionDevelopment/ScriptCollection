@@ -11,7 +11,7 @@ metadata:
 
 ## General information
 
-The "common project structure" is a set of conventions and best practices for organizing and structuring a software project defined by: https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/main/Conventions/RepositoryStructure/CommonProjectStructure/CommonProjectStructure.md
+The "common project structure" is a set of conventions and best practices for organizing and structuring a software project defined by: https://projects.aniondev.de/PublicProjects/Common/ProjectTemplates/-/raw/v3.0.4/Conventions/RepositoryStructure/CommonProjectStructure/CommonProjectStructure.md
 It follows convention-over-configuration, so most things are located at a well-defined place and do not have to be searched for.
 
 ### Codeunits
