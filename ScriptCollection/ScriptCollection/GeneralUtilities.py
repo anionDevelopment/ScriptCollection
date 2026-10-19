@@ -1356,6 +1356,98 @@ class GeneralUtilities:
             exit_code = process.wait()
             return (exit_code, stdout, stderr)
 
+    media_check_tolerance_in_seconds: float = 2.0
+
+    @staticmethod
+    @check_arguments
+    def __run_media_tool(tool: str, arguments: list[str]) -> tuple[int, str, str]:
+        result = GeneralUtilities.run_program_simple(tool, arguments)
+        return (result[0], result[1].decode("utf-8", errors="replace"), result[2].decode("utf-8", errors="replace"))
+
+    @staticmethod
+    @check_arguments
+    def __read_media_packets(file: str) -> tuple[list[str], dict[int, list[tuple[float, float]]]]:
+        """Reads all packets of the file (so the whole file is demuxed) and returns the problems reported by ffprobe and the list of (start, duration) in seconds of the packets per stream-index."""
+        result = GeneralUtilities.__run_media_tool("ffprobe", ["-v", "error", "-show_entries", "packet=stream_index,pts_time,dts_time,duration_time", "-of", "compact=p=0", file])
+        problems: list[str] = []
+        if result[0] != 0 or result[2].strip():
+            problems.append(f"Reading all packets of the file failed (exit-code: {result[0]}): {result[2].strip()}")
+        packets: dict[int, list[tuple[float, float]]] = {}
+        for line in GeneralUtilities.string_to_lines(result[1]):
+            if not line.strip():
+                continue
+            values = dict(part.split("=", 1) for part in line.split("|") if "=" in part)
+            start = values.get("pts_time", "N/A")
+            if start == "N/A":
+                start = values.get("dts_time", "N/A")
+            if start == "N/A":
+                continue
+            duration = values.get("duration_time", "N/A")
+            packets.setdefault(int(values["stream_index"]), []).append((float(start), 0.0 if duration == "N/A" else float(duration)))
+        return (problems, packets)
+
+    @staticmethod
+    @check_arguments
+    def get_media_file_inconsistencies(file: str, decode: bool) -> list[str]:
+        """Checks whether a media-file (for example mp4 or mkv) can be played completely. Returns the found inconsistencies; an empty list means that none was found.
+        Checked are: The container is readable, it declares a duration, every video- and audio-stream contains packets, starts and ends in line with the declared duration
+        (tolerance: media_check_tolerance_in_seconds) and has no gap longer than that tolerance. If decode is true then all video- and audio-streams are additionally decoded completely (slow).
+        This function needs ffprobe (and ffmpeg if decode is true)."""
+        GeneralUtilities.assert_file_exists(file)
+        GeneralUtilities.assert_condition(GeneralUtilities.tool_is_available("ffprobe"), "ffprobe is not available.")
+        GeneralUtilities.assert_condition(not decode or GeneralUtilities.tool_is_available("ffmpeg"), "ffmpeg is not available.")
+        if os.path.getsize(file) == 0:
+            return ["The file is empty."]
+        tolerance = GeneralUtilities.media_check_tolerance_in_seconds
+
+        probe = GeneralUtilities.__run_media_tool("ffprobe", ["-v", "error", "-show_format", "-show_streams", "-of", "json", file])
+        if probe[0] != 0 or probe[2].strip():
+            return [f"The container is not readable (exit-code: {probe[0]}): {probe[2].strip()}"]
+        info = json.loads(probe[1])
+        media_format: dict = info.get("format", {})
+        streams = [stream for stream in info.get("streams", []) if stream.get("codec_type") in ("video", "audio") and not stream.get("disposition", {}).get("attached_pic", 0)]
+        if len(streams) == 0:
+            return ["The file contains no video- or audio-stream."]
+        if "duration" not in media_format:
+            return ["The container does not declare a duration, so completeness can not be verified."]
+        declared_duration = float(media_format["duration"])
+        declared_start = float(media_format.get("start_time", 0))
+
+        findings: list[str] = []
+        problems, packets = GeneralUtilities.__read_media_packets(file)
+        findings.extend(problems)
+        for stream in streams:
+            index = int(stream["index"])
+            name = f"{stream['codec_type']}-stream {index} ({stream.get('codec_name', 'unknown')})"
+            stream_packets = sorted(packets.get(index, []))
+            if len(stream_packets) == 0:
+                findings.append(f"The {name} contains no packets.")
+                continue
+            first_start = stream_packets[0][0]
+            end = max(start+duration for start, duration in stream_packets)
+            if declared_start+tolerance < first_start:
+                findings.append(f"The {name} starts {first_start-declared_start:.1f}s after the start of the file.")
+            if end < declared_start+declared_duration-tolerance:
+                findings.append(f"The {name} contains only {end-declared_start:.1f}s of the declared {declared_duration:.1f}s.")
+            if declared_start+declared_duration+tolerance < end:
+                findings.append(f"The {name} is longer ({end-declared_start:.1f}s) than the declared {declared_duration:.1f}s.")
+            gaps = [(stream_packets[i][0], stream_packets[i+1][0]-(stream_packets[i][0]+stream_packets[i][1])) for i in range(len(stream_packets)-1)]
+            gaps = [gap for gap in gaps if tolerance < gap[1]]
+            if 0 < len(gaps):
+                findings.append(f"The {name} has {len(gaps)} gap(s) longer than {tolerance:.1f}s, the first one of {gaps[0][1]:.1f}s after {gaps[0][0]:.1f}s.")
+
+        if decode:
+            decoded = GeneralUtilities.__run_media_tool("ffmpeg", ["-v", "error", "-nostdin", "-i", file, "-map", "0:v?", "-map", "0:a?", "-f", "null", "-"])
+            if decoded[0] != 0 or decoded[2].strip():
+                findings.append(f"Decoding failed (exit-code: {decoded[0]}): {decoded[2].strip()}")
+        return findings
+
+    @staticmethod
+    @check_arguments
+    def assert_media_file_is_consistent(file: str, decode: bool) -> None:
+        findings = GeneralUtilities.get_media_file_inconsistencies(file, decode)
+        GeneralUtilities.assert_condition(len(findings) == 0, f"The media-file '{file}' is inconsistent: "+" ".join(findings))
+
     @staticmethod
     @check_arguments
     def assert_file_exists(file: str,message=None) -> None:
