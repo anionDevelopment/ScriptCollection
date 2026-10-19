@@ -1057,3 +1057,77 @@ class GeneralUtilitiesTests(unittest.TestCase):
         assert empty_result is True
         assert file_result is False
         assert subfolder_result is False
+
+    @staticmethod
+    def __create_media_files(folder: str) -> dict[str, str]:
+        ok_mp4 = os.path.join(folder, "ok.mp4")
+        ok_mkv = os.path.join(folder, "ok.mkv")
+        gap_mp4 = os.path.join(folder, "gap.mp4")
+        video = ["-f", "lavfi", "-i", "testsrc=d=10:s=320x240:r=25"]
+        GeneralUtilities.run_program_simple("ffmpeg", ["-v", "error", "-y"]+video+["-f", "lavfi", "-i", "sine=d=10", "-shortest", "-c:v", "libx264", "-c:a", "aac", "-movflags", "+faststart", ok_mp4])
+        GeneralUtilities.run_program_simple("ffmpeg", ["-v", "error", "-y", "-i", ok_mp4, "-c", "copy", ok_mkv])
+        GeneralUtilities.run_program_simple("ffmpeg", ["-v", "error", "-y"]+video+["-vf", "setpts='if(gt(N,100),PTS+6/TB,PTS)'", "-fps_mode", "passthrough", "-c:v", "libx264", "-an", "-movflags", "+faststart", gap_mp4])
+        return {"ok_mp4": ok_mp4, "ok_mkv": ok_mkv, "gap_mp4": gap_mp4}
+
+    @staticmethod
+    def __truncate_file(source: str, target: str) -> None:
+        with open(source, "rb") as source_file:
+            content = source_file.read()
+        with open(target, "wb") as target_file:
+            target_file.write(content[:len(content)*6//10])
+
+    def test_get_media_file_inconsistencies_complete_files(self) -> None:
+        if not (GeneralUtilities.tool_is_available("ffmpeg") and GeneralUtilities.tool_is_available("ffprobe")):
+            self.skipTest("ffmpeg and ffprobe are required.")
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            files = GeneralUtilitiesTests.__create_media_files(folder)
+
+            # act & assert
+            for decode in [False, True]:
+                assert GeneralUtilities.get_media_file_inconsistencies(files["ok_mp4"], decode) == []
+                assert GeneralUtilities.get_media_file_inconsistencies(files["ok_mkv"], decode) == []
+
+    def test_get_media_file_inconsistencies_truncated_files(self) -> None:
+        if not (GeneralUtilities.tool_is_available("ffmpeg") and GeneralUtilities.tool_is_available("ffprobe")):
+            self.skipTest("ffmpeg and ffprobe are required.")
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            files = GeneralUtilitiesTests.__create_media_files(folder)
+            truncated_mp4 = os.path.join(folder, "truncated.mp4")
+            truncated_mkv = os.path.join(folder, "truncated.mkv")
+            GeneralUtilitiesTests.__truncate_file(files["ok_mp4"], truncated_mp4)
+            GeneralUtilitiesTests.__truncate_file(files["ok_mkv"], truncated_mkv)
+
+            # act & assert
+            assert 0 < len(GeneralUtilities.get_media_file_inconsistencies(truncated_mp4, False))
+            assert 0 < len(GeneralUtilities.get_media_file_inconsistencies(truncated_mkv, False))
+            with self.assertRaises(ValueError):
+                GeneralUtilities.assert_media_file_is_consistent(truncated_mp4, False)
+
+    def test_get_media_file_inconsistencies_gap(self) -> None:
+        if not (GeneralUtilities.tool_is_available("ffmpeg") and GeneralUtilities.tool_is_available("ffprobe")):
+            self.skipTest("ffmpeg and ffprobe are required.")
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            files = GeneralUtilitiesTests.__create_media_files(folder)
+
+            # act
+            findings = GeneralUtilities.get_media_file_inconsistencies(files["gap_mp4"], False)
+
+            # assert
+            assert any("gap" in finding for finding in findings)
+
+    def test_get_media_file_inconsistencies_empty_file(self) -> None:
+        if not GeneralUtilities.tool_is_available("ffprobe"):
+            self.skipTest("ffprobe is required.")
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            empty_file = os.path.join(folder, "empty.mp4")
+            Path(empty_file).touch()
+
+            # act
+            findings = GeneralUtilities.get_media_file_inconsistencies(empty_file, False)
+
+            # assert
+            assert findings == ["The file is empty."]

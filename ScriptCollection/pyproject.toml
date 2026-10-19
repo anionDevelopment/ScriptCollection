@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.4.61"
+version = "4.4.62"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
 license = "GPL-3.0-only"
@@ -88,6 +88,7 @@ scsearchinfiles = "ScriptCollection.Executables:SearchInFiles"
 sccreatesimplemergewithoutrelease = "ScriptCollection.Executables:CreateSimpleMergeWithoutRelease"
 scshow2faasqrcode = "ScriptCollection.Executables:Show2FAAsQRCode"
 scshowmissingfiles = "ScriptCollection.Executables:ShowMissingFiles"
+sccheckmediafile = "ScriptCollection.Executables:CheckMediaFile"
 scgeneratecertificateauthority = "ScriptCollection.Executables:GenerateCertificateAuthority"
 scgeneratecertificate = "ScriptCollection.Executables:GenerateCertificate"
 scgeneratecertificatesignrequest = "ScriptCollection.Executables:GenerateCertificateSignRequest"
