@@ -238,15 +238,19 @@ class TFCPS_Tools_General:
         return response_json["tag_name"]
 
     def __add_github_api_key_if_available(self, headers: dict):
+        # Trailing newlines/whitespace in either the env var or the token-file
+        # would silently corrupt the Authorization header and make GitHub treat
+        # the request as anonymous (60/h rate limit), so strip in both paths.
         token = os.getenv("GITHUB_TOKEN")
         if token is not None:
-            headers["Authorization"] = f"Bearer {token}"
-        else:
+            token = token.strip()
+        if not token:
             user_folder = str(Path.home())
             github_token_file: str = str(os.path.join(user_folder, ".github", "token.txt"))
             if os.path.isfile(github_token_file):
-                token = GeneralUtilities.read_text_from_file(github_token_file)
-                headers["Authorization"] = f"Bearer {token}"
+                token = GeneralUtilities.read_text_from_file(github_token_file).strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         return headers
 
     

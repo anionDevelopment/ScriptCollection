@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 from ..ScriptCollection.GeneralUtilities import GeneralUtilities
@@ -188,6 +189,13 @@ def generate_certificate_for_development_purposes(tools: TFCPS_Tools_General, se
     rewrite_flutter_coverage_package_names above accesses another private method."""
     # pylint:disable=protected-access
     tools._TFCPS_Tools_General__generate_certificate_for_development_purposes(service_name, resources_folder, ca_folder)
+
+
+def add_github_api_key(tools: TFCPS_Tools_General, headers: dict) -> dict:
+    """Calls the private TFCPS_Tools_General.__add_github_api_key_if_available for a test, the same way
+    rewrite_flutter_coverage_package_names above accesses another private method."""
+    # pylint:disable=protected-access
+    return tools._TFCPS_Tools_General__add_github_api_key_if_available(headers)
 
 
 class TasksForCommonProjectStructureTests(unittest.TestCase):
@@ -672,6 +680,66 @@ items:
         # assert
         #the version which ScriptCollection uses itself must always be one of the versions it supports.
         self.assertIn(CommonProjectStructureVersion, SupportedCommonProjectStructureVersions)
+
+    def test_add_github_api_key_strips_trailing_newline_from_the_environment_variable(self) -> None:
+        #the token-file and the environment-variable are both read into a Bearer-header without further processing, so a
+        #trailing newline (the default on files written by most editors and on tokens piped from "gh auth token") would
+        #silently corrupt the header and make GitHub treat the request as anonymous (60/h rate-limit).
+        # arrange
+        tools = TFCPS_Tools_General(ScriptCollectionCore())
+        with patch.dict(os.environ, {"GITHUB_TOKEN": "ghp_token\n"}):
+
+            # act
+            actual_result = add_github_api_key(tools, {})
+
+            # assert
+            self.assertEqual("Bearer ghp_token", actual_result["Authorization"])
+
+    def test_add_github_api_key_strips_trailing_newline_from_the_token_file(self) -> None:
+        # arrange
+        tools = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as home_folder:
+            github_folder = os.path.join(home_folder, ".github")
+            GeneralUtilities.ensure_directory_exists(github_folder)
+            GeneralUtilities.write_text_to_file(os.path.join(github_folder, "token.txt"), "ghp_token_from_file\n")
+            with patch.dict(os.environ, {}, clear=True), patch.object(Path, "home", return_value=Path(home_folder)):
+
+                # act
+                actual_result = add_github_api_key(tools, {})
+
+                # assert
+                self.assertEqual("Bearer ghp_token_from_file", actual_result["Authorization"])
+
+    def test_add_github_api_key_falls_back_to_the_token_file_when_the_environment_variable_is_empty(self) -> None:
+        #an empty GITHUB_TOKEN is effectively "not set"; the token-file must be consulted instead of sending an empty
+        #Bearer-header, which GitHub would reject.
+        # arrange
+        tools = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as home_folder:
+            github_folder = os.path.join(home_folder, ".github")
+            GeneralUtilities.ensure_directory_exists(github_folder)
+            GeneralUtilities.write_text_to_file(os.path.join(github_folder, "token.txt"), "ghp_token_from_file")
+            with patch.dict(os.environ, {"GITHUB_TOKEN": ""}), patch.object(Path, "home", return_value=Path(home_folder)):
+
+                # act
+                actual_result = add_github_api_key(tools, {})
+
+                # assert
+                self.assertEqual("Bearer ghp_token_from_file", actual_result["Authorization"])
+
+    def test_add_github_api_key_leaves_the_header_untouched_when_no_token_is_available(self) -> None:
+        #no Authorization-header may be set when there is nothing to put in it: an empty "Bearer " would make GitHub
+        #reject the request as malformed-auth instead of treating it anonymously.
+        # arrange
+        tools = TFCPS_Tools_General(ScriptCollectionCore())
+        with tempfile.TemporaryDirectory() as home_folder:
+            with patch.dict(os.environ, {}, clear=True), patch.object(Path, "home", return_value=Path(home_folder)):
+
+                # act
+                actual_result = add_github_api_key(tools, {})
+
+                # assert
+                self.assertNotIn("Authorization", actual_result)
 
     def test_get_expected_schemalocation_of_another_version_references_another_xsd(self) -> None:
         # act
