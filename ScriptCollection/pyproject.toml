@@ -58,6 +58,7 @@ Documentation = "https://aniondev.github.io/ScriptCollectionReference/index.html
 Changelog = "https://github.com/anionDevelopment/ScriptCollection/tree/main/Other/Resources/Changelog"
 
 [project.scripts]
+scrais = "ScriptCollection.Executables:RunAgentInSandbox"
 scbuildcodeunits = "ScriptCollection.Executables:BuildCodeUnits"
 scbuildcodeunitsc = "ScriptCollection.Executables:BuildCodeUnitsC"
 scupdatedependencies = "ScriptCollection.Executables:UpdateDependencies"

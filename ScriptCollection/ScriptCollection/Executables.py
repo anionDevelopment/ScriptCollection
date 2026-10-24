@@ -15,6 +15,19 @@ from .TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
 from .TFCPS.TFCPS_OCIImageSecretScan import TFCPS_OCIImageSecretScan
 from .TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
 from .OCIImages.OCIImageManager import OCIImageManager
+from .AgentRunner import AgentRunner
+
+
+def RunAgentInSandbox() -> int:
+    parser = argparse.ArgumentParser(description='scrais ("rais" stands for "run agent in sandbox") runs an AI-coding-agent (for example the claude-CLI) interactively in a sandboxed environment.')
+    parser.add_argument('prompt', nargs='?', default=None, help='Prompt-string which should be passed to the agent.')
+    parser.add_argument('-i', '--interactive', action='store_true', required=False, default=False, help='Runs the agent in interactive mode.')
+    parser.add_argument('-v', '--verbose', action='store_true', required=False, default=False, help='Enables verbose output.')
+    args = parser.parse_args()
+    ar = AgentRunner(args.verbose)
+    ar.run(args.prompt, args.interactive)
+    return 0
+
 
 def FilenameObfuscator() -> int:
     parser = argparse.ArgumentParser(description=''''Obfuscates the names of all files in the given folder.
