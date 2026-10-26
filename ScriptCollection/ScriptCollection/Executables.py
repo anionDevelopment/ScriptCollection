@@ -211,6 +211,20 @@ def ShowMissingFiles() -> int:
     return 0
 
 
+def CheckMediaFile() -> int:
+    parser = argparse.ArgumentParser(description='Checks whether a media-file (for example mp4 or mkv) can be played completely. Exit-code 0 if and only if no inconsistency was found.')
+    parser.add_argument('file', help='Media-file to check')
+    parser.add_argument('--decode', action='store_true', help='Additionally decodes all video- and audio-streams completely (slow)')
+    args = parser.parse_args()
+    findings = GeneralUtilities.get_media_file_inconsistencies(args.file, args.decode)
+    for finding in findings:
+        GeneralUtilities.write_message_to_stderr(finding)
+    if 0 < len(findings):
+        return 1
+    GeneralUtilities.write_message_to_stdout(f"No inconsistencies found in '{args.file}'.")
+    return 0
+
+
 def ExtractPDFPages() -> int:
     parser = argparse.ArgumentParser(description='Extract pages from PDF-file')
     parser.add_argument('file', help='Input file')
