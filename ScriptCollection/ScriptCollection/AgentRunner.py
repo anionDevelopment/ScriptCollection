@@ -6,6 +6,7 @@ import tempfile
 from enum import Enum
 from .GeneralUtilities import GeneralUtilities
 from .ScriptCollectionCore import ScriptCollectionCore
+from .OCIImages.OCIImageManager import OCIImageManager
 
 
 class CodingAgent(Enum):
@@ -37,12 +38,15 @@ class AgentRunner:
         self.verbose = verbose
 
     @GeneralUtilities.check_arguments
-    def run(self, prompt: str, interactive: bool) -> None:
+    def run(self, prompt: str, interactive: bool, repository: str, configuration_overrides: AgentRunnerConfiguration) -> int:
+        # Returns the exit-code of the container, which is the exit-code of the initialization-script if it failed and the exit-code of the agent otherwise.
+        # In interactive mode the prompt is optional: without a prompt the agent is started without an initial instruction and the user can instruct it interactively.
+        # Every value of configuration_overrides which is not None overrides the corresponding value from the configuration-file.
+        GeneralUtilities.assert_condition(interactive or prompt is not None, "A prompt is required when the agent is not run in interactive mode.")
         self.__assert_is_git_root_dir()
-        agentRunnerConfiguration: AgentRunnerConfiguration = self.__load_configuration()
-        repository = os.getcwd()
+        agentRunnerConfiguration: AgentRunnerConfiguration = self.__load_configuration(configuration_overrides)
         initialization_script = self.__get_initialization_script(repository)
-        self.__run_sandbox(agentRunnerConfiguration, prompt, interactive, initialization_script)
+        return self.__run_sandbox(agentRunnerConfiguration, prompt, interactive, initialization_script)
 
     @GeneralUtilities.check_arguments
     def __get_initialization_script(self, repository: str) -> str:
@@ -68,23 +72,41 @@ class AgentRunner:
         GeneralUtilities.assert_condition(repository_root.returncode == 0 and os.path.normcase(os.path.realpath(repository_root.stdout.strip())) == os.path.normcase(os.path.realpath(current_working_directory)), f"The current working-directory '{current_working_directory}' is not the top-level-directory of its git-repository.")
 
     @GeneralUtilities.check_arguments
-    def __load_configuration(self) -> AgentRunnerConfiguration:
+    def __load_configuration(self, configuration_overrides: AgentRunnerConfiguration) -> AgentRunnerConfiguration:
+        # The configuration-file is optional. Each value is taken from configuration_overrides if it is set there, otherwise from the configuration-file.
+        # If a value is neither set in configuration_overrides nor in the configuration-file, an error is raised.
+        section = "AgentSandboxConfiguration"
         current_working_directory = os.getcwd()
         agent_sandbox_configuration_file = os.path.join(current_working_directory, ".ScriptCollection", "AgentSandboxConfiguration.ini")
-        GeneralUtilities.assert_condition(os.path.isfile(agent_sandbox_configuration_file), f"The file '{agent_sandbox_configuration_file}' does not exist.")
         config_parser = configparser.ConfigParser()
-        config_parser.read(agent_sandbox_configuration_file, encoding="utf-8")
+        if os.path.isfile(agent_sandbox_configuration_file):
+            config_parser.read(agent_sandbox_configuration_file, encoding="utf-8")
         agentRunnerConfiguration: AgentRunnerConfiguration = AgentRunnerConfiguration()
-        codingagent_value = config_parser.get("AgentSandboxConfiguration", "codingagent")
-        allowed_codingagent_values = [coding_agent.value for coding_agent in CodingAgent]
-        GeneralUtilities.assert_condition(codingagent_value in allowed_codingagent_values, f"Invalid value '{codingagent_value}' for 'codingagent'. Allowed values are: {', '.join(allowed_codingagent_values)}.")
-        agentRunnerConfiguration.codingagent = CodingAgent(codingagent_value)
-        agentRunnerConfiguration.image = config_parser.get("AgentSandboxConfiguration", "image")
-        agentRunnerConfiguration.drop_capabilities = config_parser.getboolean("AgentSandboxConfiguration", "drop_capabilities")
+
+        if configuration_overrides.codingagent is not None:
+            agentRunnerConfiguration.codingagent = configuration_overrides.codingagent
+        elif config_parser.has_option(section, "codingagent"):
+            codingagent_value = config_parser.get(section, "codingagent")
+            allowed_codingagent_values = [coding_agent.value for coding_agent in CodingAgent]
+            GeneralUtilities.assert_condition(codingagent_value in allowed_codingagent_values, f"Invalid value '{codingagent_value}' for 'codingagent'. Allowed values are: {', '.join(allowed_codingagent_values)}.")
+            agentRunnerConfiguration.codingagent = CodingAgent(codingagent_value)
+
+        if configuration_overrides.image is not None:
+            agentRunnerConfiguration.image = configuration_overrides.image
+        elif config_parser.has_option(section, "image"):
+            agentRunnerConfiguration.image = config_parser.get(section, "image")
+
+        if configuration_overrides.drop_capabilities is not None:
+            agentRunnerConfiguration.drop_capabilities = configuration_overrides.drop_capabilities
+        elif config_parser.has_option(section, "drop_capabilities"):
+            agentRunnerConfiguration.drop_capabilities = config_parser.getboolean(section, "drop_capabilities")
+
+        for name, value in [("codingagent", agentRunnerConfiguration.codingagent), ("image", agentRunnerConfiguration.image), ("drop_capabilities", agentRunnerConfiguration.drop_capabilities)]:
+            GeneralUtilities.assert_condition(value is not None, f"The value '{name}' is neither given as argument nor defined in '{agent_sandbox_configuration_file}'.")
         return agentRunnerConfiguration
 
     @GeneralUtilities.check_arguments
-    def __run_sandbox(self, agentRunnerConfiguration: AgentRunnerConfiguration, prompt: str, interactive: bool, initialization_script: str) -> None:
+    def __run_sandbox(self, agentRunnerConfiguration: AgentRunnerConfiguration, prompt: str, interactive: bool, initialization_script: str) -> int:
         # The container always runs Linux.
         # The repository is the current working-directory (which was asserted to be the git-root-directory before).
         # It is mounted into the container under "/Workspace/<repository-name>" (preserving the folder-name) and used as working-directory of the agent.
@@ -111,16 +133,31 @@ class AgentRunner:
             docker_command = docker_command + ["--volume", f"{host_entrypoint_file.replace(os.sep, '/')}:/Workspace/Entrypoint.sh:ro"]
             if initialization_script is not None:
                 # The initialization-script is mounted under the fixed path "/Workspace/Temp/InitializationScript.sh"; the entrypoint runs and then removes it before the agent is started.
-                # Make the initialization-script executable (chmod +x) too. As for the entrypoint this is effective on Linux-/macOS-hosts; on Windows-hosts it has no effect, which is why it is invoked via "sh" in the entrypoint.
+                # Make the initialization-script executable (chmod +x) too. As for the entrypoint this is effective on Linux-/macOS-hosts; on Windows-hosts it has no effect, which is why it is invoked via "bash" in the entrypoint.
                 initialization_script_absolute_path = os.path.abspath(initialization_script)
                 os.chmod(initialization_script_absolute_path, 0o755)
                 docker_command = docker_command + ["--volume", f"{initialization_script_absolute_path.replace(os.sep, '/')}:/Workspace/Temp/InitializationScript.sh:ro"]
-            docker_command = docker_command + ["--workdir", container_workspace_folder, "--entrypoint", "sh", agentRunnerConfiguration.image, "/Workspace/Entrypoint.sh"]
+            image = self.__get_image_to_use(agentRunnerConfiguration.image, host_repository_folder)
+            docker_command = docker_command + ["--workdir", container_workspace_folder, "--entrypoint", "sh", image, "/Workspace/Entrypoint.sh"]
             # Nothing is installed in the container; the coding-agent-CLI is assumed to be available in the image.
             # subprocess.run blocks until the container has exited, which happens when the agent is finished (or was terminated by the user in interactive mode).
-            subprocess.run(docker_command, check=False)
+            # The exit-code of the container is returned (and not checked here), so that the caller can pass it through.
+            return subprocess.run(docker_command, check=False).returncode
         finally:
             GeneralUtilities.ensure_file_does_not_exist(host_entrypoint_file)
+
+    @GeneralUtilities.check_arguments
+    def __get_image_to_use(self, configured_image: str, repository: str) -> str:
+        # If the configured image is an image-name defined in "<repository>/.ScriptCollection/OCIImages/ImageDefinition.csv" then the image (address including tag) is resolved
+        # using the usual image-mechanism of ScriptCollection: the custom registry from "~/.ScriptCollection/GlobalCache/OCIImages/ImageRegistries.csv" is preferred
+        # if it provides the image, otherwise the registry from ImageDefinition.csv is used; the tag is always the DefaultTag from ImageDefinition.csv.
+        # Otherwise the configured image is interpreted directly as image-address including tag.
+        oci_image_manager = OCIImageManager(ScriptCollectionCore())
+        if os.path.isfile(oci_image_manager.get_repository_image_definition_file(repository)) and configured_image in oci_image_manager.get_used_images_in_repository(repository):
+            return oci_image_manager.get_registry_address_for_image_with_default_tag(repository, configured_image)
+        last_colon_index = configured_image.rfind(":")
+        GeneralUtilities.assert_condition(last_colon_index > configured_image.rfind("/") and last_colon_index < len(configured_image) - 1, f"The image '{configured_image}' is neither an image-name defined in the image-definition-file of the repository nor an image-address including a tag.")
+        return configured_image
 
     @GeneralUtilities.check_arguments
     def __get_entrypoint_script_content(self, agent_command: list[str], initialization_script: str) -> str:
@@ -131,7 +168,8 @@ class AgentRunner:
         agent_command_line = shlex.join(agent_command)
         lines = ["#!/bin/sh", "set -e"]
         if initialization_script is not None:
-            lines.append("sh /Workspace/Temp/InitializationScript.sh")
+            # The initialization-script is run with bash (and not with sh), so it can use bash-syntax; the image therefore has to contain bash if an initialization-script is used.
+            lines.append("bash /Workspace/Temp/InitializationScript.sh")
             lines.append("rm -f /Workspace/Temp/InitializationScript.sh 2>/dev/null || true")
         lines.append(f"exec {agent_command_line}")
         return "\n".join(lines) + "\n"
@@ -141,6 +179,7 @@ class AgentRunner:
         # Returns the command (including the prompt and - in non-interactive mode - the agent's "approve-all"-switch) which starts the coding-agent-CLI inside the container.
         # Non-interactive mode runs the agent with its switch to approve everything, so it can do whatever it wants inside the (sandboxed) container.
         # For most agents the prompt is passed as the last positional argument; Mistral Vibe is an exception in non-interactive mode (see below).
+        # If no prompt is given (only allowed in interactive mode) the agent is started without an initial prompt.
         if codingagent == CodingAgent.Claude:
             agent_command = ["claude"] if interactive else ["claude", "--print", "--dangerously-skip-permissions"]
         elif codingagent == CodingAgent.Codex:

@@ -15,18 +15,31 @@ from .TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
 from .TFCPS.TFCPS_OCIImageSecretScan import TFCPS_OCIImageSecretScan
 from .TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
 from .OCIImages.OCIImageManager import OCIImageManager
-from .AgentRunner import AgentRunner
+from .AgentRunner import AgentRunner, AgentRunnerConfiguration, CodingAgent
 
 
 def RunAgentInSandbox() -> int:
     parser = argparse.ArgumentParser(description='scrais ("rais" stands for "run agent in sandbox") runs an AI-coding-agent (for example the claude-CLI) interactively in a sandboxed environment.')
-    parser.add_argument('prompt', nargs='?', default=None, help='Prompt-string which should be passed to the agent.')
+    parser.add_argument('-p','--prompt',default=None,required=False, help='Prompt-string which should be passed to the agent.')
+    parser.add_argument('-r','--repository',default=None, required=False, help='Repository which should be worked in.')
     parser.add_argument('-i', '--interactive', action='store_true', required=False, default=False, help='Runs the agent in interactive mode.')
     parser.add_argument('-v', '--verbose', action='store_true', required=False, default=False, help='Enables verbose output.')
+    parser.add_argument('-c', '--codingagent', default=None, required=False, choices=[coding_agent.value for coding_agent in CodingAgent], help='Coding-agent which should be used. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
+    parser.add_argument('--image', default=None, required=False, help='OCI-image which should be used for the sandbox: either an image-name defined in ".ScriptCollection/OCIImages/ImageDefinition.csv" or an image-address including tag. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
+    parser.add_argument('--dropcapabilities', default=None, required=False, choices=["true", "false"], help='Defines whether all capabilities should be dropped in the sandbox. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
     args = parser.parse_args()
+    repo=os.getcwd()
+    if args.repository is not None:
+        repo= args.repository
+    repo=GeneralUtilities.resolve_relative_path(repo, os.getcwd())
+    configuration_overrides = AgentRunnerConfiguration()
+    if args.codingagent is not None:
+        configuration_overrides.codingagent = CodingAgent(args.codingagent)
+    configuration_overrides.image = args.image
+    if args.dropcapabilities is not None:
+        configuration_overrides.drop_capabilities = args.dropcapabilities == "true"
     ar = AgentRunner(args.verbose)
-    ar.run(args.prompt, args.interactive)
-    return 0
+    return ar.run(args.prompt, args.interactive, repo, configuration_overrides)
 
 
 def FilenameObfuscator() -> int:
