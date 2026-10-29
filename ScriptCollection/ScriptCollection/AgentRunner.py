@@ -38,15 +38,32 @@ class AgentRunner:
         self.verbose = verbose
 
     @GeneralUtilities.check_arguments
-    def run(self, prompt: str, interactive: bool, repository: str, configuration_overrides: AgentRunnerConfiguration) -> int:
+    def run(self, prompt: str, interactive: bool, repository: str, configuration_overrides: AgentRunnerConfiguration, additional_folders: list[str]) -> int:
         # Returns the exit-code of the container, which is the exit-code of the initialization-script if it failed and the exit-code of the agent otherwise.
         # In interactive mode the prompt is optional: without a prompt the agent is started without an initial instruction and the user can instruct it interactively.
         # Every value of configuration_overrides which is not None overrides the corresponding value from the configuration-file.
+        # additional_folders are absolute host-folders which are additionally mounted (read-write) under "/Workspace/Other/AdditionalResources/<folder-name>".
         GeneralUtilities.assert_condition(interactive or prompt is not None, "A prompt is required when the agent is not run in interactive mode.")
-        self.__assert_is_git_root_dir()
-        agentRunnerConfiguration: AgentRunnerConfiguration = self.__load_configuration(configuration_overrides)
+        self.__assert_is_git_root_dir(repository)
+        agentRunnerConfiguration: AgentRunnerConfiguration = self.__load_configuration(repository, configuration_overrides)
         initialization_script = self.__get_initialization_script(repository)
-        return self.__run_sandbox(agentRunnerConfiguration, prompt, interactive, initialization_script)
+        additional_folder_volume_arguments = self.__get_additional_folder_volume_arguments(additional_folders)
+        return self.__run_sandbox(repository, agentRunnerConfiguration, prompt, interactive, initialization_script, additional_folder_volume_arguments)
+
+    @GeneralUtilities.check_arguments
+    def __get_additional_folder_volume_arguments(self, additional_folders: list[str]) -> list[str]:
+        # Every additional folder is mounted under "/Workspace/Other/AdditionalResources/<folder-name>" (preserving the folder-name).
+        # Because the folder-name is the mount-target, folder-names must be unique.
+        result: list[str] = []
+        used_folder_names: list[str] = []
+        for additional_folder in additional_folders:
+            GeneralUtilities.assert_condition(os.path.isdir(additional_folder), f"The additional folder '{additional_folder}' does not exist.")
+            folder_name = os.path.basename(os.path.normpath(additional_folder))
+            GeneralUtilities.assert_condition(folder_name != "", f"The additional folder '{additional_folder}' has no folder-name and can therefore not be mounted.")
+            GeneralUtilities.assert_condition(folder_name not in used_folder_names, f"The folder-name '{folder_name}' is used by more than one additional folder.")
+            used_folder_names.append(folder_name)
+            result = result + ["--volume", f"{additional_folder.replace(os.sep, '/')}:/Workspace/Other/AdditionalResources/{folder_name}"]
+        return result
 
     @GeneralUtilities.check_arguments
     def __get_initialization_script(self, repository: str) -> str:
@@ -65,19 +82,17 @@ class AgentRunner:
         return None
 
     @GeneralUtilities.check_arguments
-    def __assert_is_git_root_dir(self) -> None:
-        current_working_directory = os.getcwd()
-        ScriptCollectionCore().assert_is_git_repository(current_working_directory)
-        repository_root = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=current_working_directory, capture_output=True, text=True, check=False)
-        GeneralUtilities.assert_condition(repository_root.returncode == 0 and os.path.normcase(os.path.realpath(repository_root.stdout.strip())) == os.path.normcase(os.path.realpath(current_working_directory)), f"The current working-directory '{current_working_directory}' is not the top-level-directory of its git-repository.")
+    def __assert_is_git_root_dir(self, repository: str) -> None:
+        ScriptCollectionCore().assert_is_git_repository(repository)
+        repository_root = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=repository, capture_output=True, text=True, check=False)
+        GeneralUtilities.assert_condition(repository_root.returncode == 0 and os.path.normcase(os.path.realpath(repository_root.stdout.strip())) == os.path.normcase(os.path.realpath(repository)), f"The folder '{repository}' is not the top-level-directory of its git-repository.")
 
     @GeneralUtilities.check_arguments
-    def __load_configuration(self, configuration_overrides: AgentRunnerConfiguration) -> AgentRunnerConfiguration:
+    def __load_configuration(self, repository: str, configuration_overrides: AgentRunnerConfiguration) -> AgentRunnerConfiguration:
         # The configuration-file is optional. Each value is taken from configuration_overrides if it is set there, otherwise from the configuration-file.
         # If a value is neither set in configuration_overrides nor in the configuration-file, an error is raised.
         section = "AgentSandboxConfiguration"
-        current_working_directory = os.getcwd()
-        agent_sandbox_configuration_file = os.path.join(current_working_directory, ".ScriptCollection", "AgentSandboxConfiguration.ini")
+        agent_sandbox_configuration_file = os.path.join(repository, ".ScriptCollection", "AgentSandboxConfiguration.ini")
         config_parser = configparser.ConfigParser()
         if os.path.isfile(agent_sandbox_configuration_file):
             config_parser.read(agent_sandbox_configuration_file, encoding="utf-8")
@@ -106,11 +121,11 @@ class AgentRunner:
         return agentRunnerConfiguration
 
     @GeneralUtilities.check_arguments
-    def __run_sandbox(self, agentRunnerConfiguration: AgentRunnerConfiguration, prompt: str, interactive: bool, initialization_script: str) -> int:
+    def __run_sandbox(self, repository: str, agentRunnerConfiguration: AgentRunnerConfiguration, prompt: str, interactive: bool, initialization_script: str, additional_folder_volume_arguments: list[str]) -> int:
         # The container always runs Linux.
-        # The repository is the current working-directory (which was asserted to be the git-root-directory before).
+        # The repository is the folder given by the caller (which was asserted to be the git-root-directory before).
         # It is mounted into the container under "/Workspace/<repository-name>" (preserving the folder-name) and used as working-directory of the agent.
-        host_repository_folder = os.getcwd()
+        host_repository_folder = repository
         repository_name = os.path.basename(os.path.normpath(host_repository_folder))
         container_workspace_folder = f"/Workspace/{repository_name}"
         agent_command = self.__get_agent_command(agentRunnerConfiguration.codingagent, prompt, interactive)
@@ -131,6 +146,7 @@ class AgentRunner:
                 docker_command = docker_command + ["--cap-drop", "all", "--security-opt", "no-new-privileges:true"]
             docker_command = docker_command + ["--volume", f"{host_repository_folder.replace(os.sep, '/')}:{container_workspace_folder}"]
             docker_command = docker_command + ["--volume", f"{host_entrypoint_file.replace(os.sep, '/')}:/Workspace/Entrypoint.sh:ro"]
+            docker_command = docker_command + additional_folder_volume_arguments
             if initialization_script is not None:
                 # The initialization-script is mounted under the fixed path "/Workspace/Temp/InitializationScript.sh"; the entrypoint runs and then removes it before the agent is started.
                 # Make the initialization-script executable (chmod +x) too. As for the entrypoint this is effective on Linux-/macOS-hosts; on Windows-hosts it has no effect, which is why it is invoked via "bash" in the entrypoint.
@@ -168,24 +184,30 @@ class AgentRunner:
         agent_command_line = shlex.join(agent_command)
         lines = ["#!/bin/sh", "set -e"]
         if initialization_script is not None:
+            # A line is written to stdout before the initialization-script runs, so it is unambiguous in the container-output that an initialization-script was configured and executed (without it one cannot tell whether the agent started unconfigured because no script was declared or because a declared script did nothing).
+            lines.append('echo "Running initialization-script for the agent-sandbox..."')
             # The initialization-script is run with bash (and not with sh), so it can use bash-syntax; the image therefore has to contain bash if an initialization-script is used.
             lines.append("bash /Workspace/Temp/InitializationScript.sh")
             lines.append("rm -f /Workspace/Temp/InitializationScript.sh 2>/dev/null || true")
+        else:
+            # The counterpart of the message above: it makes clear that the agent is started unconfigured on purpose because no initialization-script is declared for this repository (see __get_initialization_script).
+            lines.append('echo "No initialization-script is configured for this repository; the agent is started without an initialization-script."')
         lines.append(f"exec {agent_command_line}")
         return "\n".join(lines) + "\n"
 
     @GeneralUtilities.check_arguments
     def __get_agent_command(self, codingagent: CodingAgent, prompt: str, interactive: bool) -> list[str]:
-        # Returns the command (including the prompt and - in non-interactive mode - the agent's "approve-all"-switch) which starts the coding-agent-CLI inside the container.
+        # Returns the command (including the prompt and the agent's "approve-all"-switch) which starts the coding-agent-CLI inside the container.
         # Non-interactive mode runs the agent with its switch to approve everything, so it can do whatever it wants inside the (sandboxed) container.
+        # Claude and Copilot also get their "approve-all"-switch in interactive mode, so the user is only asked for decisions and not for permissions.
         # For most agents the prompt is passed as the last positional argument; Mistral Vibe is an exception in non-interactive mode (see below).
         # If no prompt is given (only allowed in interactive mode) the agent is started without an initial prompt.
         if codingagent == CodingAgent.Claude:
-            agent_command = ["claude"] if interactive else ["claude", "--print", "--dangerously-skip-permissions"]
+            agent_command = ["claude", "--dangerously-skip-permissions"] if interactive else ["claude", "--print", "--dangerously-skip-permissions"]
         elif codingagent == CodingAgent.Codex:
             agent_command = ["codex"] if interactive else ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox"]
         elif codingagent == CodingAgent.Copilot:
-            agent_command = ["copilot"] if interactive else ["copilot", "--allow-all-tools"]
+            agent_command = ["copilot", "--allow-all-tools", "--allow-all-paths"]
         elif codingagent == CodingAgent.OpenCode:
             agent_command = ["opencode"] if interactive else ["opencode", "run"]
         elif codingagent == CodingAgent.Vibe:

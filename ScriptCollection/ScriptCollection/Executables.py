@@ -27,6 +27,7 @@ def RunAgentInSandbox() -> int:
     parser.add_argument('-c', '--codingagent', default=None, required=False, choices=[coding_agent.value for coding_agent in CodingAgent], help='Coding-agent which should be used. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
     parser.add_argument('--image', default=None, required=False, help='OCI-image which should be used for the sandbox: either an image-name defined in ".ScriptCollection/OCIImages/ImageDefinition.csv" or an image-address including tag. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
     parser.add_argument('--dropcapabilities', default=None, required=False, choices=["true", "false"], help='Defines whether all capabilities should be dropped in the sandbox. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
+    parser.add_argument('-a', '--additionalfolder', action='append', default=None, required=False, help='Folder which should additionally be mounted (read-write) into the sandbox under "/Workspace/Other/AdditionalResources/<folder-name>". Can be given multiple times.')
     args = parser.parse_args()
     repo=os.getcwd()
     if args.repository is not None:
@@ -38,8 +39,11 @@ def RunAgentInSandbox() -> int:
     configuration_overrides.image = args.image
     if args.dropcapabilities is not None:
         configuration_overrides.drop_capabilities = args.dropcapabilities == "true"
+    additional_folders: list[str] = []
+    if args.additionalfolder is not None:
+        additional_folders = [GeneralUtilities.resolve_relative_path(additional_folder, os.getcwd()) for additional_folder in args.additionalfolder]
     ar = AgentRunner(args.verbose)
-    return ar.run(args.prompt, args.interactive, repo, configuration_overrides)
+    return ar.run(args.prompt, args.interactive, repo, configuration_overrides, additional_folders)
 
 
 def FilenameObfuscator() -> int:

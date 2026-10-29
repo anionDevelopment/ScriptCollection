@@ -884,7 +884,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         latest to the oldest. Only plain three-part-versions (major.minor.patch) are kept: NuGet also lists four-part-
         versions (for example "1.8.0.7") and pre-release-versions (for example "2.8.0-preview4" or "2.9.2-ci-210"), which
         the rest of the update-logic does not support (it asserts a three-part-format) and which "packaging.version.Version"
-        can not always parse. Without this strict filter such an unparseable string would let the sorting below raise, which
+        can not always parse. Without this strict filter such an unparsable string would let the sorting below raise, which
         the caller turns into an empty version-list and therefore into the misleading error "Version-list can not be empty"
         for a dependency whose registry actually offers usable versions."""
         three_part_versions = [version for version in versions if re.match(r"^\d+\.\d+\.\d+$", version)]

@@ -10,3 +10,4 @@ The following articles are available in the documentation
 - [Required tools for CommonProjectStructure](./Articles/RequirementsForCommonProjectStructure.md)
 - [Restricting AI command-execution with scruncommandinfolder](./Articles/RestrictingAICommandExecution.md)
 - [Remote build](./Articles/RemoteBuild.md)
+- [Running an AI-coding-agent in a sandbox with scrais](./Articles/RunAgentInSandbox.md)
