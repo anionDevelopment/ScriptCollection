@@ -10,6 +10,7 @@ from ..SCLog import  LogLevel
 from .TFCPS_BuildCodeUnitsHook import TFCPS_BuildCodeUnitsHook
 from .TFCPS_CodeUnit_BuildCodeUnit import TFCPS_CodeUnit_BuildCodeUnit
 from .TFCPS_CodeSpellCheck import TFCPS_CodeSpellCheck
+from .TFCPS_FindingsSorter import TFCPS_FindingsSorter
 from .TFCPS_OCIImageSecretScan import TFCPS_OCIImageSecretScan
 from .TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureVersion
 
@@ -241,13 +242,19 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     def __do_project_linting(self, repository_folder: str) -> None:
         self.sc.log.log("Do project-linting...")
         self.__do_project_linting_using_codespell(repository_folder)
+        self.__sort_findings(repository_folder)
+
+    @GeneralUtilities.check_arguments
+    def __sort_findings(self, repository_folder: str) -> None:
+        self.sc.log.log("Sort findings...",LogLevel.Debug)
+        TFCPS_FindingsSorter().sort_findings(repository_folder)
 
     @GeneralUtilities.check_arguments
     def __do_project_linting_using_codespell(self, repository_folder: str) -> None:
         """Searches for typos in the repository using codespell. Findings are only reported as warnings and do not let the build fail.
         Only files which are not git-ignored are checked. See TFCPS_CodeSpellCheck for details."""
         try:
-            self.sc.log.log("Search for typos using codespell...")
+            self.sc.log.log("Search for typos using codespell...",LogLevel.Debug)
             findings: list[str] = TFCPS_CodeSpellCheck(self.sc).search_for_typos(repository_folder)
             for finding in findings:
                 self.sc.log.log(f"Possible typo: {finding}", LogLevel.Warning)

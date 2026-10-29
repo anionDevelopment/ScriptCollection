@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scriptcollection"
-version = "4.4.62"
+version = "4.4.63"
 description = "The ScriptCollection is the place for reusable scripts."
 readme = { file = "ReadMe.md", content-type = "text/markdown" }
 license = "GPL-3.0-only"
@@ -58,6 +58,7 @@ Documentation = "https://aniondev.github.io/ScriptCollectionReference/index.html
 Changelog = "https://github.com/anionDevelopment/ScriptCollection/tree/main/Other/Resources/Changelog"
 
 [project.scripts]
+scrais = "ScriptCollection.Executables:RunAgentInSandbox"
 scbuildcodeunits = "ScriptCollection.Executables:BuildCodeUnits"
 scbuildcodeunitsc = "ScriptCollection.Executables:BuildCodeUnitsC"
 scupdatedependencies = "ScriptCollection.Executables:UpdateDependencies"
