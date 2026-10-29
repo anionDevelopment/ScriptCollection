@@ -10,6 +10,7 @@ from ..SCLog import  LogLevel
 from .TFCPS_BuildCodeUnitsHook import TFCPS_BuildCodeUnitsHook
 from .TFCPS_CodeUnit_BuildCodeUnit import TFCPS_CodeUnit_BuildCodeUnit
 from .TFCPS_CodeSpellCheck import TFCPS_CodeSpellCheck
+from .TFCPS_FindingsSorter import TFCPS_FindingsSorter
 from .TFCPS_OCIImageSecretScan import TFCPS_OCIImageSecretScan
 from .TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureVersion
 
@@ -245,25 +246,15 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
     @GeneralUtilities.check_arguments
     def __sort_findings(self, repository_folder: str) -> None:
-        pass
-        #TODO when <repo>\Other\Reference\Reference.md exists and it has a "## Findings"-section and this section has a table with the columns Id	Priority	State	Description	Impact	Notes then sort the table entries (just move the lines without editing them). if this table or the entsire section or the entire file is not there: do nothing.
-        #the moving should be done like this:
-        #-read all lines
-        #-sort lines
-        #- write back in sorted order.
-        #ignore the header-line and the horizal line (the line with dashes directly after the header) when sorting.
-        #how should be sorted?
-        #distinguish between 2 kind of entries: completed entries (state "fixed" or "accepted") and not completed entries (all other states).
-        #the sorted result has first ordered uncompleted entries and then second after that ordered completed entries.
-        #sorted uncompleted entries are sorted by priority (ascending: very high, high, medium, low) and then by id (ascending).
-        #completed entries are sorted by id (ascending).
+        self.sc.log.log("Sort findings...",LogLevel.Debug)
+        TFCPS_FindingsSorter().sort_findings(repository_folder)
 
     @GeneralUtilities.check_arguments
     def __do_project_linting_using_codespell(self, repository_folder: str) -> None:
         """Searches for typos in the repository using codespell. Findings are only reported as warnings and do not let the build fail.
         Only files which are not git-ignored are checked. See TFCPS_CodeSpellCheck for details."""
         try:
-            self.sc.log.log("Search for typos using codespell...")
+            self.sc.log.log("Search for typos using codespell...",LogLevel.Debug)
             findings: list[str] = TFCPS_CodeSpellCheck(self.sc).search_for_typos(repository_folder)
             for finding in findings:
                 self.sc.log.log(f"Possible typo: {finding}", LogLevel.Warning)
