@@ -2239,7 +2239,7 @@ class TFCPS_Tools_General:
 
     @GeneralUtilities.check_arguments
     def try_update_basic_repositoryreference_from_examples_repository(self, repository_folder:str):
-        source=f"https://raw.githubusercontent.com/anionDev/CommonProjectStructureExamples/refs/heads/main/Other/Reference/RepositoryStructure.mdd"
+        source=f"https://raw.githubusercontent.com/anionDev/CommonProjectStructureExamples/refs/heads/main/Other/Reference/RepositoryStructure.md"
         target=f"{repository_folder}/Other/Reference/RepositoryStructure.md"
         self.download_file(source,target)   
 

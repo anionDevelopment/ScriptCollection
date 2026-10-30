@@ -832,6 +832,19 @@ items:
                 # assert
                 self.assertNotIn("Authorization", actual_result)
 
+    def test_try_update_basic_repositoryreference_downloads_the_file_with_the_name_of_the_target(self) -> None:
+        # arrange
+        tools = TFCPS_Tools_General(ScriptCollectionCore())
+        with patch.object(tools, "download_file") as download_file:
+
+            # act
+            tools.try_update_basic_repositoryreference_from_examples_repository("repository")
+
+            # assert
+            source: str = download_file.call_args.args[0]
+            target: str = download_file.call_args.args[1]
+            self.assertEqual(os.path.basename(target), source.split("/")[-1])
+
     def test_get_expected_schemalocation_of_another_version_references_another_xsd(self) -> None:
         # act
         actual_result = TFCPS_CodeUnitSpecific_Base.get_expected_schemalocation("4.1.2")
