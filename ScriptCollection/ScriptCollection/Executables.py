@@ -26,8 +26,9 @@ def RunAgentInSandbox() -> int:
     parser.add_argument('-v', '--verbose', action='store_true', required=False, default=False, help='Enables verbose output.')
     parser.add_argument('-c', '--codingagent', default=None, required=False, choices=[coding_agent.value for coding_agent in CodingAgent], help='Coding-agent which should be used. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
     parser.add_argument('--image', default=None, required=False, help='OCI-image which should be used for the sandbox: either an image-name defined in ".ScriptCollection/OCIImages/ImageDefinition.csv" or an image-address including tag. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
-    parser.add_argument('--dropcapabilities', default=None, required=False, choices=["true", "false"], help='Defines whether all capabilities should be dropped in the sandbox. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
+    parser.add_argument('-s','--dropcapabilities', default=None, required=False, choices=["true", "false"], help='Defines whether all capabilities should be dropped in the sandbox. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
     parser.add_argument('-a', '--additionalfolder', action='append', default=None, required=False, help='Folder which should additionally be mounted (read-write) into the sandbox under "/Workspace/Other/AdditionalResources/<folder-name>". Can be given multiple times.')
+    parser.add_argument('-d','--mountdockersocket', action='store_true', required=False, default=False, help='Mounts the docker-socket of the host (/var/run/docker.sock) into the sandbox so that the agent can use docker. DANGEROUS: this effectively gives the agent administrator-access to the docker-daemon of the host and makes the restrictions of the sandbox ineffective. Can only be set via this argument (not in the configuration-file); a warning is printed to stderr.')
     args = parser.parse_args()
     repo=os.getcwd()
     if args.repository is not None:
@@ -43,7 +44,7 @@ def RunAgentInSandbox() -> int:
     if args.additionalfolder is not None:
         additional_folders = [GeneralUtilities.resolve_relative_path(additional_folder, os.getcwd()) for additional_folder in args.additionalfolder]
     ar = AgentRunner(args.verbose)
-    return ar.run(args.prompt, args.interactive, repo, configuration_overrides, additional_folders)
+    return ar.run(args.prompt, args.interactive, repo, configuration_overrides, additional_folders, args.mountdockersocket)
 
 
 def FilenameObfuscator() -> int:

@@ -38,17 +38,25 @@ class AgentRunner:
         self.verbose = verbose
 
     @GeneralUtilities.check_arguments
-    def run(self, prompt: str, interactive: bool, repository: str, configuration_overrides: AgentRunnerConfiguration, additional_folders: list[str]) -> int:
+    def run(self, prompt: str, interactive: bool, repository: str, configuration_overrides: AgentRunnerConfiguration, additional_folders: list[str], mount_docker_socket: bool) -> int:
         # Returns the exit-code of the container, which is the exit-code of the initialization-script if it failed and the exit-code of the agent otherwise.
         # In interactive mode the prompt is optional: without a prompt the agent is started without an initial instruction and the user can instruct it interactively.
         # Every value of configuration_overrides which is not None overrides the corresponding value from the configuration-file.
         # additional_folders are absolute host-folders which are additionally mounted (read-write) under "/Workspace/Other/AdditionalResources/<folder-name>".
+        # mount_docker_socket is deliberately not part of the configuration-file: it must be a conscious decision for every single run (see __print_docker_socket_warning).
         GeneralUtilities.assert_condition(interactive or prompt is not None, "A prompt is required when the agent is not run in interactive mode.")
         self.__assert_is_git_root_dir(repository)
         agentRunnerConfiguration: AgentRunnerConfiguration = self.__load_configuration(repository, configuration_overrides)
         initialization_script = self.__get_initialization_script(repository)
         additional_folder_volume_arguments = self.__get_additional_folder_volume_arguments(additional_folders)
+        if mount_docker_socket:
+            self.__print_docker_socket_warning()
+            additional_folder_volume_arguments = additional_folder_volume_arguments + ["--volume", "/var/run/docker.sock:/var/run/docker.sock"]
         return self.__run_sandbox(repository, agentRunnerConfiguration, prompt, interactive, initialization_script, additional_folder_volume_arguments)
+
+    @GeneralUtilities.check_arguments
+    def __print_docker_socket_warning(self) -> None:
+        GeneralUtilities.write_message_to_stderr("Warning: Mounting the docker-socket of the host into the sandbox is dangerous because it makes the sandbox ineffective.")
 
     @GeneralUtilities.check_arguments
     def __get_additional_folder_volume_arguments(self, additional_folders: list[str]) -> list[str]:
