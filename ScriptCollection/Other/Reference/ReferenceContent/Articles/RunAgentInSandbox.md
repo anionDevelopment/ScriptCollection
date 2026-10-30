@@ -38,8 +38,9 @@ scrais -i
 | `-i`, `--interactive` | Runs the agent interactively (with a terminal attached). Without this switch the agent runs non-interactively and ends when it has processed the prompt. |
 | `-c`, `--codingagent` | Coding-agent to use: `claude`, `codex`, `copilot`, `opencode` or `vibe`. Overrides the [configuration-file](#configuration). |
 | `--image` | Image to use, see [Image](#image). Overrides the configuration-file. |
-| `--dropcapabilities` | `true` or `false`, see [Configuration](#configuration). Overrides the configuration-file. |
+| `-s`, `--dropcapabilities` | `true` or `false`, see [Configuration](#configuration). Overrides the configuration-file. |
 | `-a`, `--additionalfolder` | Folder which is additionally mounted read-write into the container, see [Additional folders](#additional-folders). Can be given multiple times. |
+| `-d`, `--mountdockersocket` | Mounts the docker-socket of the host into the container, see [Docker-socket](#docker-socket). Dangerous; can only be set via this argument and not in the configuration-file. |
 | `-r`, `--repository` | Repository whose [initialization-script](#initialization-scripts) is used. Defaults to the current working-directory. |
 | `-v`, `--verbose` | Enables verbose output. |
 
@@ -72,6 +73,15 @@ Every folder given with `-a`/`--additionalfolder` is mounted read-write to `/Wor
 - The folder must exist; otherwise `scrais` aborts.
 - The folder-names must be unique, because they are the mount-targets. Two folders with the same name (for example `C:\A\Data` and `C:\B\Data`) can not be given together.
 - Every change of the agent in such a folder ends up directly in the folder on the host.
+
+### Docker-socket
+
+By default the agent has no access to docker. With `--mountdockersocket` the docker-socket of the host (`/var/run/docker.sock`) is mounted into the container, so the `docker`-CLI of the image works with the docker-daemon of the host. A one-line warning is printed to stderr at every start.
+
+> **Caution:** Whoever can use the docker-socket is de facto administrator of the docker-daemon of the host. The agent can start arbitrary (also privileged) containers with arbitrary host-mounts, read and change files outside of the repository, read secrets of other containers and execute code which survives the end of the run. The restrictions of the sandbox (mounted folders, `drop_capabilities`) are ineffective then. Use this switch only for trusted repositories and prompts.
+
+- The switch is deliberately not available in the [configuration-file](#configuration), so that it is a conscious decision for every run.
+- Bind-mounts of `docker run -v` are resolved by the daemon on the host, not inside the container. Paths of the container (for example `/Workspace/<repository>`) do not exist there.
 
 ### Exit-code
 
