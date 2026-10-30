@@ -57,7 +57,7 @@ These scripts are mostly thin wrappers which delegate to ScriptCollection, so th
 All of these scripts are runnable unattended on every developer-machine, they exit with 0 on success and with a non-zero exit-code on failure.
 Running the whole pipeline is idempotent: it must not change any not-git-ignored file.
 
-Because these scripts only delegate to ScriptCollection, a change of the pipeline-behaviour usually does not belong into the repository but into ScriptCollection itself.
+Because these scripts only delegate to ScriptCollection, a change of the pipeline-behavior usually does not belong into the repository but into ScriptCollection itself.
 
 ## Build the codeunits
 
@@ -252,7 +252,7 @@ Running `scbuildcodeunits` in parallel on multiple repositories might result in 
 # Find out what a function really does
 
 This document describes what the automations are for, not how they are implemented.
-Whenever the exact behaviour of a command or of a function matters — which arguments it really accepts, in which order it does its steps, which files it touches, under which condition it fails — do not guess it and do not derive it from its name: **read its source-code** at https://github.com/anionDevelopment/ScriptCollection (mirror: https://github.com/anionDev/ScriptCollection).
+Whenever the exact behavior of a command or of a function matters — which arguments it really accepts, in which order it does its steps, which files it touches, under which condition it fails — do not guess it and do not derive it from its name: **read its source-code** at https://github.com/anionDevelopment/ScriptCollection (mirror: https://github.com/anionDev/ScriptCollection).
 
 Where to look:
 
@@ -260,15 +260,16 @@ Where to look:
 - `ScriptCollection/TFCPS/` contains the pipeline-logic which the scripts of a codeunit delegate to (per codeunit-type in the subfolders, for example `TFCPS/DotNet` and `TFCPS/NodeJS`).
 - `ScriptCollection/ScriptCollectionCore.py` and `ScriptCollection/GeneralUtilities.py` contain the general-purpose-functions which the rest uses.
 
-The installed package contains the same python-files, so reading them locally (in the `site-packages`-folder of the used python-installation) is usually faster than looking them up in the repository — but be aware that the installed version can be older than the repository, which matters exactly when a behaviour was changed recently.
+The installed package contains the same python-files, so reading them locally (in the `site-packages`-folder of the used python-installation) is usually faster than looking them up in the repository — but be aware that the installed version can be older than the repository, which matters exactly when a behavior was changed recently.
 
-If the behaviour turns out to be wrong or missing, the fix belongs into the ScriptCollection-repository (see the hints below).
+If the behavior turns out to be wrong or missing, the fix belongs into the ScriptCollection-repository (see the hints below).
 
 ## Changelog
 
 To find the correct changelog-file: Use `scshowprojectversion` to show the current product-version.
-It is important to determine the version after implementing the changes, not before it.
+It is important to determine the version after implementing the changes, not before.
 The changelog-filename in the changelog-folder is then `v<version>.md`, where `<version>` is the version shown by `scshowprojectversion`.
+ScriptCollection does automatic version-bumps at multiple places when building codeunits.
 
 # Hints
 

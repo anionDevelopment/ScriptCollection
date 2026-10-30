@@ -1085,8 +1085,8 @@ class GeneralUtilitiesTests(unittest.TestCase):
 
             # act & assert
             for decode in [False, True]:
-                assert GeneralUtilities.get_media_file_inconsistencies(files["ok_mp4"], decode) == []
-                assert GeneralUtilities.get_media_file_inconsistencies(files["ok_mkv"], decode) == []
+                self.assertEqual([], GeneralUtilities.get_media_file_inconsistencies(files["ok_mp4"], decode))
+                self.assertEqual([], GeneralUtilities.get_media_file_inconsistencies(files["ok_mkv"], decode))
 
     def test_get_media_file_inconsistencies_truncated_files(self) -> None:
         if not (GeneralUtilities.tool_is_available("ffmpeg") and GeneralUtilities.tool_is_available("ffprobe")):

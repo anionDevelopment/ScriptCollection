@@ -257,7 +257,7 @@ class TFCPS_MergeToStable:
     <hr/>
     Available reference-content for {codeunitname}:<br>
     {repo_url_html}<br>
-    <!--TODO add artefacts-link: <a href="./x">Artefacts</a><br>-->
+    <!--TODO add artifacts-link: <a href="./x">Artifacts</a><br>-->
     <a href="./Reference/index.html">Reference</a><br>
     <a href="./DiffReport/DiffReport.html">Diff-report</a><br>
     {coverage_report_link}

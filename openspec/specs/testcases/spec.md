@@ -24,9 +24,9 @@ machine which has the source-code of this product.
 - **THEN** the part which does the communication is separated from the logic and is replaced in the testcase, so that
   the testcase exercises the logic and no request leaves the process
 
-#### Scenario: A behaviour can only be exercised with a real server
+#### Scenario: A behavior can only be exercised with a real server
 
-- **WHEN** a behaviour can only be exercised by really running a server and really talking to it
+- **WHEN** a behavior can only be exercised by really running a server and really talking to it
 - **THEN** that verification is done outside of the testsuite and is not committed, and what is committed is the part
   which can be exercised without a server
 

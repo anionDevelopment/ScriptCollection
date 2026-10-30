@@ -105,7 +105,7 @@ a result:
   absolute paths, caches. Written into the repository of a developer, these are wrong there.
 - **Content the client sent itself**, unchanged - there is no point in sending it back.
 
-The earlier behaviour (replacing the whole codeunit-folder with the one of the runner) additionally **deleted** the local
+The earlier behavior (replacing the whole codeunit-folder with the one of the runner) additionally **deleted** the local
 codeunit-folder first. That destroys everything of that codeunit which is not part of the answer of the runner, including
 files which are not in git and can therefore not be restored, and on Windows it can not even complete: the build-script
 of the codeunit runs in a folder below the codeunit, a folder a process runs in can not be removed there, so the deletion

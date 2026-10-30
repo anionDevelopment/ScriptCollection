@@ -209,6 +209,8 @@ A build in a container (`scbuildcodeunitsc`) - on the host:
 2. The values of the required environment-variables are resolved (so step 1 can still provide them).
 3. The container is started: the repository is mounted, the folder `TFCPS/CustomScriptsForContainer` (if it exists), the [`TFCPS`](#tfcps)-folder (read-only, if it exists) and `GlobalCache/OCIImages/ImageRegistries.csv` (read-only, if it exists) are mounted and the environment-variables are handed over to the container.
 
+If the build itself runs in a container whose docker-socket is forwarded to the docker-daemon of the host (for example in the sandbox of [`scrais`](./RunAgentInSandbox.md)), the paths of that container do not exist for the daemon. In this case the build-container gets the volumes of the own container (`--volumes-from`), so the repository has the same path as in the own container, and the files of the configuration-folder are copied into the created container instead of being mounted, which means they are not read-only there.
+
 Inside the container `scbuildcodeunits` then runs the same steps as a build on the host, with one difference: `CustomPreCodeUnitBuildScriptInContainer.py` is executed instead of `CustomPreCodeUnitBuildScript.py`. The required environment-variables are resolved again in step 1, from the mounted `TFCPS/EnvironmentVariables.csv`; a value whose source is not available inside the container (for example a `hostenvvariable` or a secret-file outside of `TFCPS`) is taken from the environment-variable which the host passed into the container.
 
 ## Per-repository configuration

@@ -67,7 +67,7 @@ If you write a build- or maintenance-script with these commands, the same script
 Every one of these commands does something that **already exists** as a shell-built-in or Unix-utility:
 copy = `cp`/`copy`, remove = `rm`/`del`, regex-replace = `sed`/`Replace-Inline`, iterate = `find -exec` / `ForEach-Object`, etc.
 
-The problem is that the **syntax and behaviour differ** between Windows `cmd`, PowerShell, `bash` and `zsh`.
+The problem is that the **syntax and behavior differ** between Windows `cmd`, PowerShell, `bash` and `zsh`.
 The `sc*`-commands provide one syntax that works **everywhere identically**:
 
 ```bash

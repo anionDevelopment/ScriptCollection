@@ -29,7 +29,7 @@ def create_remote_build_with_answers(answers: list) -> tuple:
     with the list which collects the requests which were done. Each answer is used for one request: an answer which is an
     exception is raised, every other answer is returned as the answer of the runner."""
     sc = ScriptCollectionCore()
-    #Quiet, because the client logs that a runner is not reachable - which is the expected behaviour here and therefore
+    #Quiet, because the client logs that a runner is not reachable - which is the expected behavior here and therefore
     #must not appear in the output of the testrun.
     sc.log.loglevel = LogLevel.Quiet
     remote_build = TFCPS_RemoteBuild(sc)

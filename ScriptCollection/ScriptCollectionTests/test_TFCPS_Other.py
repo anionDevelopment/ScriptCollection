@@ -676,6 +676,97 @@ items:
                 executable_arguments: list[str] = run_in_container.call_args.args[3]
                 self.assertEqual("Productive", executable_arguments[executable_arguments.index("--targetenvironment")+1])
 
+    def test_update_dependencies_in_container_passes_the_ready_to_merge_and_fastlane_flags_into_the_container(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as repository:
+            GeneralUtilities.ensure_directory_exists(os.path.join(repository, ".git"))
+            build_codeunits = TFCPS_CodeUnit_BuildCodeUnits(repository, LogLevel.Information, "Productive", None, True, False, False, True, True)
+            with patch.object(build_codeunits, "_TFCPS_CodeUnit_BuildCodeUnits__run_scriptcollection_executable_in_container", return_value=(True, "")) as run_in_container:
+
+                # act
+                build_codeunits.update_dependencies_in_container(repository)
+
+                # assert
+                #the flags are evaluated by the build inside the container, so without forwarding them they would be silently ignored.
+                executable_arguments: list[str] = run_in_container.call_args.args[3]
+                self.assertIn("-m", executable_arguments)
+                self.assertIn("-f", executable_arguments)
+
+    def test_update_dependencies_in_container_does_not_pass_the_ready_to_merge_and_fastlane_flags_when_they_are_not_set(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as repository:
+            GeneralUtilities.ensure_directory_exists(os.path.join(repository, ".git"))
+            build_codeunits = TFCPS_CodeUnit_BuildCodeUnits(repository, LogLevel.Information, "Productive", None, True, False, False)
+            with patch.object(build_codeunits, "_TFCPS_CodeUnit_BuildCodeUnits__run_scriptcollection_executable_in_container", return_value=(True, "")) as run_in_container:
+
+                # act
+                build_codeunits.update_dependencies_in_container(repository)
+
+                # assert
+                executable_arguments: list[str] = run_in_container.call_args.args[3]
+                self.assertNotIn("-m", executable_arguments)
+                self.assertNotIn("-f", executable_arguments)
+
+    def test_base_mount_arguments_bind_mount_the_folder_when_running_on_a_host(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as repository:
+            GeneralUtilities.ensure_directory_exists(os.path.join(repository, ".git"))
+            build_codeunits = TFCPS_CodeUnit_BuildCodeUnits(repository, LogLevel.Information, "Productive", None, True, False, False)
+            with patch.object(build_codeunits, "_TFCPS_CodeUnit_BuildCodeUnits__is_running_in_container", return_value=False):
+
+                # act
+                folders: tuple[str, str] = build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__get_folders_inside_container(repository)
+                arguments: list[str] = build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__get_base_mount_arguments(repository, folders[0])
+
+                # assert
+                self.assertEqual(f"/Workspace/Project/{os.path.basename(repository)}", folders[0])
+                self.assertEqual(["-v", f"{repository}:{folders[0]}"], arguments)
+
+    def test_base_mount_arguments_share_the_volumes_when_running_in_a_container(self) -> None:
+        # arrange
+        #a bind-mount would be resolved by the docker-daemon of the host, where the path of this container does not exist.
+        with tempfile.TemporaryDirectory() as repository:
+            GeneralUtilities.ensure_directory_exists(os.path.join(repository, ".git"))
+            build_codeunits = TFCPS_CodeUnit_BuildCodeUnits(repository, LogLevel.Information, "Productive", None, True, False, False)
+            with patch.object(build_codeunits, "_TFCPS_CodeUnit_BuildCodeUnits__is_running_in_container", return_value=True), patch.object(build_codeunits.sc, "get_own_container_id", return_value="abc123"):
+
+                # act
+                folders: tuple[str, str] = build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__get_folders_inside_container(repository)
+                arguments: list[str] = build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__get_base_mount_arguments(repository, folders[0])
+
+                # assert
+                self.assertEqual(os.path.normpath(repository).replace(os.sep, "/"), folders[1])
+                self.assertEqual(["--volumes-from", "abc123"], arguments)
+
+    def test_copy_mounts_into_container_copies_files_and_folders_to_their_target_paths(self) -> None:
+        # arrange
+        #the daemon of the host can not resolve the paths of a container, so the sources are copied instead of bind-mounted.
+        with tempfile.TemporaryDirectory() as repository, tempfile.TemporaryDirectory() as sources:
+            GeneralUtilities.ensure_directory_exists(os.path.join(repository, ".git"))
+            build_codeunits = TFCPS_CodeUnit_BuildCodeUnits(repository, LogLevel.Information, "Productive", None, True, False, False)
+            source_file = os.path.join(sources, "a.csv")
+            GeneralUtilities.write_text_to_file(source_file, "content")
+            source_folder = os.path.join(sources, "folder")
+            GeneralUtilities.ensure_directory_exists(source_folder)
+            GeneralUtilities.write_text_to_file(os.path.join(source_folder, "b.txt"), "b")
+            copied: dict[str, str] = {}
+
+            def fake_run(program: str, arguments: list[str], *args, **kwargs) -> tuple[int, str, str, int]:
+                staging = arguments[1][:-2]
+                for root, _, files in os.walk(staging):
+                    for file in files:
+                        full = os.path.join(root, file)
+                        copied[os.path.relpath(full, staging)] = GeneralUtilities.read_text_from_file(full)
+                return (0, "", "", 0)
+            with patch.object(build_codeunits.sc, "run_program_argsasarray", side_effect=fake_run) as run_program:
+
+                # act
+                build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__copy_mounts_into_container("cid", ["-v", f"{source_file}:/x/a.csv:ro", "-v", f"{source_folder}:/y/folder"])
+
+                # assert
+                self.assertEqual({os.path.join("x", "a.csv"): "content", os.path.join("y", "folder", "b.txt"): "b"}, copied)
+                self.assertEqual("cid:/", run_program.call_args.args[1][2])
+
     def test_common_project_structure_version_is_supported(self) -> None:
         # assert
         #the version which ScriptCollection uses itself must always be one of the versions it supports.

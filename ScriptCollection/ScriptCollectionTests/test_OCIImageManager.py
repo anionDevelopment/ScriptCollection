@@ -31,7 +31,7 @@ def create_oci_image_manager(configuration_folder: str, mounted_registries_file:
     so a testcase can also verify which registry was asked and how often."""
     sc = ScriptCollectionCore()
     #Quiet, because the manager logs a warning when an image is taken from its fallback-registry, which is the expected
-    #behaviour in some of the tests below and therefore must not appear in the output of the testrun.
+    #behavior in some of the tests below and therefore must not appear in the output of the testrun.
     sc.log.loglevel = LogLevel.Quiet
     setattr(sc, "get_global_cache_folder", lambda: configuration_folder)
 

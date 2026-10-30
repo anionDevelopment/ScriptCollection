@@ -112,7 +112,7 @@ The findings-table MUST have a fixed set of columns in a fixed order.
 
 The state of a finding SHALL be determined by checking the source-code itself, not by documentation or comments.
 A fixed finding SHALL NOT be removed from the table; its state SHALL be set to `fixed` instead.
-The id of a finding SHALL be struck through for example `~~SEC-2~~` if and only if its state is `fixed`, and no other cell of the table SHALL ever be struck through.
+The id of a finding SHALL be struck through for example `~~SEC-2~~` if and only if its state is `fixed` or `accepted`, and no other cell of the table SHALL ever be struck through.
 
 #### Scenario: A finding was fixed
 

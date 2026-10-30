@@ -11,7 +11,7 @@ Observed facts (from code and herdr documentation, not tested against a real her
   and `pane release-agent` on exit. States: idle, working, blocked. The CLI works on Windows hosts without touching the
   named pipe.
 - The built-in herdr integration for claude only reports the session identity; the state still comes from screen detection.
-  Re-using the herdr hooks inside the container therefore does not solve the problem.
+  Reusing the herdr hooks inside the container therefore does not solve the problem.
 - Agents supported by both `scrais` and herdr: claude, codex, opencode. copilot and vibe are not supported by herdr.
 
 ## Goals / Non-Goals

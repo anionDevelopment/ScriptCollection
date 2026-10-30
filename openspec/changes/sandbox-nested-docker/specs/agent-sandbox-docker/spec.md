@@ -103,7 +103,7 @@ SHALL NOT add a key to the configuration file. The names, short names, value for
 
 Docker in the sandbox SHALL work with the same command line and the same visible behavior on Windows, macOS and Linux hosts. The
 host-specific part (which isolation backend is used) SHALL be selected by `scrais` per platform and SHALL NOT be visible in the
-command line. Where a platform cannot provide a backend which fulfils the other requirements, docker SHALL be unavailable there (with the
+command line. Where a platform cannot provide a backend which fulfills the other requirements, docker SHALL be unavailable there (with the
 message described above) instead of weakening the sandbox.
 
 #### Scenario: Run on each platform

@@ -133,7 +133,7 @@ class PlantUMLRenderer:
         if GeneralUtilities.current_system_is_windows():
             return []
         # "getuid"/"getgid" do not exist on windows, which is why they are only reached below that check; pylint
-        # analyses this file on windows as well and does not see that.
+        # analyzes this file on windows as well and does not see that.
         return ["--user", f"{os.getuid()}:{os.getgid()}"]  # pylint: disable=no-member
 
     @GeneralUtilities.check_arguments

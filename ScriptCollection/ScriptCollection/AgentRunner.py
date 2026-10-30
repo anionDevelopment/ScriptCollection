@@ -139,11 +139,10 @@ class AgentRunner:
         agent_command = self.__get_agent_command(agentRunnerConfiguration.codingagent, prompt, interactive)
         # The entrypoint is always used: if an initialization-script is present it runs it first, and then always starts the agent.
         entrypoint_script_content = self.__get_entrypoint_script_content(agent_command, initialization_script)
-        entrypoint_file_handle = tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False, newline="\n", encoding="utf-8")
-        host_entrypoint_file = entrypoint_file_handle.name
-        try:
+        with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False, newline="\n", encoding="utf-8") as entrypoint_file_handle:
+            host_entrypoint_file = entrypoint_file_handle.name
             entrypoint_file_handle.write(entrypoint_script_content)
-            entrypoint_file_handle.close()
+        try:
             # Make the entrypoint-script executable (chmod +x). On Linux-/macOS-hosts the execute-bit propagates into the container; on Windows-hosts this has no effect, which is why the script is additionally invoked via "sh" below.
             os.chmod(host_entrypoint_file, 0o755)
             docker_command = ["docker", "run", "--rm"]
