@@ -198,12 +198,13 @@ class TFCPS_CodeUnit_BuildCodeUnits:
                 hook.run_after_codeunit_was_built(tFCPS_CodeUnit_BuildCodeUnit)
             self.sc.log.log(GeneralUtilities.get_line())
 
-            self.search_for_secrets()
             self.tfcps_tools_general.generate_svg_files_from_plantuml_files_for_repository(self.repository, self.use_cache())
             self.tfcps_tools_general.generate_svg_files_from_vega_files_for_repository(self.repository, self.use_cache())
             self.tfcps_tools_general.generate_svg_files_from_vegalite_files_for_repository(self.repository, self.use_cache())
             self.__do_project_linting(self.repository)
+            self.__update_agent_sandbox_image(self.repository)
             self.__normalize_line_endings_of_common_files()
+            self.search_for_secrets()
 
             self.sc.log.log(GeneralUtilities.get_line())
 
@@ -237,6 +238,46 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.sc.log.log(f"Finished building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(end_time,False)}. (Duration: {GeneralUtilities.timedelta_to_simple_string(duration)})")
         self.sc.log.log(GeneralUtilities.get_line())
 
+
+    @GeneralUtilities.check_arguments
+    def __update_agent_sandbox_image(self, repository_folder: str) -> None:
+        """Sets the value "image" in "<repository>/.ScriptCollection/AgentSandboxConfiguration.ini" to the SCBuilder-image (address including tag)
+        defined in "<repository>/.ScriptCollection/OCIImages/ImageDefinition.csv".
+        Nothing is done if one of these files does not exist or if the image-definition-file does not contain an entry for SCBuilder."""
+        image_definition_file = os.path.join(repository_folder, ".ScriptCollection", "OCIImages", "ImageDefinition.csv")
+        agent_sandbox_configuration_file = os.path.join(repository_folder, ".ScriptCollection", "AgentSandboxConfiguration.ini")
+        if not os.path.isfile(image_definition_file) or not os.path.isfile(agent_sandbox_configuration_file):
+            return
+        scbuilder_image: str = None
+        for line in GeneralUtilities.read_nonempty_lines_from_file(image_definition_file):
+            if line.startswith("SCBuilder;"):
+                columns = line.split(";")
+                scbuilder_image = f"{columns[1]}:{columns[2]}"
+                break
+        if scbuilder_image is None:
+            return
+        self.sc.log.log(f"Set image of agent-sandbox to '{scbuilder_image}'...", LogLevel.Debug)
+        section_header = "[AgentSandboxConfiguration]"
+        image_line = f"image = {scbuilder_image}"
+        lines: list[str] = GeneralUtilities.read_lines_from_file(agent_sandbox_configuration_file)
+        updated_lines: list[str] = []
+        current_section: str = None
+        image_was_set = False
+        for line in lines:
+            stripped_line = line.strip()
+            if stripped_line.startswith("[") and stripped_line.endswith("]"):
+                current_section = stripped_line
+            elif current_section == section_header and re.match(r"^image\s*=", stripped_line):
+                line = image_line
+                image_was_set = True
+            updated_lines.append(line)
+        if not image_was_set:
+            if section_header in [line.strip() for line in updated_lines]:
+                updated_lines.insert([line.strip() for line in updated_lines].index(section_header) + 1, image_line)
+            else:
+                updated_lines.extend([section_header, image_line])
+        if updated_lines != lines:
+            GeneralUtilities.write_lines_to_file(agent_sandbox_configuration_file, updated_lines)
 
     @GeneralUtilities.check_arguments
     def __do_project_linting(self, repository_folder: str) -> None:
