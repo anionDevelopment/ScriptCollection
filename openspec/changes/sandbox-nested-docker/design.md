@@ -62,7 +62,7 @@ making the sandbox stronger than today when docker is not available.
   the runtime installed in the engine, so it cannot be assumed for Docker Desktop. A microVM backend (Docker Sandboxes) is
   described for macOS and Windows (experimental) and Linux (container based, legacy) in secondary sources.
 - Therefore the backend is selected per platform and engine by `scrais`. The spec demands the same behavior everywhere; whether
-  one platform has no backend which fulfils the safety requirements is only known after the spike. In that case docker is unavailable on that platform and this requirement
+  one platform has no backend which fulfills the safety requirements is only known after the spike. In that case docker is unavailable on that platform and this requirement
   has to be revisited with the user; the safety requirements are not relaxed.
 - Mounts and scripts follow the existing patterns (`replace(os.sep, "/")`, scripts written with LF and started via `sh`/`bash`).
 

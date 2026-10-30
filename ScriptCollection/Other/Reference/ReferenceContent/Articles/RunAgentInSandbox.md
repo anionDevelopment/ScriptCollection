@@ -82,6 +82,7 @@ By default the agent has no access to docker. With `--mountdockersocket` the doc
 
 - The switch is deliberately not available in the [configuration-file](#configuration), so that it is a conscious decision for every run.
 - Bind-mounts of `docker run -v` are resolved by the daemon on the host, not inside the container. Paths of the container (for example `/Workspace/<repository>`) do not exist there.
+- `scbuildcodeunits -c` and `scbuildcodeunitsc` detect that they run in a container. They then start the build-container with the volumes of the sandbox (`--volumes-from`), so the repository has the same path there, and copy the files of the [configuration-folder](./ConfigurationFolder.md) which would normally be mounted into the created container instead of mounting them. Copied files are not read-only.
 
 ### Exit-code
 

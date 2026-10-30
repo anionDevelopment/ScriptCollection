@@ -1,6 +1,8 @@
 import os
 import json
 import re
+import shutil
+import tempfile
 from datetime import datetime, timedelta,timezone
 import xmlschema
 from packaging.version import Version
@@ -484,11 +486,15 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         container_base_mount_folder, container_repository_folder = self.__get_folders_inside_container(base_mount_folder)
 
         #only the arguments which scupdatedependencies really accepts are passed. It has no equivalent of the
-        #pre-merge-, assert-no-new-changes-, ready-to-merge- and fastlane-flags of scbuildcodeunits, so passing one
-        #of them would make the argument-parsing fail inside the container.
+        #pre-merge- and assert-no-new-changes-flags of scbuildcodeunits, so passing one of them would make the
+        #argument-parsing fail inside the container.
         scupdatedependencies_arguments = ["scupdatedependencies", "-r", container_repository_folder, "-v", "4", "--targetenvironment", self.target_environment_type]
         if not self.__use_cache:
             scupdatedependencies_arguments.append("-n")
+        if self.__add_ready_to_merge_flag:
+            scupdatedependencies_arguments.append("-m")
+        if self.__fast_lane:
+            scupdatedependencies_arguments.append("-f")
         if GeneralUtilities.string_has_content(self.additionalargumentsfile):
             scupdatedependencies_arguments += ["--additionalargumentsfile", self.__translate_path_into_container(self.additionalargumentsfile, container_repository_folder)]
         return self.__run_scriptcollection_executable_in_container(base_mount_folder, container_base_mount_folder, container_repository_folder, scupdatedependencies_arguments, "Update dependencies in container")
@@ -503,9 +509,48 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         normalized_repository = os.path.normpath(self.repository)
         relative_repository_path = os.path.relpath(normalized_repository, normalized_base_mount_folder).replace(os.sep, "/")
         GeneralUtilities.assert_condition(relative_repository_path == "." or not relative_repository_path.startswith(".."), f"The repository '{self.repository}' is not located inside the base-mount-folder '{base_mount_folder}'.")
-        container_base_mount_folder = f"/Workspace/Project/{os.path.basename(normalized_base_mount_folder)}"
+        if self.__is_running_in_container():
+            #the build-container shares the volumes of this container (see __get_base_mount_arguments), so the folders have the same paths there.
+            container_base_mount_folder = normalized_base_mount_folder.replace(os.sep, "/")
+        else:
+            container_base_mount_folder = f"/Workspace/Project/{os.path.basename(normalized_base_mount_folder)}"
         container_repository_folder = container_base_mount_folder if relative_repository_path == "." else f"{container_base_mount_folder}/{relative_repository_path}"
         return (container_base_mount_folder, container_repository_folder)
+
+    @GeneralUtilities.check_arguments
+    def __is_running_in_container(self) -> bool:
+        #the filesystem-marker is checked in addition to the convention-based environment-variable, like in __search_for_secrets_in_repository.
+        return os.path.exists("/.dockerenv") or self.sc.is_runnning_in_container()
+
+    @GeneralUtilities.check_arguments
+    def __get_base_mount_arguments(self, base_mount_folder: str, container_base_mount_folder: str) -> list[str]:
+        """Returns the docker-arguments which make base_mount_folder available inside the build-container.
+        Running directly on a host the folder is bind-mounted. Running in a container whose docker-socket is forwarded to the daemon of the
+        host (for example the sandbox of scrais), a bind-mount would be resolved by that daemon, where the path of this process does not
+        exist: docker would silently create an empty folder, so the build would find no repository. The volumes of this container are
+        shared with the build-container instead, which makes the folder visible there under exactly the path this process uses."""
+        if not self.__is_running_in_container():
+            return ["-v", f"{base_mount_folder}:{container_base_mount_folder}"]
+        return ["--volumes-from", self.sc.get_own_container_id()]
+
+    @GeneralUtilities.check_arguments
+    def __copy_mounts_into_container(self, container_id: str, mount_arguments: list[str]) -> None:
+        """Copies the sources of the given bind-mount-arguments ("-v", "<source>:<target>[:ro]") into the not yet started container.
+        That is required instead of bind-mounting them whenever this process runs in a container whose docker-socket is forwarded to the
+        daemon of the host, because that daemon would resolve the source-paths on the host, where they do not exist. The read-only-flag
+        can not be applied to copied files."""
+        with tempfile.TemporaryDirectory() as staging_folder:
+            for index in range(0, len(mount_arguments), 2):
+                GeneralUtilities.assert_condition(mount_arguments[index] == "-v", f"Unexpected mount-argument '{mount_arguments[index]}'.")
+                #split from the right because the source can contain colons itself (for example the drive-letter of a windows-path).
+                source, target = mount_arguments[index + 1].removesuffix(":ro").rsplit(":", 1)
+                staged_target: str = os.path.join(staging_folder, target.lstrip("/"))
+                GeneralUtilities.ensure_directory_exists(os.path.dirname(staged_target))
+                if os.path.isdir(source):
+                    shutil.copytree(source, staged_target)
+                else:
+                    shutil.copy2(source, staged_target)
+            self.sc.run_program_argsasarray("docker", ["cp", f"{staging_folder}/.", f"{container_id}:/"])
 
     @GeneralUtilities.check_arguments
     def __run_scriptcollection_executable_in_container(self, base_mount_folder: str, container_base_mount_folder: str, container_repository_folder: str, executable_arguments: list[str], log_message: str) -> tuple[bool, str]:
@@ -580,19 +625,28 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             env_arguments += ["-e", env_variable_name]
 
         #run the tool inside the SCBuilder-image. base_mount_folder is mounted into the container (covering the repository and, for submodules, its real gitdir) and the docker-socket is forwarded because codeunit-builds often start containers (for example local test-services).
-        docker_arguments = [
-            "run", "--rm",
-            "-v", f"{base_mount_folder}:{container_base_mount_folder}",
+        in_container: bool = self.__is_running_in_container()
+        #bind-mounts of host-specific files are resolved by the docker-daemon, so they are only usable when running directly on a host. In a container they are copied into the created container (see __copy_mounts_into_container).
+        container_arguments = [
             "-v", "/var/run/docker.sock:/var/run/docker.sock",
             "-w", container_repository_folder,
-        ] + mount_arguments + env_arguments + [
+        ] + ([] if in_container else mount_arguments) + env_arguments + [
             image,
         ] + executable_arguments
+        docker_arguments = self.__get_base_mount_arguments(base_mount_folder, container_base_mount_folder) + container_arguments
         self.sc.log.log(f"{log_message} using image \"{image}\"...")
         image_address, image_tag = ScriptCollectionCore.split_image_address_and_tag(image)
         self.sc.docker_pull(image_address, image_tag)
         # the exitcode is evaluated by the caller (returned as part of the result-tuple), so the program-runner must not raise on a non-zero exitcode here.
-        result=self.sc.run_program_argsasarray("docker", docker_arguments, throw_exception_if_exitcode_is_not_zero=False, print_live_output=True, env_vars=required_environment_variables)
+        if not in_container:
+            result=self.sc.run_program_argsasarray("docker", ["run", "--rm"] + docker_arguments, throw_exception_if_exitcode_is_not_zero=False, print_live_output=True, env_vars=required_environment_variables)
+        else:
+            container_id: str = self.sc.run_program_argsasarray("docker", ["create"] + docker_arguments, env_vars=required_environment_variables)[1].strip()
+            try:
+                self.__copy_mounts_into_container(container_id, mount_arguments)
+                result=self.sc.run_program_argsasarray("docker", ["start", "--attach", container_id], throw_exception_if_exitcode_is_not_zero=False, print_live_output=True)
+            finally:
+                self.sc.run_program_argsasarray("docker", ["rm", "--force", container_id], throw_exception_if_exitcode_is_not_zero=False)
         exit_code:int=result[0]
         stdout:str=result[1] or GeneralUtilities.empty_string
         stderr:str=result[2] or GeneralUtilities.empty_string
@@ -836,7 +890,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
         config_file = os.path.join(self.repository, ".betterleaks.toml")
         #the filesystem-marker is checked in addition to the convention-based environment-variable (which the rest of this class uses as well),
-        #because a wrong result here does not only change a message but makes the scan analyse the wrong folder.
+        #because a wrong result here does not only change a message but makes the scan analyze the wrong folder.
         running_in_container = os.path.exists("/.dockerenv") or self.sc.is_runnning_in_container()
         if running_in_container:
             # We run inside the build-container with the docker-socket forwarded to the host-daemon.

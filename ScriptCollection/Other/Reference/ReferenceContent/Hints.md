@@ -46,7 +46,7 @@ There are three ways, which have to be distinguished because they have different
 
 ### What is scanned
 
-The scan is implemented in `TFCPS_OCIImageSecretScan`. It exports the image with `docker save` and analyses the resulting archive:
+The scan is implemented in `TFCPS_OCIImageSecretScan`. It exports the image with `docker save` and analyzes the resulting archive:
 
 | Part | Checked for |
 |---|---|

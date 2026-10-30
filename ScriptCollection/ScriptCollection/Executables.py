@@ -408,12 +408,14 @@ def UpdateDependenciesC() -> int:
     parser.add_argument('--additionalargumentsfile', required=False, default=None)
     parser.add_argument("-n",'--nocache', required=False, default=False, action='store_true')
     parser.add_argument('-b','--basemountfolder', required=False, default=None)
+    parser.add_argument('-m','--addreadytomergeflag', required=False, default=False, action='store_true')
+    parser.add_argument('-f','--fastlane', required=False, default=False, action='store_true', help="Skips running RunTestcases.py")
     args = parser.parse_args()
 
     GeneralUtilities.reconfigure_standard_input_and_outputs()
     repo:str=GeneralUtilities.resolve_relative_path(args.repositoryfolder,os.getcwd())
     verbosity=LogLevel(int(args.verbosity))
-    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,False,False)
+    t:TFCPS_CodeUnit_BuildCodeUnits=TFCPS_CodeUnit_BuildCodeUnits(repo,verbosity,args.targetenvironment,args.additionalargumentsfile,not args.nocache,False,False,args.addreadytomergeflag,args.fastlane)
     base_mount_folder:str=args.basemountfolder
     if base_mount_folder is None:
         base_mount_folder=t.get_default_base_mount_folder()

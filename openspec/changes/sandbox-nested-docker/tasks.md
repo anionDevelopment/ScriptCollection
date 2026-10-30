@@ -3,7 +3,7 @@
 ## 1. Verification spike (not committed as testcases)
 
 - [ ] 1.1 Decide with the user the docker engine of the target hosts per platform (design open question 1).
-- [ ] 1.1a Determine for Windows, macOS and Linux which backend fulfils all safety requirements; if one platform has none, go back to the user.
+- [ ] 1.1a Determine for Windows, macOS and Linux which backend fulfills all safety requirements; if one platform has none, go back to the user.
 - [ ] 1.2 Verify on such a host: `docker run --runtime=sysbox-runc` with the SCBuilder image, `dockerd` starts, `docker run hello-world` and `docker build` work, `docker ps` shows only private containers.
 - [ ] 1.3 Verify that a nested container cannot reach host paths (bind mount of a host path outside the mounts) and that nothing remains on the host after the run.
 - [ ] 1.4 Verify the combination with `drop_capabilities = true`; record the result in design.md.
