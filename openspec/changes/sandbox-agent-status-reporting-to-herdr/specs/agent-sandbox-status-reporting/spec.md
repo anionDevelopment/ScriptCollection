@@ -2,16 +2,13 @@
 
 ## Purpose
 
-Records how the state of an agent which runs in the agent sandbox (`scrais`) becomes visible in herdr, and which isolation
-rules the channel between container and host has to respect.
+Records how the state of an agent which runs in the agent sandbox (`scrais`) becomes visible in herdr, and which isolation rules the channel between container and host has to respect.
 
 ## ADDED Requirements
 
 ### Requirement: The state of a sandboxed agent is reported to herdr
 
-When `scrais` is started inside a herdr pane (herdr environment variables are present) and the used coding-agent has a status
-adapter, `scrais` SHALL report the state of the agent to herdr through the herdr CLI. The reported states SHALL be `working`
-while the agent processes a prompt, `idle` while it waits for input, and `blocked` while it waits for a decision of the user.
+When `scrais` is started inside a herdr pane (herdr environment variables are present) and the used coding-agent has a status adapter, `scrais` SHALL report the state of the agent to herdr through the herdr CLI. The reported states SHALL be `working` while the agent processes a prompt, `idle` while it waits for input, and `blocked` while it waits for a decision of the user.
 When the container ends, `scrais` SHALL release the agent in herdr.
 
 #### Scenario: Agent receives a prompt
@@ -41,8 +38,8 @@ When the container ends, `scrais` SHALL release the agent in herdr.
 
 ### Requirement: Reporting is inactive outside of herdr and for agents without adapter
 
-`scrais` SHALL NOT call herdr when the herdr environment variables are not present, and SHALL NOT report for a coding-agent
-without status adapter. In both cases the agent SHALL be started exactly as without this feature.
+`scrais` SHALL NOT call herdr when the herdr environment variables are not present, and SHALL NOT report for a coding-agent without status adapter.
+In both cases the agent SHALL be started exactly as without this feature.
 
 #### Scenario: scrais is started outside of herdr
 
@@ -56,9 +53,8 @@ without status adapter. In both cases the agent SHALL be started exactly as with
 
 ### Requirement: The container can only communicate fixed state tokens to the host
 
-The channel from container to host SHALL consist of one event file in a dedicated host folder which is mounted into the
-container. The host SHALL accept only the exact tokens `working`, `idle`, `blocked` and `ended` from it, SHALL ignore every other
-line, and SHALL NOT pass any content of the file as argument, message or command to herdr except the validated state.
+The channel from container to host SHALL consist of one event file in a dedicated host folder which is mounted into the container.
+The host SHALL accept only the exact tokens `working`, `idle`, `blocked` and `ended` from it, SHALL ignore every other line, and SHALL NOT pass any content of the file as argument, message or command to herdr except the validated state.
 The herdr socket, the herdr binary and the herdr environment variables SHALL NOT be made available inside the container.
 
 #### Scenario: Container writes an unknown or malicious line
@@ -73,8 +69,8 @@ The herdr socket, the herdr binary and the herdr environment variables SHALL NOT
 
 ### Requirement: Reports are ordered and attributable
 
-Every report SHALL use a stable source identifier owned by `scrais` and an agent name which differs from the names of the agents
-which herdr supports natively. Every report SHALL carry a sequence number which increases across runs.
+Every report SHALL use a stable source identifier owned by `scrais` and an agent name which differs from the names of the agents which herdr supports natively.
+Every report SHALL carry a sequence number which increases across runs.
 
 #### Scenario: Two reports in quick succession
 
@@ -83,8 +79,8 @@ which herdr supports natively. Every report SHALL carry a sequence number which 
 
 ### Requirement: The command-line interface of scrais stays unchanged
 
-This change SHALL NOT add, remove or rename an argument of `scrais` and SHALL NOT add a key to the configuration file. The
-reporting is active automatically when the herdr environment variables are present.
+This change SHALL NOT add, remove or rename an argument of `scrais` and SHALL NOT add a key to the configuration file.
+The reporting is active automatically when the herdr environment variables are present.
 
 #### Scenario: Argument list is compared
 
@@ -93,10 +89,9 @@ reporting is active automatically when the herdr environment variables are prese
 
 ### Requirement: Reporting works on Windows, macOS and Linux hosts
 
-Reporting SHALL work on Windows, macOS and Linux hosts with identical behavior. The hook helper which runs in the container
-SHALL be a Linux shell script written with LF line endings and started via `sh`, independent of the host platform. Mounts
-SHALL use the same path conversion as the existing mounts, and the herdr call SHALL use `HERDR_BIN_PATH` as given, as an argument
-list without shell, so that `.exe` paths and spaces work.
+Reporting SHALL work on Windows, macOS and Linux hosts with identical behavior.
+The hook helper which runs in the container SHALL be a Linux shell script written with LF line endings and started via `sh`, independent of the host platform.
+Mounts SHALL use the same path conversion as the existing mounts, and the herdr call SHALL use `HERDR_BIN_PATH` as given, as an argument list without shell, so that `.exe` paths and spaces work.
 
 #### Scenario: Windows host
 
@@ -110,8 +105,7 @@ list without shell, so that `.exe` paths and spaces work.
 
 ### Requirement: The feature is testable without herdr, docker or a server
 
-The logic (token validation, event reading, mapping, command building, adapter content) SHALL be separated from process start
-and file-system watching, so that testcases exercise it without herdr, docker or a network.
+The logic (token validation, event reading, mapping, command building, adapter content) SHALL be separated from process start and file-system watching, so that testcases exercise it without herdr, docker or a network.
 
 #### Scenario: Testcase for the relay
 

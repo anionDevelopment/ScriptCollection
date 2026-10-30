@@ -2,11 +2,9 @@
 
 ## Why
 
-When `scrais` runs an agent in a sandbox container, the status indicator of that agent in herdr stays without a meaningful
-state. herdr determines the state of an agent from the foreground process of the pane and from the terminal output. In the
-pane only `scrais` and its child `docker` are visible, and the agent runs inside the container. Screen detection does not work
-for this setup, and setting the agent via environment variable does not help because the state is still missing. herdr offers
-a documented way to report the state explicitly (`pane report-agent`), but nothing in the sandbox uses it.
+When `scrais` runs an agent in a sandbox container, the status indicator of that agent in herdr stays without a meaningful state. herdr determines the state of an agent from the foreground process of the pane and from the terminal output.
+In the pane only `scrais` and its child `docker` are visible, and the agent runs inside the container.
+Screen detection does not work for this setup, and setting the agent via environment variable does not help because the state is still missing. herdr offers a documented way to report the state explicitly (`pane report-agent`), but nothing in the sandbox uses it.
 
 ## What Changes
 
@@ -24,6 +22,7 @@ a documented way to report the state explicitly (`pane report-agent`), but nothi
 ## Capabilities
 
 ### New Capabilities
+
 - `agent-sandbox-status-reporting`: reporting of the state of an agent which runs in the agent sandbox to herdr, including
   the isolation rules for the channel between container and host.
 

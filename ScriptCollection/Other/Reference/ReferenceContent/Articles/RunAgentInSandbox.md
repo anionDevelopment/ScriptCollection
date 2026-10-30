@@ -6,14 +6,18 @@
 
 The purpose is to be able to always let AI-agents run unattended in a sandbox, with one simple command.
 
-An unattended agent executes commands on its own, without anybody approving them. Running it like that on the host is a security-risk, because it can access everything the user can access (other repositories, the home-folder, credentials, the whole file-system). The sandbox is what increases the security: inside the container the agent sees only:
+An unattended agent executes commands on its own, without anybody approving them.
+Running it like that on the host is a security-risk, because it can access everything the user can access (other repositories, the home-folder, credentials, the whole file-system).
+The sandbox is what increases the security: inside the container the agent sees only:
 
 - the repository it should work in (mounted read-write),
 - the [additional folders](#additional-folders) given with `-a` (mounted read-write),
 - what the used image contains,
 - what an optional [initialization-script](#initialization-scripts) sets up.
 
-Because the damage an agent can do is limited to the container and the mounted repository, `scrais` starts every agent in non-interactive mode with its "approve everything"-switch (see [Supported agents](#supported-agents)), so it can work without asking for permission. The interactive mode uses the same sandbox when a user wants to work together with the agent. For `claude` and `copilot` the "approve everything"-switch is also used in interactive mode, so the user is only asked for decisions about the task and not for permissions.
+Because the damage an agent can do is limited to the container and the mounted repository, `scrais` starts every agent in non-interactive mode with its "approve everything"-switch (see [Supported agents](#supported-agents)), so it can work without asking for permission.
+The interactive mode uses the same sandbox when a user wants to work together with the agent.
+For `claude` and `copilot` the "approve everything"-switch is also used in interactive mode, so the user is only asked for decisions about the task and not for permissions.
 
 The container is removed (`docker run --rm`) as soon as the agent has finished, so every run starts from the state of the image.
 
@@ -32,17 +36,17 @@ cd C:\Projects\MyRepository
 scrais -i
 ```
 
-| Argument | Description |
-| --- | --- |
-| `-p`, `--prompt` | Prompt which is passed to the agent. Required in non-interactive mode, optional in interactive mode. |
-| `-i`, `--interactive` | Runs the agent interactively (with a terminal attached). Without this switch the agent runs non-interactively and ends when it has processed the prompt. |
-| `-c`, `--codingagent` | Coding-agent to use: `claude`, `codex`, `copilot`, `opencode` or `vibe`. Overrides the [configuration-file](#configuration). |
-| `--image` | Image to use, see [Image](#image). Overrides the configuration-file. |
-| `-s`, `--dropcapabilities` | `true` or `false`, see [Configuration](#configuration). Overrides the configuration-file. |
-| `-a`, `--additionalfolder` | Folder which is additionally mounted read-write into the container, see [Additional folders](#additional-folders). Can be given multiple times. |
+| Argument                    | Description                                                                                                                                                                   |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-p`, `--prompt`            | Prompt which is passed to the agent. Required in non-interactive mode, optional in interactive mode.                                                                          |
+| `-i`, `--interactive`       | Runs the agent interactively (with a terminal attached). Without this switch the agent runs non-interactively and ends when it has processed the prompt.                      |
+| `-c`, `--codingagent`       | Coding-agent to use: `claude`, `codex`, `copilot`, `opencode` or `vibe`. Overrides the [configuration-file](#configuration).                                                  |
+| `--image`                   | Image to use, see [Image](#image). Overrides the configuration-file.                                                                                                          |
+| `-s`, `--dropcapabilities`  | `true` or `false`, see [Configuration](#configuration). Overrides the configuration-file.                                                                                     |
+| `-a`, `--additionalfolder`  | Folder which is additionally mounted read-write into the container, see [Additional folders](#additional-folders). Can be given multiple times.                               |
 | `-d`, `--mountdockersocket` | Mounts the docker-socket of the host into the container, see [Docker-socket](#docker-socket). Dangerous; can only be set via this argument and not in the configuration-file. |
-| `-r`, `--repository` | Repository whose [initialization-script](#initialization-scripts) is used. Defaults to the current working-directory. |
-| `-v`, `--verbose` | Enables verbose output. |
+| `-r`, `--repository`        | Repository whose [initialization-script](#initialization-scripts) is used. Defaults to the current working-directory.                                                         |
+| `-v`, `--verbose`           | Enables verbose output.                                                                                                                                                       |
 
 Typical calls:
 
@@ -67,7 +71,8 @@ scrais -i -a C:\Temp\MyFolder -a C:\Data\OtherFolder
 
 ### Additional folders
 
-Every folder given with `-a`/`--additionalfolder` is mounted read-write to `/Workspace/Other/AdditionalResources/<folder-name>`, so the folder-name is preserved. Example: `-a C:\Temp\MyFolder` is available in the container as `/Workspace/Other/AdditionalResources/MyFolder`.
+Every folder given with `-a`/`--additionalfolder` is mounted read-write to `/Workspace/Other/AdditionalResources/<folder-name>`, so the folder-name is preserved.
+Example: `-a C:\Temp\MyFolder` is available in the container as `/Workspace/Other/AdditionalResources/MyFolder`.
 
 - A relative path is resolved against the current working-directory.
 - The folder must exist; otherwise `scrais` aborts.
@@ -76,7 +81,9 @@ Every folder given with `-a`/`--additionalfolder` is mounted read-write to `/Wor
 
 ### Docker-socket
 
-By default the agent has no access to docker. With `--mountdockersocket` the docker-socket of the host (`/var/run/docker.sock`) is mounted into the container, so the `docker`-CLI of the image works with the docker-daemon of the host. A one-line warning is printed to stderr at every start.
+By default the agent has no access to docker.
+With `--mountdockersocket` the docker-socket of the host (`/var/run/docker.sock`) is mounted into the container, so the `docker`-CLI of the image works with the docker-daemon of the host.
+A one-line warning is printed to stderr at every start.
 
 > **Caution:** Whoever can use the docker-socket is de facto administrator of the docker-daemon of the host. The agent can start arbitrary (also privileged) containers with arbitrary host-mounts, read and change files outside of the repository, read secrets of other containers and execute code which survives the end of the run. The restrictions of the sandbox (mounted folders, `drop_capabilities`) are ineffective then. Use this switch only for trusted repositories and prompts.
 
@@ -102,13 +109,16 @@ image = aniondev/scbuilder:v1.2.13
 drop_capabilities = true
 ```
 
-| Key | Meaning |
-| --- | --- |
-| `codingagent` | The agent which is started: `claude`, `codex`, `copilot`, `opencode` or `vibe`. |
-| `image` | The image the container is started from, see [Image](#image). |
+| Key                 | Meaning                                                                                                                                                                                         |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `codingagent`       | The agent which is started: `claude`, `codex`, `copilot`, `opencode` or `vibe`.                                                                                                                 |
+| `image`             | The image the container is started from, see [Image](#image).                                                                                                                                   |
 | `drop_capabilities` | If `true`, the container is started with `--cap-drop all` and `--security-opt no-new-privileges:true`. This hardens the sandbox but can break tools in the image which need a Linux-capability. |
 
-Every key can also be given as command-line-argument (`--codingagent`, `--image`, `--dropcapabilities`). A value given on the command-line overrides the value from the file. The file itself is optional: it is only required for the values which are not given on the command-line. If a value is neither given on the command-line nor defined in the file, `scrais` aborts with an error which names the missing value.
+Every key can also be given as command-line-argument (`--codingagent`, `--image`, `--dropcapabilities`).
+A value given on the command-line overrides the value from the file.
+The file itself is optional: it is only required for the values which are not given on the command-line.
+If a value is neither given on the command-line nor defined in the file, `scrais` aborts with an error which names the missing value.
 
 ### Image
 
@@ -121,15 +131,16 @@ If the value is neither an image-name from `ImageDefinition.csv` nor an address 
 
 ## Supported agents
 
-| `codingagent` | CLI | Interactive mode | Non-interactive mode |
-| --- | --- | --- | --- |
-| `claude` | Claude Code | `claude --dangerously-skip-permissions [prompt]` | `claude --print --dangerously-skip-permissions <prompt>` |
-| `codex` | OpenAI Codex | `codex [prompt]` | `codex exec --dangerously-bypass-approvals-and-sandbox <prompt>` |
-| `copilot` | GitHub Copilot CLI | `copilot --allow-all-tools --allow-all-paths [prompt]` | `copilot --allow-all-tools --allow-all-paths <prompt>` |
-| `opencode` | opencode | `opencode [prompt]` | `opencode run <prompt>` |
-| `vibe` | Mistral Vibe | `vibe [prompt]` | `vibe --auto-approve --prompt <prompt>` |
+| `codingagent` | CLI                | Interactive mode                                       | Non-interactive mode                                             |
+| ------------- | ------------------ | ------------------------------------------------------ | ---------------------------------------------------------------- |
+| `claude`      | Claude Code        | `claude --dangerously-skip-permissions [prompt]`       | `claude --print --dangerously-skip-permissions <prompt>`         |
+| `codex`       | OpenAI Codex       | `codex [prompt]`                                       | `codex exec --dangerously-bypass-approvals-and-sandbox <prompt>` |
+| `copilot`     | GitHub Copilot CLI | `copilot --allow-all-tools --allow-all-paths [prompt]` | `copilot --allow-all-tools --allow-all-paths <prompt>`           |
+| `opencode`    | opencode           | `opencode [prompt]`                                    | `opencode run <prompt>`                                          |
+| `vibe`        | Mistral Vibe       | `vibe [prompt]`                                        | `vibe --auto-approve --prompt <prompt>`                          |
 
-`scrais` only starts the agent; it does not configure it. Credentials, settings, skills etc. which the agent needs inside the container have to come from the image or from an [initialization-script](#initialization-scripts).
+`scrais` only starts the agent; it does not configure it.
+Credentials, settings, skills etc. which the agent needs inside the container have to come from the image or from an [initialization-script](#initialization-scripts).
 
 ## What the container looks like
 
@@ -140,7 +151,8 @@ If the value is neither an image-name from `ImageDefinition.csv` nor an address 
 
 ## Initialization-scripts
 
-An initialization-script prepares the container before the agent starts. The typical use is to make the credentials and the configuration of the agent available, which a fresh container does not have, for example:
+An initialization-script prepares the container before the agent starts.
+The typical use is to make the credentials and the configuration of the agent available, which a fresh container does not have, for example:
 
 - writing the token of the agent into its configuration-file,
 - configuring git-credentials,
@@ -148,7 +160,8 @@ An initialization-script prepares the container before the agent starts. The typ
 
 ### Declaring an initialization-script
 
-Initialization-scripts are declared per machine (not per repository) in `~/.ScriptCollection/RunAIInSandbox/InitializationScripts.csv`. The first line is a header-line; every further line maps a repository to its script:
+Initialization-scripts are declared per machine (not per repository) in `~/.ScriptCollection/RunAIInSandbox/InitializationScripts.csv`.
+The first line is a header-line; every further line maps a repository to its script:
 
 ```csv
 Repository;ScriptFile

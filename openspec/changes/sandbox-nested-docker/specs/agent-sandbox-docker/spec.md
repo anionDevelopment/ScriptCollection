@@ -8,10 +8,9 @@ Records how an agent in the agent sandbox (`scrais`) can use docker without weak
 
 ### Requirement: Docker works normally inside the sandbox
 
-When the prerequisites are met, the command `docker` inside the container SHALL work like on a normal machine for at least
-`docker run`, `docker build`, `docker pull`, `docker ps` and `docker compose`, without additional arguments, environment
-variables or manual preparation by the agent. No switch or configuration key SHALL be needed. The daemon SHALL be ready
-before the initialization script and the agent start.
+When the prerequisites are met, the command `docker` inside the container SHALL work like on a normal machine for at least `docker run`, `docker build`, `docker pull`, `docker ps` and `docker compose`, without additional arguments, environment variables or manual preparation by the agent.
+No switch or configuration key SHALL be needed.
+The daemon SHALL be ready before the initialization script and the agent start.
 
 #### Scenario: Agent starts a container
 
@@ -25,9 +24,9 @@ before the initialization script and the agent start.
 
 ### Requirement: Everything the agent starts stays inside the sandbox
 
-The docker daemon used by the agent SHALL be private to the sandbox container. Containers, images, networks and volumes
-which the agent creates SHALL NOT be visible on the daemon of the host and SHALL be gone when the sandbox ends. Containers
-started by the agent SHALL NOT be able to access host files other than those the sandbox itself has mounted.
+The docker daemon used by the agent SHALL be private to the sandbox container.
+Containers, images, networks and volumes which the agent creates SHALL NOT be visible on the daemon of the host and SHALL be gone when the sandbox ends.
+Containers started by the agent SHALL NOT be able to access host files other than those the sandbox itself has mounted.
 
 #### Scenario: Agent lists containers
 
@@ -46,9 +45,8 @@ started by the agent SHALL NOT be able to access host files other than those the
 
 ### Requirement: No unsafe configuration is needed or used
 
-For a run in which docker is provided, the `docker run` arguments of `scrais` SHALL NOT contain any argument which weakens
-the isolation of the sandbox. The existing behavior of `drop_capabilities` SHALL stay as configured, unless the isolating
-runtime makes a combination technically impossible; that case SHALL be rejected with a message instead of silently weakened.
+For a run in which docker is provided, the `docker run` arguments of `scrais` SHALL NOT contain any argument which weakens the isolation of the sandbox.
+The existing behavior of `drop_capabilities` SHALL stay as configured, unless the isolating runtime makes a combination technically impossible; that case SHALL be rejected with a message instead of silently weakened.
 
 #### Scenario: Start arguments are checked
 
@@ -59,9 +57,7 @@ runtime makes a combination technically impossible; that case SHALL be rejected 
 
 ### Requirement: The sandbox is never weakened to provide docker
 
-`scrais` SHALL check before the start whether the host provides the isolation required for nested docker and whether the image
-contains the docker daemon and CLI. If a check fails, `scrais` SHALL start the sandbox without docker (see above) and SHALL NOT
-fall back to the host socket or to any weaker configuration to provide docker.
+`scrais` SHALL check before the start whether the host provides the isolation required for nested docker and whether the image contains the docker daemon and CLI. If a check fails, `scrais` SHALL start the sandbox without docker (see above) and SHALL NOT fall back to the host socket or to any weaker configuration to provide docker.
 
 #### Scenario: Host has no suitable runtime
 
@@ -75,9 +71,9 @@ fall back to the host socket or to any weaker configuration to provide docker.
 
 ### Requirement: The switch to mount the host docker socket is removed
 
-The switch `-d`/`--mountdockersocket` SHALL NOT exist any more and SHALL NOT be replaced by another switch. `scrais` SHALL NOT
-offer any way to mount the docker socket of the host into the sandbox. The warning about the host socket and the documentation
-section about it SHALL be removed.
+The switch `-d`/`--mountdockersocket` SHALL NOT exist any more and SHALL NOT be replaced by another switch.
+`scrais` SHALL NOT offer any way to mount the docker socket of the host into the sandbox.
+The warning about the host socket and the documentation section about it SHALL be removed.
 
 #### Scenario: Old switch is used
 
@@ -91,8 +87,8 @@ section about it SHALL be removed.
 
 ### Requirement: The rest of the command-line interface stays unchanged
 
-Except for the removal of `-d`/`--mountdockersocket`, this change SHALL NOT add, remove or rename an argument of `scrais` and
-SHALL NOT add a key to the configuration file. The names, short names, value formats and defaults of all other arguments SHALL stay as before.
+Except for the removal of `-d`/`--mountdockersocket`, this change SHALL NOT add, remove or rename an argument of `scrais` and SHALL NOT add a key to the configuration file.
+The names, short names, value formats and defaults of all other arguments SHALL stay as before.
 
 #### Scenario: Argument list is compared
 
@@ -101,10 +97,9 @@ SHALL NOT add a key to the configuration file. The names, short names, value for
 
 ### Requirement: The feature works on Windows, macOS and Linux hosts
 
-Docker in the sandbox SHALL work with the same command line and the same visible behavior on Windows, macOS and Linux hosts. The
-host-specific part (which isolation backend is used) SHALL be selected by `scrais` per platform and SHALL NOT be visible in the
-command line. Where a platform cannot provide a backend which fulfills the other requirements, docker SHALL be unavailable there (with the
-message described above) instead of weakening the sandbox.
+Docker in the sandbox SHALL work with the same command line and the same visible behavior on Windows, macOS and Linux hosts.
+The host-specific part (which isolation backend is used) SHALL be selected by `scrais` per platform and SHALL NOT be visible in the command line.
+Where a platform cannot provide a backend which fulfills the other requirements, docker SHALL be unavailable there (with the message described above) instead of weakening the sandbox.
 
 #### Scenario: Run on each platform
 
@@ -118,8 +113,7 @@ message described above) instead of weakening the sandbox.
 
 ### Requirement: The feature is testable without docker
 
-The decision logic (argument building, forbidden-argument check, prerequisite evaluation, entrypoint content) SHALL be separated
-from process execution, so that testcases exercise it without docker and without a network.
+The decision logic (argument building, forbidden-argument check, prerequisite evaluation, entrypoint content) SHALL be separated from process execution, so that testcases exercise it without docker and without a network.
 
 #### Scenario: Prerequisite evaluation in a testcase
 

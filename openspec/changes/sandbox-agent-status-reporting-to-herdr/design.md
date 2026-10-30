@@ -16,11 +16,9 @@ Observed facts (from code and herdr documentation, not tested against a real her
 
 ## Goals / Non-Goals
 
-Goals: agent-agnostic core with one small adapter per agent; sandbox isolation unchanged; no new dependency; works for
-Windows hosts.
+Goals: agent-agnostic core with one small adapter per agent; sandbox isolation unchanged; no new dependency; works for Windows hosts.
 
-Non-Goals: status for copilot and vibe; transmitting messages or titles; reporting resume commands; non-interactive-mode
-specific behavior beyond the same states.
+Non-Goals: status for copilot and vibe; transmitting messages or titles; reporting resume commands; non-interactive-mode specific behavior beyond the same states.
 
 ## Decisions
 

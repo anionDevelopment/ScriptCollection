@@ -2,16 +2,15 @@
 
 ## Purpose
 
-Records the architectural constraints which every change to this product has to respect. They are not derivable from the
-source-code itself: they state what decides whether the product is in a healthy state and how the codeunits of this repository may
-depend on each other.
+Records the architectural constraints which every change to this product has to respect.
+They are not derivable from the source-code itself: they state what decides whether the product is in a healthy state and how the codeunits of this repository may depend on each other.
 
 ## Requirements
 
 ### Requirement: "scbuildcodeunits" is the single source of truth for the state of the pipeline
 
-The command `scbuildcodeunits` SHALL always be executable in this repository, and it SHALL succeed whenever the repository
-is in a healthy state. Whether the pipeline of this product is green SHALL be decided by that command and by nothing else.
+The command `scbuildcodeunits` SHALL always be executable in this repository, and it SHALL succeed whenever the repository is in a healthy state.
+Whether the pipeline of this product is green SHALL be decided by that command and by nothing else.
 
 #### Scenario: A change is considered finished
 
@@ -27,8 +26,8 @@ is in a healthy state. Whether the pipeline of this product is green SHALL be de
 
 ### Requirement: A codeunit only accesses codeunits which it declares as its dependencies
 
-A codeunit SHALL NOT access the source-code of another codeunit unless that other codeunit is declared as a dependent
-codeunit in its `<codeunit-name>.codeunit.xml`. The codeunits of this repository are: ScriptCollection.
+A codeunit SHALL NOT access the source-code of another codeunit unless that other codeunit is declared as a dependent codeunit in its `<codeunit-name>.codeunit.xml`.
+The codeunits of this repository are: ScriptCollection.
 
 #### Scenario: A codeunit needs functionality of another codeunit
 

@@ -2,12 +2,11 @@
 
 ## Why
 
-An agent in the sandbox sometimes needs docker (build an image, start a test service). The only way today is
-`scrais --mountdockersocket`, which mounts the docker socket of the host. Whoever can use that socket is administrator of the
-docker daemon of the host: the agent can start privileged containers with arbitrary host mounts, so the sandbox is
-ineffective. The other well-known ways (privileged docker-in-docker, relaxing seccomp or user namespace restrictions) weaken
-the sandbox in a similar way. The goal is docker inside the sandbox where everything the agent starts stays inside the
-sandbox and no unsafe configuration is needed.
+An agent in the sandbox sometimes needs docker (build an image, start a test service).
+The only way today is `scrais --mountdockersocket`, which mounts the docker socket of the host.
+Whoever can use that socket is administrator of the docker daemon of the host: the agent can start privileged containers with arbitrary host mounts, so the sandbox is ineffective.
+The other well-known ways (privileged docker-in-docker, relaxing seccomp or user namespace restrictions) weaken the sandbox in a similar way.
+The goal is docker inside the sandbox where everything the agent starts stays inside the sandbox and no unsafe configuration is needed.
 
 ## What Changes
 
@@ -28,6 +27,7 @@ sandbox and no unsafe configuration is needed.
 ## Capabilities
 
 ### New Capabilities
+
 - `agent-sandbox-docker`: docker usage inside the agent sandbox without access to the daemon, files or resources of the host.
 
 ### Modified Capabilities
