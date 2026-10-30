@@ -4,7 +4,7 @@ description: "Contains information about the \"common project structure\" which 
 metadata:
   purpose: "Information about repository-conventions."
   tags: information, conventions
-  version: 1.1.0
+  version: 1.1.1
 ---
 
 # General
@@ -52,7 +52,7 @@ Running the whole pipeline is idempotent: it must not change any not-git-ignored
 
 The update of the dependencies exists on two levels, and both of them are optional:
 
-- `<repository>/Other/UpdateDependencies.py` updates the things which belong to the repository as a whole, so everything which lives in `<repository>/Other` and not in a codeunit.
+- `<repository>/Other/Scripts/UpdateDependencies.py` updates the things which belong to the repository as a whole, so everything which lives in `<repository>/Other` and not in a codeunit.
 - `<codeunit>/Other/UpdateDependencies.py` updates the dependencies of one codeunit. Everything which is specific to a codeunit belongs here and not into the script of the repository. Whether a codeunit has one at all is stated in its `codeunit.xml` `properties/@codeunithasupdatabledependencies`, dependencies which are deliberately not updated are listed in `properties/updatesettings/ignoreddependencies`.
 
 The common project structure only defines **which** scripts must exist and **what** they must do, not **how** they are implemented.
@@ -94,6 +94,7 @@ It can be read from defined files:
 - `properties/@developmentstate`: for example "Active development", "Maintenance updates only" or "Inactive".
 - `properties/@codeunithastestablesourcecode`: whether the codeunit has testable source-code at all if `false`, there are no testcases and no `RunTestcases.py`.
 - `properties/@codeunithasupdatabledependencies`: whether the codeunit has dependencies which can be updated if `false`, there is no `UpdateDependencies.py`.
+- `properties/@throwexceptionifcodeunitfilecannotbevalidated`: whether a codeunit-file which is not valid against `codeunit.xsd` lets the build fail.
 - `properties/testsettings/@minimalcodecoverageinpercent`: the minimum test-coverage-threshold which the testcases must reach.
 - `properties/pipelinedemands`: tools optionally with version which must be available to build the codeunit.
 - `properties/updatesettings/ignoreddependencies`: dependencies which are deliberately not updated.
@@ -112,7 +113,7 @@ Further defined sources are the `ReadMe.md`-files product- and codeunit-level, i
 Building means running all scripts of all enabled codeunits for building, linting, running the testcases, etc. in the correct order regarding the dependencies between the codeunits.
 In repositories which implement the common project structure using ScriptCollection the pipeline-command for this is `scbuildcodeunits` with the `-c`-switch it runs the scripts in a container which provides a standardized environment.
 The details and all further switches are described in the skill `common-project-structure-using-scriptcollection`.
-If the pipeline-command exits with 0 then everything is fine.
+If the pipeline-command exits with 0 then the build succeeded, but linting-issues are only reported as warnings, so the output has to be checked for them as well.
 If it exits with a non-zero exit-code then there is an error and the output of the command should be checked for details.
 
 To ensure that the current branch is buildable the usual command to check that is `scbuildcodeunits -c -v 4`.
@@ -131,3 +132,5 @@ Use the following files to store draft-commit-messages and draft-commit-descript
 
 - `<repository>/.ScriptCollection/Cache/GitCommitMessageDraft.txt`: One line commit-message
 - `<repository>/.ScriptCollection/Cache/GitCommitDescriptionDraft.txt`: Optional multiline advanced commit description
+
+<!-- This file is generated. Do not modify. -->

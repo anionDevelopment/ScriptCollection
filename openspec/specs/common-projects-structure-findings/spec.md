@@ -122,7 +122,28 @@ The id of a finding SHALL be struck through for example `~~SEC-2~~` if and only 
 #### Scenario: A finding is still present
 
 - **WHEN** the source-code shows that a finding is still present completely or partially
-- **THEN** its state is `open` or `partially fixed` and its id is not struck through
+- **THEN** its state is `open` and its id is not struck through
+
+#### Scenario: A finding was accepted
+
+- **WHEN** it was decided that a finding stays as it is
+- **THEN** the row stays in the table, its state is set to `accepted` and its id is struck through
+
+### Requirement: The rows of the findings-table are sorted
+
+The rows of the findings-table SHALL be sorted automatically when the codeunits are built with `scbuildcodeunits`.
+The rows of findings which are not completed SHALL come first, sorted by priority from `very high` to `low` and then by id.
+The rows of completed findings, which are the findings with the state `fixed` or `accepted`, SHALL come after that, sorted by id.
+
+#### Scenario: A finding is added
+
+- **WHEN** a row is added to the findings-table at any position
+- **THEN** the next build moves it to the position which this sorting defines, and no other cell of the table is changed by that
+
+#### Scenario: A finding has an unknown priority or an invalid id
+
+- **WHEN** a finding which is not completed has a priority other than `very high`, `high`, `mid` or `low`, or any finding has an id which does not have the form `<prefix>-<number>`
+- **THEN** the build fails
 
 ### Requirement: The findings-section is formatted
 
@@ -132,3 +153,6 @@ After the findings-section was changed, the whole section SHALL be formatted acc
 
 - **WHEN** a row of the findings-table was added or changed
 - **THEN** the whole section `## Findings` is formatted, including the padding of the table-cells
+
+
+<!-- This file is generated. Do not modify. -->
