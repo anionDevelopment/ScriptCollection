@@ -9,28 +9,24 @@ Observed facts (code):
   initialization script and then `exec`s the agent. `drop_capabilities` adds `--cap-drop all` and `no-new-privileges`.
 - Nested containers cannot be isolated by the sandbox if they run on the daemon of the host (sibling containers).
 
-External facts (secondary sources, not tested here): Sysbox lets a container run docker without `--privileged` and without a
-socket mount via `--runtime=sysbox-runc`; it maps container root to an unprivileged host user, but is not a VM-equivalent
-boundary, needs installation on the docker host, and I could not confirm how it works with Docker Desktop on Windows. Docker
-Sandboxes run each agent in a microVM with a private docker daemon; Windows support is described as experimental, and its
-fit to the `scrais` model (own image, mounts, initialization script, all agents) is unknown.
+External facts (secondary sources, not tested here): Sysbox lets a container run docker without `--privileged` and without a socket mount via `--runtime=sysbox-runc`; it maps container root to an unprivileged host user, but is not a VM-equivalent boundary, needs installation on the docker host, and I could not confirm how it works with Docker Desktop on Windows.
+Docker Sandboxes run each agent in a microVM with a private docker daemon; Windows support is described as experimental, and its fit to the `scrais` model (own image, mounts, initialization script, all agents) is unknown.
 
 ## Goals / Non-Goals
 
 Goals: normal `docker` in the sandbox, nothing leaves the sandbox, no unsafe configuration, never weaken the sandbox to provide docker.
-Non-Goals: persistent image cache between runs, GPU access, nested docker for agents other than via the same mechanism,
-making the sandbox stronger than today when docker is not available.
+Non-Goals: persistent image cache between runs, GPU access, nested docker for agents other than via the same mechanism, making the sandbox stronger than today when docker is not available.
 
 ## Alternatives
 
-| Option | Stays in sandbox | Unsafe config needed | Verdict |
-| --- | --- | --- | --- |
-| Mount host socket (today) | no | the socket itself | removed without replacement switch |
-| Socket proxy filtering API calls to the host daemon | no (sibling containers on the host) | filter must catch every dangerous create/build parameter | rejected: large attack surface, fails the requirement that everything stays in the sandbox |
-| Privileged docker-in-docker sidecar | no (privileged container is a host breakout) | `--privileged` | rejected |
-| Rootless docker or podman inside the container | yes | relaxed seccomp or AppArmor, `/dev/fuse` or extra capabilities | rejected: needs the unsafe settings the requirement forbids (to be re-verified in the spike, because it depends on the host engine) |
-| Isolating runtime with nested docker (Sysbox) | yes | none (a different `--runtime`) | preferred first backend |
-| MicroVM sandbox with private daemon | yes, strongest | none | candidate second backend; fit to `scrais` unknown |
+| Option                                              | Stays in sandbox                             | Unsafe config needed                                           | Verdict                                                                                                                             |
+| --------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Mount host socket (today)                           | no                                           | the socket itself                                              | removed without replacement switch                                                                                                  |
+| Socket proxy filtering API calls to the host daemon | no (sibling containers on the host)          | filter must catch every dangerous create/build parameter       | rejected: large attack surface, fails the requirement that everything stays in the sandbox                                          |
+| Privileged docker-in-docker sidecar                 | no (privileged container is a host breakout) | `--privileged`                                                 | rejected                                                                                                                            |
+| Rootless docker or podman inside the container      | yes                                          | relaxed seccomp or AppArmor, `/dev/fuse` or extra capabilities | rejected: needs the unsafe settings the requirement forbids (to be re-verified in the spike, because it depends on the host engine) |
+| Isolating runtime with nested docker (Sysbox)       | yes                                          | none (a different `--runtime`)                                 | preferred first backend                                                                                                             |
+| MicroVM sandbox with private daemon                 | yes, strongest                               | none                                                           | candidate second backend; fit to `scrais` unknown                                                                                   |
 
 ## Decisions
 

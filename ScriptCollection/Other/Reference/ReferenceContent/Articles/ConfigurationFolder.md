@@ -32,7 +32,9 @@ Structure of `~/.ScriptCollection`:
 
 ### `PythonExecutable.txt`
 
-Configures which Python-executable ScriptCollection uses. The file-content is the absolute path to the executable. If the file does not exist, the current `sys.executable` (or `python`) is used.
+Configures which Python-executable ScriptCollection uses.
+The file-content is the absolute path to the executable.
+If the file does not exist, the current `sys.executable` (or `python`) is used.
 
 ```text
 /opt/venv/bin/python
@@ -40,18 +42,23 @@ Configures which Python-executable ScriptCollection uses. The file-content is th
 
 ## GlobalCache
 
-The folder `~/.ScriptCollection/GlobalCache` is the machine-wide cache. It can be emptied with the command `sccleantoolscache`.
+The folder `~/.ScriptCollection/GlobalCache` is the machine-wide cache.
+It can be emptied with the command `sccleantoolscache`.
 
 ### `GlobalCache/Tools`
 
-Contains the downloaded tools (CycloneDX-CLI, JRE, MediaMTX, ...). This folder is managed automatically and can be pre-filled with the command `scdownloadcachabletools`. See [Downloadable tools](./DownloadableTools.md) for details.
+Contains the downloaded tools (CycloneDX-CLI, JRE, MediaMTX, ...).
+This folder is managed automatically and can be pre-filled with the command `scdownloadcachabletools`.
+See [Downloadable tools](./DownloadableTools.md) for details.
 
 ### `GlobalCache/OCIImages/ImageRegistries.csv`
 
 When you use third-party OCI-images (for example a base-image for your custom image or a database-image for integration-tests) then you need to take them from a registry.
-By default the [docker-hub](https://hub.docker.com/) is used, which has a low rate-limit. It is therefore recommended to host your own registry that caches these images, so they can be pulled without rate-limits.
+By default the [docker-hub](https://hub.docker.com/) is used, which has a low rate-limit.
+It is therefore recommended to host your own registry that caches these images, so they can be pulled without rate-limits.
 
-This file maps an image-name to the custom registry-address it should be taken from. Columns: `ImageName;RegistryAddress`.
+This file maps an image-name to the custom registry-address it should be taken from.
+Columns: `ImageName;RegistryAddress`.
 
 ```csv
 ImageName;RegistryAddress
@@ -60,16 +67,26 @@ Nginx;myownregistry1.example.com/nginx
 DotNet;myownregistry2.example.com/dotnetbase
 ```
 
-When a custom registry is defined for an image here, that registry is used - but only if the image is really available there with the tag the repository defines. If the image is already available with that address and tag in the local image-store of the docker-daemon, the registry is not asked at all. Otherwise the manifest of the image is requested from the custom registry (after the login described below). The result of this check is remembered per image and tag by the object which resolves the image-addresses (`OCIImageManager`), so the registry is asked at most once per image for the lifetime of that object. If that request fails - because the registry is not reachable, because it does not contain the image, or because the available credentials do not permit the access - the fallback (upstream) registry from the repository's image-definition (see [Per-repository configuration](#per-repository-configuration)) is used instead. The fallback is used as well when no custom registry is defined for the image at all.
+When a custom registry is defined for an image here, that registry is used - but only if the image is really available there with the tag the repository defines.
+If the image is already available with that address and tag in the local image-store of the docker-daemon, the registry is not asked at all.
+Otherwise the manifest of the image is requested from the custom registry (after the login described below).
+The result of this check is remembered per image and tag by the object which resolves the image-addresses (`OCIImageManager`), so the registry is asked at most once per image for the lifetime of that object.
+If that request fails - because the registry is not reachable, because it does not contain the image, or because the available credentials do not permit the access - the fallback (upstream) registry from the repository's image-definition (see [Per-repository configuration](#per-repository-configuration)) is used instead.
+The fallback is used as well when no custom registry is defined for the image at all.
 The purpose of the fallback is that a freshly cloned project just works without further setup and that an unavailable custom registry does not break a build; a warning is shown when the fallback-registry is used, which states whether no custom registry is defined for the image or whether the image is not available in the custom registry (the warning does not distinguish why the custom registry did not provide it).
 
-This applies to a build in a container (`scbuildcodeunitsc`, `scbuildcodeunits -c`) as well: the file of the host is mounted read-only into the build-container (to `/Workspace/ScriptCollectionConfiguration/OCIImages/ImageRegistries.csv`), so the build inside the container takes the images from the same registries as a build on the host. Only this file (and, separately, the whole [`TFCPS`](#tfcps)-folder, so that a `file`-value of `EnvironmentVariables.csv` can point to a secret-file next to it) are mounted, not the whole configuration-folder, so nothing else of it is exposed to the container. The mount-path is an own path and not the configuration-folder of the container-user, because the home-directory inside the container depends on the user the image runs as. A self-hosted build-runner follows the same approach: it mounts only `TFCPS` and `GlobalCache/OCIImages` (read-only) into the configuration-folder of the user of the job-container, see [Build-runner-configuration](./BuildRunnerConfiguration.md). There the file is taken from that configuration-folder.
+This applies to a build in a container (`scbuildcodeunitsc`, `scbuildcodeunits -c`) as well: the file of the host is mounted read-only into the build-container (to `/Workspace/ScriptCollectionConfiguration/OCIImages/ImageRegistries.csv`), so the build inside the container takes the images from the same registries as a build on the host.
+Only this file (and, separately, the whole [`TFCPS`](#tfcps)-folder, so that a `file`-value of `EnvironmentVariables.csv` can point to a secret-file next to it) are mounted, not the whole configuration-folder, so nothing else of it is exposed to the container.
+The mount-path is an own path and not the configuration-folder of the container-user, because the home-directory inside the container depends on the user the image runs as.
+A self-hosted build-runner follows the same approach: it mounts only `TFCPS` and `GlobalCache/OCIImages` (read-only) into the configuration-folder of the user of the job-container, see [Build-runner-configuration](./BuildRunnerConfiguration.md).
+There the file is taken from that configuration-folder.
 
 > Note: If the custom registry requires authentication, the credentials have to be available where the pull happens as well. They are declared as [environment-variables](#oci-registries) - resolved from `TFCPS/EnvironmentVariables.csv` or from the environment of the build-pipeline, exactly like a required environment-variable of a product. Without credentials the images of that registry are taken from the fallback-registry, unless they are already available in the local image-store of the docker-daemon.
 
 ### `GlobalCache/TranslationServiceProperties.txt`
 
-Configures the translation-service used to translate XLF-files (for the NodeJS-/web-codeunits). Without this file no automatic translation is done.
+Configures the translation-service used to translate XLF-files (for the NodeJS-/web-codeunits).
+Without this file no automatic translation is done.
 
 ```text
 LibreTranslateAPI=https://my-libretranslate.example.com
@@ -79,7 +96,8 @@ LibreTranslateAPI=https://my-libretranslate.example.com
 
 ### `OCR/ServiceURL.txt`
 
-Configures the base-address of the OCR-service used by the OCR-commands (for example `scocranalysisoffile`). The first non-empty, non-comment line (lines starting with `#` are ignored) is used as the service-address.
+Configures the base-address of the OCR-service used by the OCR-commands (for example `scocranalysisoffile`).
+The first non-empty, non-comment line (lines starting with `#` are ignored) is used as the service-address.
 
 ```text
 https://my-ocr-service.example.com
@@ -89,7 +107,9 @@ https://my-ocr-service.example.com
 
 ### `TFCPS/EnvironmentVariables.csv`
 
-Defines where the values of the environment-variables come from which a repository declares as required for its build (see [Required environment-variables](#required-environment-variables) below). Because the values are machine-/user-specific (and often secret) they are configured here and not in the repository. Columns: `EnvVariableName;Kind;Value`.
+Defines where the values of the environment-variables come from which a repository declares as required for its build (see [Required environment-variables](#required-environment-variables) below).
+Because the values are machine-/user-specific (and often secret) they are configured here and not in the repository.
+Columns: `EnvVariableName;Kind;Value`.
 
 `Kind` is one of:
 
@@ -108,13 +128,14 @@ The file may contain entries for all repositories built on this machine; only th
 
 #### Package-sources
 
-A package-source which is not publicly available (for example a private NuGet-feed) is configured with the same mechanism, because a package-source and especially its credentials must not be part of a repository. A source named `<sourcename>` for the technology `<technology>` (currently `CSharp`) is defined by these environment-variables:
+A package-source which is not publicly available (for example a private NuGet-feed) is configured with the same mechanism, because a package-source and especially its credentials must not be part of a repository.
+A source named `<sourcename>` for the technology `<technology>` (currently `CSharp`) is defined by these environment-variables:
 
-| Environment-variable | Meaning |
-|---|---|
-| `Dependency_<technology>_<sourcename>_URL` | the url of the source (this variable declares the source) |
-| `Dependency_<technology>_<sourcename>_Username` | the username, if the source requires authentication |
-| `Dependency_<technology>_<sourcename>_Password` | the password or token belonging to the username |
+| Environment-variable                            | Meaning                                                   |
+| ----------------------------------------------- | --------------------------------------------------------- |
+| `Dependency_<technology>_<sourcename>_URL`      | the url of the source (this variable declares the source) |
+| `Dependency_<technology>_<sourcename>_Username` | the username, if the source requires authentication       |
+| `Dependency_<technology>_<sourcename>_Password` | the password or token belonging to the username           |
 
 ```csv
 EnvVariableName;Kind;Value
@@ -123,7 +144,8 @@ Dependency_CSharp_MyPrivateFeed_Username;literal;myuser
 Dependency_CSharp_MyPrivateFeed_Password;file;Secrets/MyToken.txt
 ```
 
-A repository which needs such a source declares these variable-names as [required environment-variables](#required-environment-variables). Every .NET-codeunit-operation (build, testcases, linting, dependency-update) then registers the declared sources before it resolves the dependencies:
+A repository which needs such a source declares these variable-names as [required environment-variables](#required-environment-variables).
+Every .NET-codeunit-operation (build, testcases, linting, dependency-update) then registers the declared sources before it resolves the dependencies:
 
 - If a source with the same url is already registered (which is usually the case on a machine on which the developer configured the feed manually), its credentials are updated instead of registering the same feed a second time.
 - Sources which are not declared are never removed or changed: the registration is stored in the NuGet-configuration of the current user, which on a developer-machine is the configuration they also use for their own work.
@@ -133,13 +155,14 @@ A repository which needs such a source declares these variable-names as [require
 
 #### OCI-registries
 
-The credentials of an OCI-registry are configured with the same mechanism, for the same reason: `TFCPS/EnvironmentVariables.csv` is part of the configuration-folder of the user, which a build-pipeline does not have, while an environment-variable can be provided from its secret-store. A registry named `<registryname>` is defined by these environment-variables:
+The credentials of an OCI-registry are configured with the same mechanism, for the same reason: `TFCPS/EnvironmentVariables.csv` is part of the configuration-folder of the user, which a build-pipeline does not have, while an environment-variable can be provided from its secret-store.
+A registry named `<registryname>` is defined by these environment-variables:
 
-| Environment-variable | Meaning |
-|---|---|
-| `OCIRegistry_<registryname>_Address` | the address of the registry, with or without the scheme `https://` (this variable declares the registry) |
-| `OCIRegistry_<registryname>_Username` | the username |
-| `OCIRegistry_<registryname>_Password` | the password or token belonging to the username |
+| Environment-variable                  | Meaning                                                                                                  |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `OCIRegistry_<registryname>_Address`  | the address of the registry, with or without the scheme `https://` (this variable declares the registry) |
+| `OCIRegistry_<registryname>_Username` | the username                                                                                             |
+| `OCIRegistry_<registryname>_Password` | the password or token belonging to the username                                                          |
 
 ```csv
 EnvVariableName;Kind;Value
@@ -148,18 +171,26 @@ OCIRegistry_MyRegistry_Username;literal;myuser
 OCIRegistry_MyRegistry_Password;file;Secrets/MyRegistryToken.txt
 ```
 
-`<registryname>` is only the name of the declaration (it does not have to match the address), and the name is treated case-insensitively. Username and password are mandatory for a declared registry: a registry which allows anonymous pulls does not have to be declared at all. A declaration whose values can not be resolved in the environment the build runs in - an incomplete declaration, a secret-file which does not exist there, a `hostenvvariable` which is not set there - does not break the build: that registry is skipped with a warning which names the reason, and its images are taken from the fallback-registry.
+`<registryname>` is only the name of the declaration (it does not have to match the address), and the name is treated case-insensitively.
+Username and password are mandatory for a declared registry: a registry which allows anonymous pulls does not have to be declared at all.
+A declaration whose values can not be resolved in the environment the build runs in - an incomplete declaration, a secret-file which does not exist there, a `hostenvvariable` which is not set there - does not break the build: that registry is skipped with a warning which names the reason, and its images are taken from the fallback-registry.
 
-Unlike a required environment-variable of a product (see above), an OCI-registry does **not** have to be declared by any repository: every registry which is declared in `TFCPS/EnvironmentVariables.csv` (or in the environment) is available to every build on this machine, because which registries exist is a property of the machine/pipeline, not of a particular product. This is also why there is no separate credentials-file for it (there used to be one, `GlobalCache/RegistryCredentials.csv`; it was removed because it duplicated this mechanism for no benefit).
+Unlike a required environment-variable of a product (see above), an OCI-registry does **not** have to be declared by any repository: every registry which is declared in `TFCPS/EnvironmentVariables.csv` (or in the environment) is available to every build on this machine, because which registries exist is a property of the machine/pipeline, not of a particular product.
+This is also why there is no separate credentials-file for it (there used to be one, `GlobalCache/RegistryCredentials.csv`; it was removed because it duplicated this mechanism for no benefit).
 
-Everything which accesses a registry logs in to all registries for which credentials are available before it does so: pulling an image, pulling the images of the local test-services, checking whether a custom registry provides an image and building the image of a docker-codeunit. Without usable credentials the custom registry does not answer that availability-check, so the affected images are taken from the fallback-registry (see [`GlobalCache/OCIImages/ImageRegistries.csv`](#globalcacheociimagesimageregistriescsv)). This applies to the base-image of a Dockerfile as well, with one difference: the address which the check decided on is passed to the build as a build-argument and buildkit then resolves it directly, so a problem which only appears after that decision (for example credentials which the build-daemon can not use) surfaces as a failing build instead of as a fallback.
+Everything which accesses a registry logs in to all registries for which credentials are available before it does so: pulling an image, pulling the images of the local test-services, checking whether a custom registry provides an image and building the image of a docker-codeunit.
+Without usable credentials the custom registry does not answer that availability-check, so the affected images are taken from the fallback-registry (see [`GlobalCache/OCIImages/ImageRegistries.csv`](#globalcacheociimagesimageregistriescsv)).
+This applies to the base-image of a Dockerfile as well, with one difference: the address which the check decided on is passed to the build as a build-argument and buildkit then resolves it directly, so a problem which only appears after that decision (for example credentials which the build-daemon can not use) surfaces as a failing build instead of as a fallback.
 For this to work in every supported environment see [Custom OCI-registries](./CustomOCIRegistries.md), which describes the setup for a host, for a locally started build-container and for a self-hosted GitLab- or GitHub-runner; [Build-runner-configuration](./BuildRunnerConfiguration.md) contains the corresponding runner-configuration (`docker-compose.yml`, `config.toml`, workflow) and covers the required environment-variables of a product with the same mount.
 
 ### `TFCPS/AdditionalRequiredEnvironmentVariables.txt`
 
-Declares environment-variables which are additionally required for every codeunit-build on this machine, regardless of what the built repository declares. One name per line; empty lines and lines starting with `#` are ignored. The values are resolved exactly like the [required environment-variables](#required-environment-variables) of a repository.
+Declares environment-variables which are additionally required for every codeunit-build on this machine, regardless of what the built repository declares.
+One name per line; empty lines and lines starting with `#` are ignored.
+The values are resolved exactly like the [required environment-variables](#required-environment-variables) of a repository.
 
-This is meant for machine-local tooling (for example a [custom pre-codeunit-build-script](#custom-pre-codeunit-build-scripts)) which needs environment-variables: a repository must not have to declare what only the tooling of one particular machine needs. The file is optional.
+This is meant for machine-local tooling (for example a [custom pre-codeunit-build-script](#custom-pre-codeunit-build-scripts)) which needs environment-variables: a repository must not have to declare what only the tooling of one particular machine needs.
+The file is optional.
 
 ```text
 # required by my CustomPreCodeUnitBuildScript.py
@@ -168,19 +199,26 @@ MY_MACHINE_SPECIFIC_TOKEN
 
 ### Custom pre-codeunit-build-scripts
 
-Optional Python-scripts which are executed at the beginning of a codeunit-build, before the first codeunit is built (and before the `PrepareBuildCodeunits.py` of the repository). They are meant for machine-specific preparation-commands - for example logging in to a registry or providing credentials - and are located outside of any repository on purpose, so they are never committed.
+Optional Python-scripts which are executed at the beginning of a codeunit-build, before the first codeunit is built (and before the `PrepareBuildCodeunits.py` of the repository).
+They are meant for machine-specific preparation-commands - for example logging in to a registry or providing credentials - and are located outside of any repository on purpose, so they are never committed.
 
 Which script is executed depends on where the build runs:
 
-| File | Executed by | Executed where |
-|---|---|---|
-| `TFCPS/CustomPreCodeUnitBuildScript.py` | `scbuildcodeunits` | on the host, at the beginning of the build |
-| `TFCPS/CustomPreCodeUnitBuildScriptForContainer.py` | `scbuildcodeunitsc` (`scbuildcodeunits -c`) | on the host, before the build-container is started |
+| File                                                                         | Executed by                                                      | Executed where                                            |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------- |
+| `TFCPS/CustomPreCodeUnitBuildScript.py`                                      | `scbuildcodeunits`                                               | on the host, at the beginning of the build                |
+| `TFCPS/CustomPreCodeUnitBuildScriptForContainer.py`                          | `scbuildcodeunitsc` (`scbuildcodeunits -c`)                      | on the host, before the build-container is started        |
 | `TFCPS/CustomScriptsForContainer/CustomPreCodeUnitBuildScriptInContainer.py` | `scbuildcodeunitsc` (`scbuildcodeunits -c`) and a build-pipeline | inside the build-container, at the beginning of the build |
 
-Every script is optional: a file which does not exist is skipped without an error. The scripts are executed with the folder they are located in as working-directory, so a script can use files located next to it.
+Every script is optional: a file which does not exist is skipped without an error.
+The scripts are executed with the folder they are located in as working-directory, so a script can use files located next to it.
 
-The whole folder `TFCPS/CustomScriptsForContainer` (and not only `CustomPreCodeUnitBuildScriptInContainer.py`) is mounted into the container (to `/Workspace/CustomScripts`) by the host-call which starts it, if the folder exists. The whole folder is mounted so that the script can start a sibling-script located next to it, and the mount is writable because the scripts in that folder may use it as their own download-cache-folder. Do not put anything into this folder which must not be visible inside the container. If the folder is not mounted there, the script is taken from `TFCPS/CustomScriptsForContainer` in the configuration-folder of the container-user. This is the case on a self-hosted build-runner which mounts the `TFCPS`-folder into the job-container (see [Build-runner-configuration](./BuildRunnerConfiguration.md)), so the same script also runs in a pipeline-build. That mount is read-only, so there the script can not use its folder as download-cache-folder.
+The whole folder `TFCPS/CustomScriptsForContainer` (and not only `CustomPreCodeUnitBuildScriptInContainer.py`) is mounted into the container (to `/Workspace/CustomScripts`) by the host-call which starts it, if the folder exists.
+The whole folder is mounted so that the script can start a sibling-script located next to it, and the mount is writable because the scripts in that folder may use it as their own download-cache-folder.
+Do not put anything into this folder which must not be visible inside the container.
+If the folder is not mounted there, the script is taken from `TFCPS/CustomScriptsForContainer` in the configuration-folder of the container-user.
+This is the case on a self-hosted build-runner which mounts the `TFCPS`-folder into the job-container (see [Build-runner-configuration](./BuildRunnerConfiguration.md)), so the same script also runs in a pipeline-build.
+That mount is read-only, so there the script can not use its folder as download-cache-folder.
 
 `CustomPreCodeUnitBuildScriptForContainer.py` runs before the values of the required environment-variables are resolved, so it can also create the files those values are read from.
 
@@ -209,13 +247,16 @@ A build in a container (`scbuildcodeunitsc`) - on the host:
 2. The values of the required environment-variables are resolved (so step 1 can still provide them).
 3. The container is started: the repository is mounted, the folder `TFCPS/CustomScriptsForContainer` (if it exists), the [`TFCPS`](#tfcps)-folder (read-only, if it exists) and `GlobalCache/OCIImages/ImageRegistries.csv` (read-only, if it exists) are mounted and the environment-variables are handed over to the container.
 
-If the build itself runs in a container whose docker-socket is forwarded to the docker-daemon of the host (for example in the sandbox of [`scrais`](./RunAgentInSandbox.md)), the paths of that container do not exist for the daemon. In this case the build-container gets the volumes of the own container (`--volumes-from`), so the repository has the same path as in the own container, and the files of the configuration-folder are copied into the created container instead of being mounted, which means they are not read-only there.
+If the build itself runs in a container whose docker-socket is forwarded to the docker-daemon of the host (for example in the sandbox of [`scrais`](./RunAgentInSandbox.md)), the paths of that container do not exist for the daemon.
+In this case the build-container gets the volumes of the own container (`--volumes-from`), so the repository has the same path as in the own container, and the files of the configuration-folder are copied into the created container instead of being mounted, which means they are not read-only there.
 
-Inside the container `scbuildcodeunits` then runs the same steps as a build on the host, with one difference: `CustomPreCodeUnitBuildScriptInContainer.py` is executed instead of `CustomPreCodeUnitBuildScript.py`. The required environment-variables are resolved again in step 1, from the mounted `TFCPS/EnvironmentVariables.csv`; a value whose source is not available inside the container (for example a `hostenvvariable` or a secret-file outside of `TFCPS`) is taken from the environment-variable which the host passed into the container.
+Inside the container `scbuildcodeunits` then runs the same steps as a build on the host, with one difference: `CustomPreCodeUnitBuildScriptInContainer.py` is executed instead of `CustomPreCodeUnitBuildScript.py`.
+The required environment-variables are resolved again in step 1, from the mounted `TFCPS/EnvironmentVariables.csv`; a value whose source is not available inside the container (for example a `hostenvvariable` or a secret-file outside of `TFCPS`) is taken from the environment-variable which the host passed into the container.
 
 ## Per-repository configuration
 
-In addition to the machine-wide `~/.ScriptCollection`-folder, each repository has its own `<repository>/.ScriptCollection`-folder. The most relevant files there are:
+In addition to the machine-wide `~/.ScriptCollection`-folder, each repository has its own `<repository>/.ScriptCollection`-folder.
+The most relevant files there are:
 
 - `<repository>/.ScriptCollection/OCIImages/ImageDefinition.csv`: Defines which OCI-images the repository uses, their upstream- (fallback-) registry and the default-tag. Columns: `ImageName;UpstreamRegistryAddress;DefaultTag`.
 
@@ -224,33 +265,40 @@ ImageName;UpstreamRegistryAddress;DefaultTag
 Debian;docker.io/library/debian;13.4-slim
 ```
 
-This file (per repository) defines the fallback-registry and tag, while `~/.ScriptCollection/GlobalCache/OCIImages/ImageRegistries.csv` (machine-wide) defines the custom registry to prefer. The fallback-registry is used whenever the preferred registry does not provide the image - also when it is defined but not available (see there).
+This file (per repository) defines the fallback-registry and tag, while `~/.ScriptCollection/GlobalCache/OCIImages/ImageRegistries.csv` (machine-wide) defines the custom registry to prefer.
+The fallback-registry is used whenever the preferred registry does not provide the image - also when it is defined but not available (see there).
 
 #### Base-image of a docker-codeunit
 
 The `FROM`-lines of the `Dockerfile` of a docker-codeunit must not contain a registry-address, because that address is resolved by buildkit and not by ScriptCollection: neither the preferred custom registry nor the fallback-registry would apply to it, and a build would fail with `401 Unauthorized` or run into the rate-limit of the upstream-registry depending on which address was written there.
 
-Instead, the build passes every image of `ImageDefinition.csv` as the build-argument `image_<imagename in lowercase>`, whose value is the address with tag the image has to be taken from on this machine. It is the same name under which an image is available to the local test-services. A `Dockerfile` declares the arguments it needs and uses them in its `FROM`-lines:
+Instead, the build passes every image of `ImageDefinition.csv` as the build-argument `image_<imagename in lowercase>`, whose value is the address with tag the image has to be taken from on this machine.
+It is the same name under which an image is available to the local test-services.
+A `Dockerfile` declares the arguments it needs and uses them in its `FROM`-lines:
 
 ```dockerfile
 ARG image_debian
 FROM ${image_debian}
 ```
 
-All declared images are passed, so a multi-stage-build can use several of them. An argument which a `Dockerfile` does not declare is simply unused.
+All declared images are passed, so a multi-stage-build can use several of them.
+An argument which a `Dockerfile` does not declare is simply unused.
 
 ### `<repository>/.betterleaks.toml`
 
-Configures the secret-scan which runs as part of `scbuildcodeunits`. The scan has two parts:
+Configures the secret-scan which runs as part of `scbuildcodeunits`.
+The scan has two parts:
 
 - The repository-content is scanned with betterleaks.
 - The OCI-images which the codeunits of the repository built are scanned separately: for every codeunit which has the folder `<codeunit>/Other/Artifacts/BuildResult_OCIImage`, the image `<codeunit>:<version>` (in lowercase) is exported from the local docker-instance with `docker save` and the resulting archive is scanned. This is necessary because betterleaks does not look into archives and because a built image can contain secrets which are not part of the repository at all: build-arguments recorded in the image-history, environment-variables and labels of the image, and files which are copied or generated during the image-build. An image is published to a registry, so a secret inside it is readable by everybody who is allowed to pull it.
 
-The `[[allowlists]]`-entries of this file apply to the repository-scan only. Known false positives of the image-scan are declared in `<repository>/.ScriptCollection/SecretScanConfiguration.toml` instead, see the section "Secret-scan of OCI-images" in the [Hints](../Hints.md#secret-scan-of-oci-images).
+The `[[allowlists]]`-entries of this file apply to the repository-scan only.
+Known false positives of the image-scan are declared in `<repository>/.ScriptCollection/SecretScanConfiguration.toml` instead, see the section "Secret-scan of OCI-images" in the [Hints](../Hints.md#secret-scan-of-oci-images).
 
 ### Required environment-variables
 
-A repository declares which environment-variables its build needs in `<repository>/.ScriptCollection/ProductInformation.xml`. Only the names are declared there; the values are never part of the repository.
+A repository declares which environment-variables its build needs in `<repository>/.ScriptCollection/ProductInformation.xml`.
+Only the names are declared there; the values are never part of the repository.
 
 ```xml
 <cps:productinformation
@@ -265,7 +313,8 @@ A repository declares which environment-variables its build needs in `<repositor
 </cps:productinformation>
 ```
 
-The `requiredenvironmentvariables`-element is **required**. A product whose build does not need any environment-variable declares it empty:
+The `requiredenvironmentvariables`-element is **required**.
+A product whose build does not need any environment-variable declares it empty:
 
 ```xml
     <cps:requiredenvironmentvariables></cps:requiredenvironmentvariables>
@@ -273,12 +322,17 @@ The `requiredenvironmentvariables`-element is **required**. A product whose buil
 
 This way it is always visible which environment-variables a product depends on; a missing element is a mistake and not the statement "no variables needed", and the build reports it as such.
 
-The value of every declared variable is resolved from the machine-wide [`~/.ScriptCollection/TFCPS/EnvironmentVariables.csv`](#tfcpsenvironmentvariablescsv). This happens for every build:
+The value of every declared variable is resolved from the machine-wide [`~/.ScriptCollection/TFCPS/EnvironmentVariables.csv`](#tfcpsenvironmentvariablescsv).
+This happens for every build:
 
 - When the codeunits are built on the host (`scbuildcodeunits`), the variables are set in the environment of the build-process, so every sub-process started for a codeunit inherits them.
 - When the codeunits are built in a container (`scbuildcodeunitsc`, `scbuildcodeunits -c`), the variables are additionally passed into the container, so they do not have to be specified on every call. Only their names are passed as arguments; the values are given to the docker-client through its environment, so a value never appears in a log or in the process-list.
 - When a single codeunit is built directly (for example `<codeunit>/Other/Build/Build.py`), the variables are set as well, so such a build behaves like a build started with `scbuildcodeunits`.
 
-If a declared variable is not defined in that file, its value is taken from the environment of the build-process. That is how a build-pipeline provides a value from its own secret-store. The configuration-file has precedence, so a resolved value does not depend on what happens to be set in the environment of the caller. If a value can not be determined in either way, the build aborts with a message which names both possibilities.
+If a declared variable is not defined in that file, its value is taken from the environment of the build-process.
+That is how a build-pipeline provides a value from its own secret-store.
+The configuration-file has precedence, so a resolved value does not depend on what happens to be set in the environment of the caller.
+If a value can not be determined in either way, the build aborts with a message which names both possibilities.
 
-Because the configuration-file is looked up in the `TFCPS`-folder, a build-container which gets that folder mounted (by `scbuildcodeunitsc`, or into the configuration-folder of the container-user on a self-hosted build-runner) resolves the values exactly like a build on a host does. See [Build-runner-configuration](./BuildRunnerConfiguration.md) for the setup of a self-hosted build-runner.
+Because the configuration-file is looked up in the `TFCPS`-folder, a build-container which gets that folder mounted (by `scbuildcodeunitsc`, or into the configuration-folder of the container-user on a self-hosted build-runner) resolves the values exactly like a build on a host does.
+See [Build-runner-configuration](./BuildRunnerConfiguration.md) for the setup of a self-hosted build-runner.

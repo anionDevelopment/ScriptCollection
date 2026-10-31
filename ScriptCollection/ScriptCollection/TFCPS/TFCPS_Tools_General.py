@@ -2238,12 +2238,6 @@ class TFCPS_Tools_General:
         self.download_file(source,target)   
 
     @GeneralUtilities.check_arguments
-    def try_update_basic_repositoryreference_from_examples_repository(self, repository_folder:str):
-        source=f"https://raw.githubusercontent.com/anionDev/CommonProjectStructureExamples/refs/heads/main/Other/Reference/RepositoryStructure.mdd"
-        target=f"{repository_folder}/Other/Reference/RepositoryStructure.md"
-        self.download_file(source,target)   
-
-    @GeneralUtilities.check_arguments
     def update_dependent_oci_images(self, repo:str):
         self.oci_image_manager.update_default_tag_for_images_in_image_definitions_file(repo,True)
 

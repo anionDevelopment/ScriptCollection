@@ -4,24 +4,30 @@
 
 A build which runs in a build-pipeline needs the same machine-specific information as a build on a developer-machine: the values of the [required environment-variables](./ConfigurationFolder.md#required-environment-variables) of the product, for example the credentials of a private package-source.
 
-A repository declares only the **names** of the environment-variables it needs (in `<repository>/.ScriptCollection/ProductInformation.xml`); the **values** are never part of the repository. In a build-pipeline the values therefore have to come from the build-infrastructure. ScriptCollection resolves a value from one of two sources:
+A repository declares only the **names** of the environment-variables it needs (in `<repository>/.ScriptCollection/ProductInformation.xml`); the **values** are never part of the repository.
+In a build-pipeline the values therefore have to come from the build-infrastructure.
+ScriptCollection resolves a value from one of two sources:
 
 1. From `~/.ScriptCollection/TFCPS/EnvironmentVariables.csv`, if the variable is defined there.
 2. From the environment of the build-process otherwise.
 
-The configuration-file has precedence, so a resolved value does not depend on what happens to be set in the environment of the caller. If a value can not be determined in either way, the build aborts with a message which names both possibilities.
+The configuration-file has precedence, so a resolved value does not depend on what happens to be set in the environment of the caller.
+If a value can not be determined in either way, the build aborts with a message which names both possibilities.
 
-Both sources work everywhere - on a developer-machine, inside a build-container and in a build-pipeline. The recommended setup for self-hosted runners is the first one, because it uses exactly the same file (and the same format) as a developer-machine.
+Both sources work everywhere - on a developer-machine, inside a build-container and in a build-pipeline.
+The recommended setup for self-hosted runners is the first one, because it uses exactly the same file (and the same format) as a developer-machine.
 
 ## Recommended setup: mount the configuration-folder into the job-container
 
-The build of a pipeline runs in a container (usually the SCBuilder-image). Mounting a folder of the runner-host as the configuration-folder of that container makes ScriptCollection resolve the values there exactly like it does on a host.
+The build of a pipeline runs in a container (usually the SCBuilder-image).
+Mounting a folder of the runner-host as the configuration-folder of that container makes ScriptCollection resolve the values there exactly like it does on a host.
 
 > Note: The environment-variables of the **runner-process** are not inherited by a **job-container**, so configuring them in the runner-image or in the docker-compose-file of the runner does not make them available to the build. The mount (or the secret-store of the forge, see below) is what reaches the job-container.
 
 ### Folder on the runner-host
 
-Create the folder once per runner-host, for example `/srv/ScriptCollectionConfiguration`. It is a copy of the parts of a developer's `~/.ScriptCollection` which a build needs:
+Create the folder once per runner-host, for example `/srv/ScriptCollectionConfiguration`.
+It is a copy of the parts of a developer's `~/.ScriptCollection` which a build needs:
 
 ```text
 /srv/ScriptCollectionConfiguration/
@@ -41,15 +47,21 @@ Dependency_CSharp_MyPrivateFeed_Username;literal;myuser
 Dependency_CSharp_MyPrivateFeed_Password;file;Secrets/MyToken.txt
 ```
 
-Use a **relative** path for a secret-file (it is resolved against `<configuration-folder>/TFCPS`). An absolute path or a `~`-path of the developer-machine does not exist inside the container.
+Use a **relative** path for a secret-file (it is resolved against `<configuration-folder>/TFCPS`).
+An absolute path or a `~`-path of the developer-machine does not exist inside the container.
 
 > **Create `GlobalCache/OCIImages/ImageRegistries.csv` even if it is empty** (a file containing only the header-line `ImageName;RegistryAddress` is enough). The mount is read-only, but ScriptCollection creates that file when it does not exist yet. On a read-only mount that creation fails and the build aborts, so a missing file breaks every build on this runner. See [Custom OCI-registries](./CustomOCIRegistries.md) for what to put into that file.
 
 ### Mount only the two subfolders, never the whole folder
 
-Only `TFCPS` and `GlobalCache/OCIImages` are mounted (read-only) into the job-container, each to its own target-path below `/root/.ScriptCollection` - not the whole folder to `/root/.ScriptCollection`. This follows the same approach as `scbuildcodeunits -c` on a developer-machine, which also mounts only these parts of the configuration-folder read-only and not the whole folder (there to own paths below `/Workspace/ScriptCollectionConfiguration`, and from `GlobalCache/OCIImages` only the file `ImageRegistries.csv`).
+Only `TFCPS` and `GlobalCache/OCIImages` are mounted (read-only) into the job-container, each to its own target-path below `/root/.ScriptCollection` - not the whole folder to `/root/.ScriptCollection`.
+This follows the same approach as `scbuildcodeunits -c` on a developer-machine, which also mounts only these parts of the configuration-folder read-only and not the whole folder (there to own paths below `/Workspace/ScriptCollectionConfiguration`, and from `GlobalCache/OCIImages` only the file `ImageRegistries.csv`).
 
-The reason is the rest of `GlobalCache`: the SCBuilder-image already contains a prefilled tool-cache in `/root/.ScriptCollection/GlobalCache/Tools` (filled by `scdownloadcachabletools` when the image is built). A mount of the whole folder to `/root/.ScriptCollection` hides that cache. A build which then needs one of the cached tools tries to download it into `GlobalCache/Tools` and fails with `Read-only file system`. This only happens for builds which use the tool-cache at all - for example the merge of the bill-of-materials of a codeunit with the ones of its dependent codeunits, the generation of code from an API-specification or the build of an Android-app-bundle. A repository whose builds do not use the tool-cache works with both kinds of mounts, which is why the problem does not show up on every runner.
+The reason is the rest of `GlobalCache`: the SCBuilder-image already contains a prefilled tool-cache in `/root/.ScriptCollection/GlobalCache/Tools` (filled by `scdownloadcachabletools` when the image is built).
+A mount of the whole folder to `/root/.ScriptCollection` hides that cache.
+A build which then needs one of the cached tools tries to download it into `GlobalCache/Tools` and fails with `Read-only file system`.
+This only happens for builds which use the tool-cache at all - for example the merge of the bill-of-materials of a codeunit with the ones of its dependent codeunits, the generation of code from an API-specification or the build of an Android-app-bundle.
+A repository whose builds do not use the tool-cache works with both kinds of mounts, which is why the problem does not show up on every runner.
 
 Restrict the access-rights of the folder to the user which runs the runner (for example `chmod 600` for the files below `Secrets`).
 
@@ -110,7 +122,8 @@ services:
       - /Workspace/Other/Runner/MyRunner:/Workspace/Other/Runner/MyRunner
 ```
 
-This requires an `SCGitHubRunner`-image which contains the container-hook (see the "Container-hooks" section of its usage-documentation); after updating the image, `docker compose pull && docker compose up -d` on the runner-host. That same hook also sets `IS_RUNNING_IN_SERVER_PIPELINE` in every job-container it starts (see below), so nothing has to be configured for that here.
+This requires an `SCGitHubRunner`-image which contains the container-hook (see the "Container-hooks" section of its usage-documentation); after updating the image, `docker compose pull && docker compose up -d` on the runner-host.
+That same hook also sets `IS_RUNNING_IN_SERVER_PIPELINE` in every job-container it starts (see below), so nothing has to be configured for that here.
 
 ### GitHub (any other runner-image)
 
@@ -130,13 +143,17 @@ jobs:
 
 ### Target-path of the mount
 
-`/root/.ScriptCollection` is the configuration-folder of the user the job-container runs as; the two subfolders are mounted to `TFCPS` and `GlobalCache/OCIImages` below it (see [Mount only the two subfolders, never the whole folder](#mount-only-the-two-subfolders-never-the-whole-folder)). The SCBuilder-image runs as `root`; for an image which runs as another user the target-paths are below the `.ScriptCollection`-folder in the home-directory of that user.
+`/root/.ScriptCollection` is the configuration-folder of the user the job-container runs as; the two subfolders are mounted to `TFCPS` and `GlobalCache/OCIImages` below it (see [Mount only the two subfolders, never the whole folder](#mount-only-the-two-subfolders-never-the-whole-folder)).
+The SCBuilder-image runs as `root`; for an image which runs as another user the target-paths are below the `.ScriptCollection`-folder in the home-directory of that user.
 
 The mount is needed for a repository which declares required environment-variables, and it is also what makes a custom OCI-registry (and its credentials) available to every build on this runner - see [Custom OCI-registries](./CustomOCIRegistries.md).
 
 ## Telling a build that it runs on a build-server
 
-A build-server deliberately provides less than a developer-machine: it has the configuration-folder, but not the developer's personal tooling and credential-files. A preparation-step which uses those has to be skipped there instead of failing - and a build can not derive that situation on its own, because a build which was started with `scbuildcodeunits -c` on a developer-machine also runs in a container and is otherwise indistinguishable from a job-container of a runner. It is therefore stated explicitly, with the environment-variable `IS_RUNNING_IN_SERVER_PIPELINE`. ScriptCollection itself does not evaluate this variable; it is a convention between the build-infrastructure and the repository-specific scripts (for example a custom pre-codeunit-build-script or `PrepareBuildCodeunits.py`) which have to behave differently on a build-server:
+A build-server deliberately provides less than a developer-machine: it has the configuration-folder, but not the developer's personal tooling and credential-files.
+A preparation-step which uses those has to be skipped there instead of failing - and a build can not derive that situation on its own, because a build which was started with `scbuildcodeunits -c` on a developer-machine also runs in a container and is otherwise indistinguishable from a job-container of a runner.
+It is therefore stated explicitly, with the environment-variable `IS_RUNNING_IN_SERVER_PIPELINE`.
+ScriptCollection itself does not evaluate this variable; it is a convention between the build-infrastructure and the repository-specific scripts (for example a custom pre-codeunit-build-script or `PrepareBuildCodeunits.py`) which have to behave differently on a build-server:
 
 ```yaml
 IS_RUNNING_IN_SERVER_PIPELINE: "true"
@@ -152,7 +169,8 @@ Setting it on the runner as well is what makes a repository whose pipeline-file 
 
 ## Alternative: the secret-store of the forge
 
-If a value has to be managed by the forge (for example because it differs per repository or is rotated there), it is provided as an environment-variable of the build-job instead. ScriptCollection then takes it from the environment.
+If a value has to be managed by the forge (for example because it differs per repository or is rotated there), it is provided as an environment-variable of the build-job instead.
+ScriptCollection then takes it from the environment.
 
 - **GitLab**: define a CI/CD-variable (masked and protected) on group- or project-level. It is available in the job automatically; no repository-change is needed. Additionally the variable can be passed per run when the pipeline is triggered via the API.
 - **GitHub**: define an organization- or repository-secret and map it in the workflow:

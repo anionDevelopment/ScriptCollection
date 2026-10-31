@@ -6,8 +6,7 @@
 ![PyPI](https://img.shields.io/pypi/v/ScriptCollection)
 ![Dependencies](https://img.shields.io/librariesio/github/anionDevelopment/ScriptCollection)
 
-[![CodeFactor](https://www.codefactor.io/repository/github/anionDevelopment/scriptcollection/badge/main)](https://www.codefactor.io/repository/github/anionDevelopment/scriptcollection/overview/main)
-[![Downloads](https://pepy.tech/badge/scriptcollection)](https://pepy.tech/project/scriptcollection)
+[![CodeFactor](https://www.codefactor.io/repository/github/anionDevelopment/scriptcollection/badge/main)](https://www.codefactor.io/repository/github/anionDevelopment/scriptcollection/overview/main) [![Downloads](https://pepy.tech/badge/scriptcollection)](https://pepy.tech/project/scriptcollection)
 ![Coverage](https://raw.githubusercontent.com/anionDevelopment/ScriptCollection/main/ScriptCollection/Other/Resources/TestCoverageBadges/badge_shieldsio_linecoverage_blue.svg)
 
 The ScriptCollection is the place for reusable scripts.
@@ -22,7 +21,8 @@ Most of the scripts are written in [python](https://www.python.org) 3.
 
 Caution: Before executing **any** script of this repository read the sourcecode of the script (and the sourcecode of all functions called by this function directly or transitively) carefully and verify that the script does exactly what you want to do and nothing else.
 
-Some functions are not entirely available on windows or require common third-party tools. See the [Runtime dependencies](#runtime-dependencies)-section for more information.
+Some functions are not entirely available on windows or require common third-party tools.
+See the [Runtime dependencies](#runtime-dependencies)-section for more information.
 
 When using ScriptCollection it is not required but recommended for better usability to have [epew](https://github.com/anionDev/Epew) installed.
 
@@ -40,11 +40,14 @@ You can simply git-clone the ScriptCollection and then use the scripts under the
 
 `git clone https://github.com/anionDevelopment/ScriptCollection.git`
 
-It may be easier to pip-install the ScriptCollection but technically pip is not required. Actually you need to git-clone (or download as zip-file from [GitHub](https://github.com/anionDevelopment/ScriptCollection)) the ScriptCollection to use the scripts in this repository which are not written in python.
+It may be easier to pip-install the ScriptCollection but technically pip is not required.
+Actually you need to git-clone (or download as zip-file from [GitHub](https://github.com/anionDevelopment/ScriptCollection)) the ScriptCollection to use the scripts in this repository which are not written in python.
 
 ## Troubleshooting
 
-It is recommended to always use only the newest version of the ScriptCollection. If you have an older version: Update it (e. g. using `pip3 install ScriptCollection --upgrade` if you installed the ScriptCollection via pip). If you still have problems, then feel free to create an [issue](https://github.com/anionDevelopment/ScriptCollection/issues).
+It is recommended to always use only the newest version of the ScriptCollection.
+If you have an older version: Update it (e. g. using `pip3 install ScriptCollection --upgrade` if you installed the ScriptCollection via pip).
+If you still have problems, then feel free to create an [issue](https://github.com/anionDevelopment/ScriptCollection/issues).
 
 If you have installed the ScriptCollection as pip-package you can simply check the version by running `scshowversion` or using Python with the following commands:
 
@@ -97,7 +100,8 @@ pip3 install --force-reinstall ./ScriptCollection/Other/Artifacts/BuildResult_Wh
 
 (Note: `x.x.x` must be replaced by the appropriate version-number.)
 
-The complete build-pipeline (build, testcases, linting, reference-generation, etc.) is run by `scbuildcodeunits` in the repository-root (or `task bb` if [Task](https://taskfile.dev) is installed). Afterwards `task dl` installs the built wheel locally.
+The complete build-pipeline (build, testcases, linting, reference-generation, etc.) is run by `scbuildcodeunits` in the repository-root (or `task bb` if [Task](https://taskfile.dev) is installed).
+Afterwards `task dl` installs the built wheel locally.
 
 ### Coding style
 
@@ -118,7 +122,8 @@ For functions to read or change the permissions or the owner of a file the Scrip
 - chown
 - ls
 
-These tools must be available on the system where the functions should be executed. Meanwhile these tools are also available on Windows but may have a slightly limited functionality.
+These tools must be available on the system where the functions should be executed.
+Meanwhile these tools are also available on Windows but may have a slightly limited functionality.
 
 ## License
 

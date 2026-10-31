@@ -4,7 +4,7 @@ description: "Contains information about the automations provided by ScriptColle
 metadata:
   purpose: "Information about automation using ScriptCollection."
   tags: information, automation, conventions
-  version: 1.2.0
+  version: 1.3.0
 ---
 
 # General
@@ -61,23 +61,28 @@ Because these scripts only delegate to ScriptCollection, a change of the pipelin
 
 ## Build the codeunits
 
-| Command                | Purpose                                                                                                                                    |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `scbuildcodeunits`     | Runs all scripts of all enabled codeunits (in the correct order regarding the dependencies between the codeunits) directly on the machine. |
-| `scbuildcodeunits -c`  | Same, but runs the scripts inside a container which provides a standardized environment (`-c` = `--runincontainer`).                       |
-| `scbuildcodeunitsc`    | Shortcut for `scbuildcodeunits -c`.                                                                                                        |
-| `scupdatedependencies` | Runs the `UpdateDependencies.py` of all codeunits.                                                                                         |
+| Command                 | Purpose                                                                                                                                                                                                                                                                 |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scbuildcodeunits`      | Runs all scripts of all enabled codeunits (in the correct order regarding the dependencies between the codeunits) directly on the machine.                                                                                                                              |
+| `scbuildcodeunits -c`   | Same, but runs the scripts inside a container which provides a standardized environment (`-c` = `--runincontainer`).                                                                                                                                                    |
+| `scbuildcodeunitsc`     | Shortcut for `scbuildcodeunits -c`.                                                                                                                                                                                                                                     |
+| `scupdatedependencies`  | Updates the dependencies of the repository (`<repository>/Other/Scripts/UpdateDependencies.py`) and of all codeunits (`<codeunit>/Other/UpdateDependencies.py`), builds again to verify them and commits the result. Requires a repository without uncommitted changes. |
+| `scupdatedependenciesc` | Shortcut for `scupdatedependencies -c`.                                                                                                                                                                                                                                 |
 
 Relevant switches of `scbuildcodeunits`:
 
 - `-r`/`--repositoryfolder`: the repository to build (default: current folder).
 - `-e`/`--targetenvironment`: the target-environment (default: `QualityCheck`, productive builds use `Productive`).
 - `-v`/`--verbosity`: the loglevel (higher value = more output; useful when analyzing a failing build).
-- `-f`/`--fastlane`: skips `RunTestcases.py` (useful for a quick check, but not sufficient to consider a change verified).
+- `-f`/`--fastlane`: skips `RunTestcases.py` (useful for a quick check, but not sufficient to consider a change verified). It is only allowed on branches whose name starts with `fix/`, on every other branch the build fails.
 - `-n`/`--nocache`: does not use cached tools/resources.
-- `-u`/`--assertnonewchanges`: fails if the pipeline changes a not-git-ignored file (verifies the idempotency).
+- `-u`/`--assertnonewchanges`: fails if the repository has uncommitted changes before the build or if the pipeline changes a not-git-ignored file (verifies the idempotency). It can not be combined with `-p`.
+- `-m`/`--addreadytomergeflag`: creates `.ScriptCollection/.IsReadyToMerge` after a successful build on a working-branch. On the branch `other/maintenance` this also happens without the switch.
+- `-p`/`--ispremerge`: marks the build as pre-merge-build, which removes `.ScriptCollection/.IsReadyToMerge` and additionally collects metrics and generates the lines-of-code-diagram.
+- `-b`/`--basemountfolder`: the folder which is mounted into the container, it must be the repository or a folder which contains it (only used with `-c`).
+- `-a`/`--additionalargumentsfile`: a file with additional arguments for the scripts of the codeunits.
 
-If the command exits with 0 then everything is fine.
+If the command exits with 0 then the build succeeded, but linting-issues and the typos found by codespell are only reported as warnings and do not let the build fail, so the output has to be checked for them as well.
 If it exits with a non-zero exit-code then there is an error and the output of the command has to be checked for details.
 
 `scbuildcodeunits` also does some preparation-steps automatically; see the next section for which files it generates and synchronizes.
@@ -89,12 +94,19 @@ Some files of a repository are not maintained by hand but are derived from anoth
 None of these files has to be generated by hand, and none of them may be edited by hand — a manual change is lost with the next build.
 Change the source instead.
 
-| File / folder                            | Derived from                                | Note                                                                                      |
-| ---------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `<repository>/Taskfile.yml`              | `<repository>/<projectname>.code-workspace` | To add or change a task, change the `tasks`-section of the workspace-file.                |
-| The skill-folders of the other agents    | `<repository>/.agents/skills`               | See below.                                                                                |
-| The diagrams which are based on plantuml | the corresponding `.puml`-files             | The generated diagrams are always regenerated, so a change belongs into the `.puml`-file. |
-| The codeunits-overview-diagram           | the codeunits and their dependencies        |                                                                                           |
+| File / folder                                                                              | Derived from                                                                            | Note                                                                                      |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `<repository>/Taskfile.yml`                                                                | `<repository>/<projectname>.code-workspace`                                             | To add or change a task, change the `tasks`-section of the workspace-file.                |
+| The skill-folders of the other agents                                                      | `<repository>/.agents/skills`                                                           | See below.                                                                                |
+| The diagrams which are based on plantuml                                                   | the corresponding `.puml`-files                                                         | The generated diagrams are always regenerated, so a change belongs into the `.puml`-file. |
+| The codeunits-overview-diagram                                                             | the codeunits and their dependencies                                                    |                                                                                           |
+| `<repository>/.ScriptCollection/AgentSandboxConfiguration.ini` (value `image`)             | the `SCBuilder`-entry of `<repository>/.ScriptCollection/OCIImages/ImageDefinition.csv` | Only if both files exist. To change the image, change the tag in `ImageDefinition.csv`.   |
+| `<repository>/.ScriptCollection/.gitignore`                                                | fixed content                                                                           | Ignores `/Cache/`.                                                                        |
+| `<repository>/Other/Resources/Support/InformationAboutSupportedVersions.csv`               | the version of the project                                                              | A new version gets its own line.                                                          |
+| The order of the rows of the findings-table in `<repository>/Other/Reference/Reference.md` | the state, the priority and the id of the findings                                      | Only the rows are moved. See the specification `common-projects-structure-findings`.      |
+| The openspec-instruction-files                                                             | `openspec update --force`                                                               | Only if `<repository>/openspec/config.yaml` exists.                                       |
+
+`Taskfile.yml` and the codeunits-overview-diagram are generated by `<repository>/Other/Scripts/PrepareBuildCodeunits.py`, so they are only generated if this script of the repository does that.
 
 The following files and folders are also **generated** and must therefore never be edited by hand — a manual change is useless because it is overwritten with the next build:
 
@@ -111,12 +123,13 @@ Do not commit files with CRLF-line-endings: they are changed back, which shows u
 
 ### Skills
 
-- The folder `<repository>/.agents/skills` is the **single source of truth** for the skills of a repository. Every skill which belongs to the repository is created and changed there.
+- The folder `<repository>/.agents/skills` is the **single source of truth** for the skills which belong only to that repository. Every such skill is created and changed there.
 - The skill-folders of the other agents are **synchronized from it automatically**. Never edit a skill in one of those folders: the change is lost as soon as the codeunits are built again.
 - Some skills are **generated** and must therefore not be edited by hand even inside `<repository>/.agents/skills`, because a manual change is overwritten with the next build. These are:
-  - `common-project-structure`
+  - `common-project-structure` and `common-project-structure-using-scriptcollection`: their single source of truth is the folder `skills` of the repository `anionDevPublicAIUtilities`, so a change of them belongs there.
   - `product-knowledge`
   - the `openspec-*`-skills (these are managed by openspec itself, so they are neither written nor changed by hand).
+- The source-code of ScriptCollection does not contain this synchronization of skills. It is done by the custom-scripts of the build-environment, see `CustomPreCodeUnitBuildScript.py` in the reference-article about the configuration-folder.
 
 ## Tasks
 
@@ -124,24 +137,24 @@ Repositories usually contain a `Taskfile.yml` in the repository-root which can b
 
 Important properties of `Taskfile.yml`:
 
-- It is **generated** from the `.code-workspace`-file of the repository (by `scgeneratetaskfilefromworkspacefile`, which is also executed as part of `scbuildcodeunits`). Therefore `Taskfile.yml` must never be edited manually: to add or change a task, change the `tasks`-section of the `<repository>/<repository>.code-workspace`-file and regenerate the `Taskfile.yml`.
+- It is **generated** from the `.code-workspace`-file of the repository (during the build by `Other/Scripts/PrepareBuildCodeunits.py`, manually with `scgeneratetaskfilefromworkspacefile`). Therefore `Taskfile.yml` must never be edited manually: to add or change a task, change the `tasks`-section of the `<repository>/<repository>.code-workspace`-file and regenerate the `Taskfile.yml`.
 - Every task has a long name (for example `UpdateVisualRegressionBaselines`), a lowercase-alias (`updatevisualregressionbaselines`) and a short alias (`uvrb`). All of them can be used.
 - `task --list` shows all tasks which are available in the current repository.
 
 Tasks which commonly exist (which tasks exist really depends on the repository):
 
-| Task (short alias)                                                                     | Purpose                                                                                                 |
-| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `BaseBuildAllCodeunits` (`bb`)                                                         | Runs `scbuildcodeunits`.                                                                                |
-| `BaseBuildAllCodeunitsContainerized` (`bd`)                                            | Runs `scbuildcodeunitsc`.                                                                               |
-| `BaseUpdateDependencies` (`bud`)                                                       | Runs `scupdatedependencies`.                                                                            |
-| `UpdateVisualRegressionBaselines` (`uvrb`)                                             | Regenerates the baseline-screenshots of the visual-regression-tests (see below).                        |
-| `Translate` (`t`)                                                                      | Updates the translation-files. Is also executed automatically by `scbuildcodeunits` if the task exists. |
-| `BaseExampleStart` (`beu`) / `BaseExampleStop` (`bed`)                                 | Starts/stops the example-instance of the product (usually a docker-compose-setup).                      |
-| `LocaltestserviceMariadbStart` (`ldmu`) / `LocaltestserviceMariadbStop` (`ldmd`)       | Starts/stops the local MariaDB-testservice.                                                             |
-| `LocaltestservicePostgresqlStart` (`ldpu`) / `LocaltestservicePostgresqlStop` (`ldpd`) | Starts/stops the local PostgreSQL-testservice.                                                          |
-| `LocaltestserviceReverseProxyStart` / `LocaltestserviceReverseProxyStop`               | Starts/stops the local reverse-proxy-testservice.                                                       |
-| `RunFrontend` (`rf`)                                                                   | Starts the frontend-codeunit in development-mode.                                                       |
+| Task (short alias)                                                                     | Purpose                                                                                                                 |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `BaseBuildAllCodeunits` (`bb`)                                                         | Runs `scbuildcodeunits`.                                                                                                |
+| `BaseBuildAllCodeunitsContainerized` (`bd`)                                            | Runs `scbuildcodeunitsc`.                                                                                               |
+| `BaseUpdateDependencies` (`bud`)                                                       | Runs `scupdatedependencies`.                                                                                            |
+| `UpdateVisualRegressionBaselines` (`uvrb`)                                             | Regenerates the baseline-screenshots of the visual-regression-tests (see below).                                        |
+| `Translate` (`t`)                                                                      | Updates the translation-files. Is not executed by `scbuildcodeunits`, so it has to be run after building the codeunits. |
+| `BaseExampleStart` (`beu`) / `BaseExampleStop` (`bed`)                                 | Starts/stops the example-instance of the product (usually a docker-compose-setup).                                      |
+| `LocaltestserviceMariadbStart` (`ldmu`) / `LocaltestserviceMariadbStop` (`ldmd`)       | Starts/stops the local MariaDB-testservice.                                                                             |
+| `LocaltestservicePostgresqlStart` (`ldpu`) / `LocaltestservicePostgresqlStop` (`ldpd`) | Starts/stops the local PostgreSQL-testservice.                                                                          |
+| `LocaltestserviceReverseProxyStart` / `LocaltestserviceReverseProxyStop`               | Starts/stops the local reverse-proxy-testservice.                                                                       |
+| `RunFrontend` (`rf`)                                                                   | Starts the frontend-codeunit in development-mode.                                                                       |
 
 Some testcases require that the corresponding local testservices are running.
 If testcases which need a database or a reverse-proxy fail, first check whether the required `Localtestservice...`-task was started.
@@ -179,6 +192,7 @@ Rules for this:
 
 The changelog is located in `<repository>/Other/Resources/Changelog` and the file for the current version is `v<version>.md`.
 Determine `<version>` with `scshowprojectversion` **after** the changes were implemented, because the version can change with the changes.
+The build fails if this file does not exist.
 
 ## Release
 
@@ -206,13 +220,12 @@ The most relevant ones:
 
 ## Dependencies and tools
 
-| Command                                | Purpose                                                                     |
-| -------------------------------------- | --------------------------------------------------------------------------- |
-| `scupdatenugetpackagesincsharpproject` | Updates the nuget-packages of a C#-project.                                 |
-| `scupdateimagesindockercomposefile`    | Updates the image-versions in a docker-compose-file.                        |
-| `scdownloadcachabletools`              | Downloads the external tools which the pipeline needs into the local cache. |
-| `sccleantoolscache`                    | Clears this cache.                                                          |
-| `scnpmi`                               | Runs an `npm install` in a defined way.                                     |
+| Command                             | Purpose                                                                     |
+| ----------------------------------- | --------------------------------------------------------------------------- |
+| `scupdateimagesindockercomposefile` | Updates the image-versions in a docker-compose-file.                        |
+| `scdownloadcachabletools`           | Downloads the external tools which the pipeline needs into the local cache. |
+| `sccleantoolscache`                 | Clears this cache.                                                          |
+| `scnpmi`                            | Runs an `npm install` in a defined way.                                     |
 
 ## Docker
 
@@ -254,7 +267,7 @@ Running `scbuildcodeunits` in parallel on multiple repositories might result in 
 This document describes what the automations are for, not how they are implemented.
 Whenever the exact behavior of a command or of a function matters — which arguments it really accepts, in which order it does its steps, which files it touches, under which condition it fails — do not guess it and do not derive it from its name: **read its source-code** at https://github.com/anionDevelopment/ScriptCollection (mirror: https://github.com/anionDev/ScriptCollection).
 
-Where to look:
+Where to look (all paths are relative to the codeunit-folder `ScriptCollection` of that repository):
 
 - `ScriptCollection/Executables.py` contains one function per `sc...`-commandline-command, including the definition of its arguments. The mapping from the command-name to that function is in the `[project.scripts]`-section of the `pyproject.toml` of the ScriptCollection-codeunit.
 - `ScriptCollection/TFCPS/` contains the pipeline-logic which the scripts of a codeunit delegate to (per codeunit-type in the subfolders, for example `TFCPS/DotNet` and `TFCPS/NodeJS`).
@@ -277,3 +290,5 @@ ScriptCollection does automatic version-bumps at multiple places when building c
 - Do not edit generated files (`Taskfile.yml`, generated diagrams, generated references, the synchronized skill-folders) manually. Change their source and regenerate them. See "Files which are generated and synchronized automatically".
 - Never bypass a failing script (for example by lowering the code-coverage-threshold or by regenerating baselines) without having understood the failure first.
 - The File `.ScriptCollection/.IsReadyToMerge` is not allowed to be created manually. It is managed automatically by the ScriptCollection system to indicate when a project is ready to be merged.
+
+<!-- This file is generated. Do not modify. -->

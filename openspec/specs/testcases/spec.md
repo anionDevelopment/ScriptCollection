@@ -2,21 +2,18 @@
 
 ## Purpose
 
-Records what a testcase of this product may do. The product automates builds and therefore talks to servers in several
-places - task-runners, registries, git-remotes, container-registries - which makes it tempting to verify that by really
-talking to one. A testcase which does that no longer states something about the code of this product: its result then
-also depends on whether something is reachable, on a port being free and on what a third party currently answers.
+Records what a testcase of this product may do.
+The product automates builds and therefore talks to servers in several places - task-runners, registries, git-remotes, container-registries - which makes it tempting to verify that by really talking to one.
+A testcase which does that no longer states something about the code of this product: its result then also depends on whether something is reachable, on a port being free and on what a third party currently answers.
 
 ## Requirements
 
 ### Requirement: A testcase does not communicate with a server
 
-A testcase SHALL NOT send a request to a server and SHALL NOT verify that a connection to one can be established. This
-holds for every kind of server: one which the testcase starts itself, one which runs somewhere in the network of the
-executing machine, and one which is reachable over the internet.
+A testcase SHALL NOT send a request to a server and SHALL NOT verify that a connection to one can be established.
+This holds for every kind of server: one which the testcase starts itself, one which runs somewhere in the network of the executing machine, and one which is reachable over the internet.
 
-A testcase SHALL therefore be executable on a machine without network-access, and its result SHALL be the same on every
-machine which has the source-code of this product.
+A testcase SHALL therefore be executable on a machine without network-access, and its result SHALL be the same on every machine which has the source-code of this product.
 
 #### Scenario: The code under test communicates with a server
 

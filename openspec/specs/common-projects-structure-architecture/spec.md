@@ -145,3 +145,6 @@ This applies to the changelog-files below `Other/Resources/Changelog`, to the lo
 
 - **WHEN** an entry of a changelog, of a log-file or of an archived change describes a state which the product does not have anymore
 - **THEN** the entry stays unchanged, because it documents what was true when it was written, and changing it would destroy the history instead of documenting the product
+
+
+<!-- This file is generated. Do not modify. -->
