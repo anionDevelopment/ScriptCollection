@@ -71,7 +71,8 @@ Differences between the agents SHALL be limited to the hook configuration inside
 ### Requirement: The image declares status support through a defined prerequisite
 
 An image supports the status report if it fulfills both of the following conditions:
-It SHALL provide the executable `scrais-agent-status` on the `PATH`, and it SHALL contain a user-level hook configuration of its agents which calls this executable with a state token.
+It SHALL provide the executable `scrais-agent-status` on the `PATH`, and it SHALL contain a hook configuration of its agents which calls this executable with a state token.
+The hook configuration SHALL be stored so that an initialization-script which writes the usual configuration file of an agent does not remove it.
 `RunAgentInSandbox.md` SHALL document this prerequisite.
 
 #### Scenario: Image fulfills the prerequisite

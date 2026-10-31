@@ -147,7 +147,71 @@ Credentials, settings, skills etc. which the agent needs inside the container ha
 - The repository is mounted read-write to `/Workspace/<repository-folder-name>`, which is also the working-directory of the agent. Every change of the agent ends up directly in the repository on the host.
 - The entrypoint of the image is replaced by a generated script (`/Workspace/Entrypoint.sh`). It runs the initialization-script (if there is one) and then replaces itself with the agent (`exec`), so signals like Ctrl+C reach the agent directly. This also means that a custom entrypoint of the image is not run.
 - The [additional folders](#additional-folders) are mounted read-write to `/Workspace/Other/AdditionalResources/<folder-name>`.
+- If the [status is reported to herdr](#status-report-to-herdr), a dedicated host-folder is mounted read-write to `/Workspace/Temp/AgentStatus`.
 - Nothing else of the host is mounted. The network is not restricted.
+
+## Status-report to herdr
+
+When `scrais` runs in a pane of [herdr](https://github.com/herdrdev/herdr), the state of the agent in the container is shown in herdr. herdr can not determine it on its own, because it only sees `scrais` and `docker` in the pane.
+
+The feature is active automatically and has no argument and no configuration-key. It works in the same way for all [supported agents](#supported-agents):
+
+- A hook of the agent in the container calls `scrais-agent-status <token>`, which appends the token to an event-file.
+- `scrais` on the host reads this file, accepts only the exact tokens `working`, `idle` and `blocked`, and reports the state with the CLI of herdr (source `scrais`, agent `scrais-<codingagent>`).
+- When the container has ended, `scrais` releases the agent in herdr.
+
+The agent always runs, independent of this feature:
+
+| Situation                                                                     | Behavior                                                                                                      |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Outside of herdr (`HERDR_ENV` is not `1`, pane-id or binary-path is missing). | Nothing is reported, no folder is mounted and the entrypoint is unchanged.                                    |
+| The image does not fulfill the prerequisite.                                  | The agent runs as usual and nothing is reported. With `--verbose` a message says that no status was received. |
+| The report fails (for example herdr does not answer).                         | The agent keeps running and the exit-code stays the same. The failure is only shown with `--verbose`.         |
+
+### Prerequisite for the image
+
+The SCBuilder-image fulfills the prerequisite beginning with version `v1.2.19`. Another image has to provide:
+
+1. The executable `scrais-agent-status` on the `PATH`. It must always exit with code 0 and must not write to stdout, because the hooks of some agents interpret stdout as a response:
+
+   ```sh
+   #!/bin/sh
+   exec >/dev/null 2>&1
+   event_folder="/Workspace/Temp/AgentStatus"
+   if [ -d "${event_folder}" ]; then
+       printf '%s\n' "$1" >>"${event_folder}/events"
+   fi
+   exit 0
+   ```
+
+2. A hook-configuration of its agents which calls this executable. It must be stored so that an initialization-script does not remove it. For example the [script below](#example) replaces `~/.claude/settings.json` completely.
+
+The hook-configurations of the SCBuilder-image are located in the folder `SCBuilder/AgentStatus` of its repository:
+
+| `codingagent` | Stored in                                           | `working`                                   | `blocked`                                                        | `idle`                 |
+| ------------- | --------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------- | ---------------------- |
+| `claude`      | `/etc/claude-code/managed-settings.json`            | `UserPromptSubmit`, `PostToolUse`           | `AskUserQuestion`, `PermissionRequest`, `Notification`           | `Stop`                 |
+| `codex`       | `/etc/codex/requirements.toml`                      | `UserPromptSubmit`, `PostToolUse`           | `PermissionRequest`                                              | `Stop`, `Interrupt`    |
+| `copilot`     | `~/.copilot/hooks/scrais-agent-status.json`         | `userPromptSubmitted`, `postToolUse`        | `notification`                                                   | `agentStop`            |
+| `opencode`    | `~/.config/opencode/plugins/scrais-agent-status.js` | `session.status`, `permission.replied`      | `permission.asked`                                               | `session.status`       |
+| `vibe`        | `~/.vibe/hooks.toml`                                | `pre_tool`, `post_tool`                     | not available                                                    | `post_agent`           |
+
+The mapping is derived from the documentation and the source-code of the versions which are pinned in SCBuilder (claude 2.1.296, codex 0.162.1, copilot 1.0.96, opencode 1.19.0, vibe 2.26.1). It is not verified yet with running agents.
+
+### Limits
+
+- `vibe` has no event for an approval-request, so it never shows `blocked` and stays `working` while it waits for an approval.
+- `vibe` has no event for a submitted prompt, so `working` starts with the first tool.
+- The end of a subagent of `vibe` shows `idle` until the next tool starts.
+- `claude` can stay `working` when the user interrupts a turn.
+- The indicator can be behind by a fraction of a second, and states which last shorter than that can be skipped.
+
+### Security
+
+- The socket, the binary and the environment-variables of herdr are not available in the container. The API of herdr can run commands in a pane, so access to it would defeat the sandbox.
+- The event-file is the only channel. A line which is not an exact token is ignored, and nothing of the file except the validated state reaches herdr.
+- The agent can write the event-file, so it can report a wrong state. The impact is limited to a wrong indicator.
+- The event-folder is writable for everybody, because the user of the container is unknown. Other local users can therefore also write tokens during a run, with the same limited impact.
 
 ## Initialization-scripts
 
