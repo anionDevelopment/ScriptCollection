@@ -7,6 +7,7 @@ from enum import Enum
 from .GeneralUtilities import GeneralUtilities
 from .ScriptCollectionCore import ScriptCollectionCore
 from .OCIImages.OCIImageManager import OCIImageManager
+from .AgentStatusReporting.AgentStatusReportingSession import AgentStatusReportingSession
 
 
 class CodingAgent(Enum):
@@ -137,8 +138,11 @@ class AgentRunner:
         repository_name = os.path.basename(os.path.normpath(host_repository_folder))
         container_workspace_folder = f"/Workspace/{repository_name}"
         agent_command = self.__get_agent_command(agentRunnerConfiguration.codingagent, prompt, interactive)
+        # The status of the agent is reported on the same way for every coding-agent. The session is None if there is nothing to report to.
+        status_session = AgentStatusReportingSession.try_create(dict(os.environ), f"scrais-{agentRunnerConfiguration.codingagent.value}", self.verbose)
+        status_start_line = None if status_session is None else status_session.get_start_report_line(prompt is not None)
         # The entrypoint is always used: if an initialization-script is present it runs it first, and then always starts the agent.
-        entrypoint_script_content = self.__get_entrypoint_script_content(agent_command, initialization_script)
+        entrypoint_script_content = self.__get_entrypoint_script_content(agent_command, initialization_script, status_start_line)
         with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False, newline="\n", encoding="utf-8") as entrypoint_file_handle:
             host_entrypoint_file = entrypoint_file_handle.name
             entrypoint_file_handle.write(entrypoint_script_content)
@@ -160,13 +164,19 @@ class AgentRunner:
                 initialization_script_absolute_path = os.path.abspath(initialization_script)
                 os.chmod(initialization_script_absolute_path, 0o755)
                 docker_command = docker_command + ["--volume", f"{initialization_script_absolute_path.replace(os.sep, '/')}:/Workspace/Temp/InitializationScript.sh:ro"]
+            if status_session is not None:
+                docker_command = docker_command + status_session.get_volume_arguments()
             image = self.__get_image_to_use(agentRunnerConfiguration.image, host_repository_folder)
             docker_command = docker_command + ["--workdir", container_workspace_folder, "--entrypoint", "sh", image, "/Workspace/Entrypoint.sh"]
             # Nothing is installed in the container; the coding-agent-CLI is assumed to be available in the image.
             # subprocess.run blocks until the container has exited, which happens when the agent is finished (or was terminated by the user in interactive mode).
             # The exit-code of the container is returned (and not checked here), so that the caller can pass it through.
+            if status_session is not None:
+                status_session.start()
             return subprocess.run(docker_command, check=False).returncode
         finally:
+            if status_session is not None:
+                status_session.stop()
             GeneralUtilities.ensure_file_does_not_exist(host_entrypoint_file)
 
     @GeneralUtilities.check_arguments
@@ -183,11 +193,12 @@ class AgentRunner:
         return configured_image
 
     @GeneralUtilities.check_arguments
-    def __get_entrypoint_script_content(self, agent_command: list[str], initialization_script: str) -> str:
+    def __get_entrypoint_script_content(self, agent_command: list[str], initialization_script: str, status_start_line: str) -> str:
         # The entrypoint-script is always used as the container's entrypoint (located at "/Workspace/Entrypoint.sh").
         # It is regenerated before every container-start, so the decision whether the initialization-script is called is made here in python
         # (no runtime-check in the script): if an initialization-script is present its call is included (and the script is removed afterwards),
         # otherwise it is omitted. Afterwards the agent is always started (via exec, so signals reach the agent).
+        # status_start_line is None if the status is not reported; it is the only runtime-check, because only the container knows whether its image supports the status-report.
         agent_command_line = shlex.join(agent_command)
         lines = ["#!/bin/sh", "set -e"]
         if initialization_script is not None:
@@ -199,6 +210,8 @@ class AgentRunner:
         else:
             # The counterpart of the message above: it makes clear that the agent is started unconfigured on purpose because no initialization-script is declared for this repository (see __get_initialization_script).
             lines.append('echo "No initialization-script is configured for this repository; the agent is started without an initialization-script."')
+        if status_start_line is not None:
+            lines.append(status_start_line)
         lines.append(f"exec {agent_command_line}")
         return "\n".join(lines) + "\n"
 
