@@ -2,8 +2,8 @@
 
 ## 1. Verification spike (not committed as testcases)
 
-- [ ] 1.1 Verify with a real herdr that `pane report-agent` with source `scrais` and agent name `scrais-claude` shows the expected indicator colors for working, idle, blocked, that `release-agent` clears it, and that an unknown name like `scrais-vibe` works in the same way.
-- [ ] 1.2 Verify claude: the hooks in `/etc/claude-code/managed-settings.json` fire in the container when `--dangerously-skip-permissions` is used; record the tested version.
+- [x] 1.1 Verify with a real herdr that `pane report-agent` with source `scrais` and agent name `scrais-claude` shows the expected indicator colors for working, idle, blocked, that `release-agent` clears it, and that an unknown name like `scrais-vibe` works in the same way.
+- [x] 1.2 Verify claude: the hooks in `/etc/claude-code/managed-settings.json` fire in the container when `--dangerously-skip-permissions` is used; record the tested version.
 - [ ] 1.3 Verify codex: the managed hooks in `/etc/codex/requirements.toml` run without a trust decision; record the tested version.
 - [ ] 1.4 Verify copilot: `~/.copilot/hooks/*.json` fires with `--allow-all-tools`, including the filter on the `notification` type; record the tested version.
 - [ ] 1.5 Verify opencode: the plugin is loaded and the events `session.status`, `permission.asked`, `permission.replied` arrive; record the tested version.
