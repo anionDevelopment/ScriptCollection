@@ -139,9 +139,6 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             #ensure <repo>/.gitignore is set up (ignores the cache-folder so cache-files never show up as uncommitted changes)
             self.__ensure_global_gitignore_is_setup(self.repository)
 
-            #validate the openspec-specifications if openspec is set up in the repository
-            self.__validate_openspec()
-
             self.sc.log.log(f"Start building codeunits at {GeneralUtilities.datetime_to_string_for_readable_entry(start_time,False)}. (Target environment-type: {self.target_environment_type})")
 
             #ensure common cache-files are available
@@ -286,6 +283,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         self.sc.log.log("Do project-linting...")
         self.__do_project_linting_using_codespell(repository_folder)
         self.__sort_findings(repository_folder)
+        self.__validate_openspec(repository_folder)
 
     @GeneralUtilities.check_arguments
     def __sort_findings(self, repository_folder: str) -> None:
@@ -436,11 +434,14 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.sc.run_with_epew("openspec", "update --force", self.repository)
 
     @GeneralUtilities.check_arguments
-    def __validate_openspec(self) -> None:
-        openspec_configuration_file: str = os.path.join(self.repository, "openspec", "config.yaml")
+    def __validate_openspec(self,repository:str) -> None:
+        openspec_configuration_file: str = os.path.join(repository, "openspec", "config.yaml")
         if os.path.isfile(openspec_configuration_file):
             self.sc.log.log("Validate openspec-specifications...")
-            self.sc.run_with_epew("openspec", "validate --all --strict", self.repository)
+            try:
+                self.sc.run_with_epew("openspec", "validate --all --strict", repository)
+            except Exception as e:
+                self.sc.log.log_exception(f"Openspec validation failed.",e,LogLevel.Warning)
 
     @GeneralUtilities.check_arguments
     def get_default_base_mount_folder(self) -> str:
