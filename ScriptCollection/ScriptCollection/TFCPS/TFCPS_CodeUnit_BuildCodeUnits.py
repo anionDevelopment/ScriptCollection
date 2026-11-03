@@ -197,21 +197,23 @@ class TFCPS_CodeUnit_BuildCodeUnits:
                 hook.run_after_codeunit_was_built(tFCPS_CodeUnit_BuildCodeUnit)
             self.sc.log.log(GeneralUtilities.get_line())
 
-            self.tfcps_tools_general.generate_svg_files_from_plantuml_files_for_repository(self.repository, self.use_cache())
-            self.tfcps_tools_general.generate_svg_files_from_vega_files_for_repository(self.repository, self.use_cache())
-            self.tfcps_tools_general.generate_svg_files_from_vegalite_files_for_repository(self.repository, self.use_cache())
-            self.__do_project_linting(self.repository)
-            self.__update_agent_sandbox_image(self.repository)
+            self.sc.log.log("Do project post-build-tasks...")
+        
+            if not self.__fast_lane:
+                self.__do_project_linting(self.repository)
+                self.__update_agent_sandbox_image(self.repository)
+                self.search_for_secrets()
             self.__normalize_line_endings_of_common_files()
-            self.search_for_secrets()
-
-            self.sc.log.log(GeneralUtilities.get_line())
 
             if self.is_pre_merge():
                 self.__collect_metrics()
                 self.__generate_loc_diagram()
-                self.sc.log.log(GeneralUtilities.get_line())
 
+            self.tfcps_tools_general.generate_svg_files_from_plantuml_files_for_repository(self.repository, self.use_cache())
+            self.tfcps_tools_general.generate_svg_files_from_vega_files_for_repository(self.repository, self.use_cache())
+            self.tfcps_tools_general.generate_svg_files_from_vegalite_files_for_repository(self.repository, self.use_cache())
+
+            self.sc.log.log(GeneralUtilities.get_line())
         except Exception:
             error_occurred=True
             raise
