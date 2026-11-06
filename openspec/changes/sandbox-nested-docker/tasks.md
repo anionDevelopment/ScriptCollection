@@ -8,6 +8,7 @@
 - [ ] 1.3 Verify that a nested container cannot reach host paths (bind mount of a host path outside the mounts) and that nothing remains on the host after the run.
 - [ ] 1.4 Verify the combination with `drop_capabilities = true`; record the result in design.md.
 - [ ] 1.5 Check the microVM alternative for fit (own image, mounts, initialization script, agents) and record the result in design.md.
+- [ ] 1.6 Verify with an allowlist: `docker pull` through the egress-proxy from a registry whose domains are allowed works, a registry which is not allowed is denied (listed with `--verbose`), a nested container can not connect directly to the outside, and with an empty allowlist every pull fails; record the needed registry-domains and the answer to design open question 5 in design.md.
 
 ## 2. Core
 
@@ -26,12 +27,13 @@
 - [ ] 4.1 Run arguments with prerequisites met contain the backend arguments and no forbidden argument; with prerequisites missing the arguments are as before.
 - [ ] 4.2 Prerequisite check: missing runtime, missing daemon in image, `drop_capabilities` conflict, success (test doubles); the message names the prerequisite.
 - [ ] 4.3 Entrypoint content with and without the daemon start.
-- [ ] 4.4 Interface guard: a testcase compares the argument definitions of `scrais` (names, short names, actions, defaults) with the expected list; the only difference to before is the missing `-d/--mountdockersocket`, which is rejected.
+- [ ] 4.4 Interface guard: a testcase compares the argument definitions of `scrais` (names, short names, actions, defaults) with the expected list; the expected list is the current state of `scrais` at implementation time (including `--alloweddomain` and `--egressproxyimage`), and the only difference to it is the missing `-d/--mountdockersocket`, which is rejected.
 - [ ] 4.5 Backend selection per platform (platform supplied by a test double) and Windows path conversion of mounts.
+- [ ] 4.6 With an allowlist the docker command contains the network arguments of the egress-proxy and the backend arguments, and `assert_no_unsafe_arguments` accepts it; the same for `--network none` with an empty allowlist.
 
 ## 5. Documentation and finish
 
-- [ ] 5.1 Replace the "Docker-socket" section in `RunAgentInSandbox.md` by the new section (prerequisites per platform, limits, removed switch) and remove the table row of `-d`.
+- [ ] 5.1 Replace the "Docker-socket" section in `RunAgentInSandbox.md` by the new section (prerequisites per platform, limits, removed switch, registry-domains for the allowlist) and remove the table row of `-d` and the warning about `--mountdockersocket` in the section "Network access".
 - [ ] 5.2 Add changelog entry marking the removal of the switch (breaking).
 - [ ] 5.2a Manual verification on Windows, macOS and Linux (not committed as testcases).
 - [ ] 5.3 Run `scbuildcodeunits` and make sure it succeeds.

@@ -1,4 +1,5 @@
 import argparse
+import configparser
 import os
 import subprocess
 import tempfile
@@ -11,6 +12,7 @@ from ..ScriptCollection.AgentStatusReporting.AgentStatusReportingSession import 
 from ..ScriptCollection.AgentStatusReporting.HerdrAgentStatusReporter import HerdrAgentStatusReporter
 from ..ScriptCollection.Executables import RunAgentInSandbox
 from ..ScriptCollection.TFCPS.ContainerBuildEnvironment import ContainerMount
+from ..ScriptCollection.AgentSandboxNetwork.SandboxNetworkConfiguration import SandboxNetworkConfiguration
 
 
 HERDR_ENVIRONMENT: dict[str, str] = {"HERDR_ENV": "1", "HERDR_PANE_ID": "w1:p1", "HERDR_BIN_PATH": "herdr"}
@@ -40,9 +42,14 @@ class ContainerStart:
 
 class AgentRunnerTests(unittest.TestCase):
 
-    def __start_container(self, environment: dict[str, str], codingagent: CodingAgent = CodingAgent.Claude, prompt: str = None, docker_exit_code: int = 0, build_environment: SandboxBuildEnvironment = None, initialization_script: str = None) -> ContainerStart:
+    def __start_container(self, environment: dict[str, str], codingagent: CodingAgent = CodingAgent.Claude, prompt: str = None, docker_exit_code: int = 0, build_environment: SandboxBuildEnvironment = None, initialization_script: str = None, network_configuration: SandboxNetworkConfiguration = None, docker_commands: list[list[str]] = None) -> ContainerStart:
         # Replaces docker: the runner is executed up to the call of "docker run", which then reads the generated entrypoint before it is removed again.
+        # network_configuration is the unrestricted network-access if it is not given. docker_commands records every docker-command, including the ones of the egress-proxy.
         container_start = ContainerStart()
+        if network_configuration is None:
+            network_configuration = SandboxNetworkConfiguration(None, None)
+        if docker_commands is None:
+            docker_commands = []
         configuration = AgentRunnerConfiguration()
         configuration.codingagent = codingagent
         configuration.image = "example/image:v1.0.0"
@@ -52,6 +59,10 @@ class AgentRunnerTests(unittest.TestCase):
             if command[0] != "docker":
                 container_start.herdr_commands.append(command)
                 return subprocess.CompletedProcess(command, 0)
+            docker_commands.append(command)
+            if command[1] != "run" or "--detach" in command:
+                # A command of the egress-proxy.
+                return subprocess.CompletedProcess(command, 0, "", "")
             container_start.docker_command = command
             container_start.docker_client_environment = keyword_arguments.get("env")
             entrypoint_file = next(argument for argument in command if argument.endswith(":/Workspace/Entrypoint.sh:ro")).removesuffix(":/Workspace/Entrypoint.sh:ro")
@@ -64,7 +75,7 @@ class AgentRunnerTests(unittest.TestCase):
             oci_image_manager.return_value.get_repository_image_definition_file.return_value = "NotExistingFile"
             with mock.patch.dict(os.environ, environment, clear=True):
                 with mock.patch("subprocess.run", side_effect=run):
-                    container_start.exit_code = AgentRunner(False)._AgentRunner__run_sandbox(os.getcwd(), configuration, prompt, True, initialization_script, [], build_environment)  # pylint: disable=protected-access
+                    container_start.exit_code = AgentRunner(False)._AgentRunner__run_sandbox(os.getcwd(), configuration, prompt, True, initialization_script, [], build_environment, network_configuration)  # pylint: disable=protected-access
         return container_start
 
     def test_nothing_changes_outside_of_herdr(self) -> None:
@@ -182,6 +193,8 @@ class AgentRunnerTests(unittest.TestCase):
             ("dropcapabilities", ("-s", "--dropcapabilities"), None),
             ("additionalfolder", ("-a", "--additionalfolder"), None),
             ("providebuildenvironment", ("-b", "--providebuildenvironment"), None),
+            ("alloweddomain", ("--alloweddomain",), None),
+            ("egressproxyimage", ("--egressproxyimage",), None),
             ("mountdockersocket", ("-d", "--mountdockersocket"), False),
             ("verbose", ("-v", "--verbose"), False),
         ]
@@ -200,13 +213,14 @@ class AgentRunnerTests(unittest.TestCase):
         actual_arguments = [(action.dest, tuple(action.option_strings), None if action.dest == "help" else action.default) for action in parsers[0]._actions]  # pylint: disable=protected-access
         self.assertEqual(sorted(expected_arguments), sorted(actual_arguments, key=lambda argument: argument[0]))
 
-    def __load_configuration(self, configuration_file_content: str, provide_build_environment_override: bool) -> AgentRunnerConfiguration:
+    def __load_configuration(self, configuration_file_content: str, provide_build_environment_override: bool, allowed_domains_override: list[str] = None) -> AgentRunnerConfiguration:
         with tempfile.TemporaryDirectory() as repository:
             os.makedirs(os.path.join(repository, ".ScriptCollection"))
             with open(os.path.join(repository, ".ScriptCollection", "AgentSandboxConfiguration.ini"), "w", encoding="utf-8") as file:
                 file.write("[AgentSandboxConfiguration]\ncodingagent = claude\nimage = example/image:v1.0.0\ndrop_capabilities = true\n" + configuration_file_content)
             overrides = AgentRunnerConfiguration()
             overrides.provide_build_environment = provide_build_environment_override
+            overrides.allowed_domains = allowed_domains_override
             return AgentRunner(False)._AgentRunner__load_configuration(repository, overrides)  # pylint: disable=protected-access
 
     def test_build_environment_is_not_provided_if_it_is_not_defined(self) -> None:
@@ -343,3 +357,106 @@ class AgentRunnerTests(unittest.TestCase):
         # assert
         self.assertEqual(["--volume", "/host/CustomScripts:/Workspace/CustomScripts", "--volume", "/host/TFCPS:/Workspace/ScriptCollectionConfiguration/TFCPS:ro"], build_environment.volume_arguments)
         self.assertEqual({"MyVariable": "MyValue"}, build_environment.environment_variables)
+
+    def test_allowlist_is_not_defined_if_the_configuration_file_does_not_contain_its_section(self) -> None:
+        # act and assert
+        self.assertIsNone(self.__load_configuration("", None).allowed_domains)
+
+    def test_empty_allowlist_in_the_configuration_file_is_defined(self) -> None:
+        # act and assert
+        self.assertEqual([], self.__load_configuration("[AllowedDomains]\n", None).allowed_domains)
+
+    def test_allowlist_is_read_from_the_configuration_file_and_the_comments_do_not_matter(self) -> None:
+        # act
+        configuration = self.__load_configuration("egress_proxy_image = example/squid:v1.0.0\n[AllowedDomains]\na.example.com = API of the agent: needed for every request\n.example.org =\n", None)
+
+        # assert
+        self.assertEqual(["a.example.com", ".example.org"], configuration.allowed_domains)
+        self.assertEqual("example/squid:v1.0.0", configuration.egress_proxy_image)
+
+    def test_domain_which_is_listed_twice_in_the_configuration_file_is_rejected(self) -> None:
+        # act and assert
+        with self.assertRaisesRegex(configparser.DuplicateOptionError, "a.example.com"):
+            self.__load_configuration("[AllowedDomains]\na.example.com = first\na.example.com = second\n", None)
+
+    def test_allowlist_is_read_from_the_command_line(self) -> None:
+        # act and assert
+        self.assertEqual(["b.example.com"], self.__load_configuration("", None, ["b.example.com"]).allowed_domains)
+
+    def test_allowlist_of_the_command_line_replaces_the_one_of_the_configuration_file(self) -> None:
+        # act and assert
+        self.assertEqual(["b.example.com"], self.__load_configuration("[AllowedDomains]\na.example.com = comment\n", None, ["b.example.com"]).allowed_domains)
+
+    def test_without_allowlist_the_network_arguments_are_unchanged(self) -> None:
+        # arrange
+        docker_commands: list[list[str]] = []
+
+        # act
+        with mock.patch.object(AgentRunnerModule.GeneralUtilities, "write_message_to_stderr") as write_message_to_stderr:
+            container_start = self.__start_container({}, docker_commands=docker_commands)
+
+        # assert
+        self.assertNotIn("--network", container_start.docker_command)
+        self.assertNotIn("--dns", container_start.docker_command)
+        self.assertEqual([container_start.docker_command], docker_commands)
+        write_message_to_stderr.assert_not_called()
+
+    def test_empty_allowlist_blocks_the_network_access(self) -> None:
+        # arrange
+        docker_commands: list[list[str]] = []
+
+        # act
+        with mock.patch.object(AgentRunnerModule.GeneralUtilities, "write_message_to_stderr") as write_message_to_stderr:
+            container_start = self.__start_container({}, network_configuration=SandboxNetworkConfiguration([], None), docker_commands=docker_commands)
+
+        # assert
+        self.assertEqual("none", container_start.docker_command[container_start.docker_command.index("--network")+1])
+        self.assertEqual([container_start.docker_command], docker_commands)
+        write_message_to_stderr.assert_called_once_with("The sandbox has no network access.")
+
+    def test_allowlist_attaches_the_sandbox_only_to_the_network_of_the_egress_proxy(self) -> None:
+        # arrange
+        docker_commands: list[list[str]] = []
+
+        # act
+        with mock.patch.object(AgentRunnerModule.GeneralUtilities, "write_message_to_stderr") as write_message_to_stderr:
+            container_start = self.__start_container({}, network_configuration=SandboxNetworkConfiguration(["api.example.com"], "example/squid:v1.0.0"), docker_commands=docker_commands)
+
+        # assert
+        network_name = next(command[-1] for command in docker_commands if command[1:4] == ["network", "create", "--internal"])
+        proxy_start = next(command for command in docker_commands if "--detach" in command)
+        self.assertEqual("example/squid:v1.0.0", proxy_start[-1])
+        self.assertEqual(network_name, container_start.docker_command[container_start.docker_command.index("--network")+1])
+        self.assertEqual(1, container_start.docker_command.count("--network"))
+        self.assertEqual("127.0.0.1", container_start.docker_command[container_start.docker_command.index("--dns")+1])
+        self.assertIn("HTTPS_PROXY=http://" + proxy_start[proxy_start.index("--name")+1] + ":3128", container_start.docker_command)
+        write_message_to_stderr.assert_called_once_with("Network access of the sandbox is restricted to api.example.com via HTTPS.")
+
+    def test_egress_proxy_is_removed_after_a_failing_run_and_the_exit_code_is_kept(self) -> None:
+        # arrange
+        docker_commands: list[list[str]] = []
+
+        # act
+        with mock.patch.object(AgentRunnerModule.GeneralUtilities, "write_message_to_stderr"):
+            container_start = self.__start_container({}, docker_exit_code=3, network_configuration=SandboxNetworkConfiguration(["api.example.com"], "example/squid:v1.0.0"), docker_commands=docker_commands)
+
+        # assert
+        self.assertEqual(3, container_start.exit_code)
+        self.assertEqual(["rm", "--force"], docker_commands[-2][1:3])
+        self.assertEqual(["network", "rm"], docker_commands[-1][1:3])
+        self.assertLess(docker_commands.index(container_start.docker_command), len(docker_commands) - 2)
+
+    def test_invalid_allowlist_is_rejected_before_anything_is_started(self) -> None:
+        # arrange
+        configuration = AgentRunnerConfiguration()
+        configuration.codingagent = CodingAgent.Claude
+        configuration.image = "example/image:v1.0.0"
+        configuration.drop_capabilities = True
+        configuration.allowed_domains = ["https://example.com"]
+        agent_runner = AgentRunner(False)
+
+        # act and assert
+        with mock.patch.object(agent_runner, "_AgentRunner__assert_is_git_root_dir"), mock.patch("subprocess.run") as run:
+            with self.assertRaisesRegex(ValueError, "'https://example.com'"):
+                agent_runner.run("Do something.", False, os.getcwd(), configuration, [], False)
+        run.assert_not_called()

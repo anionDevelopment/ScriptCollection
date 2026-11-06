@@ -202,7 +202,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         
             if not self.__fast_lane:
                 self.__do_project_linting(self.repository)
-                self.__update_agent_sandbox_image(self.repository)
+                self.__update_agent_images(self.repository)
                 self.search_for_secrets()
             self.__normalize_line_endings_of_common_files()
 
@@ -242,25 +242,31 @@ class TFCPS_CodeUnit_BuildCodeUnits:
 
 
     @GeneralUtilities.check_arguments
-    def __update_agent_sandbox_image(self, repository_folder: str) -> None:
-        """Sets the value "image" in "<repository>/.ScriptCollection/AgentSandboxConfiguration.ini" to the SCBuilder-image (address including tag)
-        defined in "<repository>/.ScriptCollection/OCIImages/ImageDefinition.csv".
-        Nothing is done if one of these files does not exist or if the image-definition-file does not contain an entry for SCBuilder."""
+    def __update_agent_images(self, repository_folder: str) -> None:
+        # The image of the sandbox and the image of its egress-proxy (which enforces the allowlist of the sandbox) follow the image-definition-file.
+        self.__update_agent_sandbox_image(repository_folder, "SCBuilder", "image")
+        self.__update_agent_sandbox_image(repository_folder, "Squid", "egress_proxy_image")
+        
+    @GeneralUtilities.check_arguments
+    def __update_agent_sandbox_image(self, repository_folder: str, image: str, key: str) -> None:
+        """Sets the value of the given key in "<repository>/.ScriptCollection/AgentSandboxConfiguration.ini" to the given image (address including tag)
+        as defined in "<repository>/.ScriptCollection/OCIImages/ImageDefinition.csv".
+        Nothing is done if one of these files does not exist or if the image-definition-file does not contain an entry for the image."""
         image_definition_file = os.path.join(repository_folder, ".ScriptCollection", "OCIImages", "ImageDefinition.csv")
         agent_sandbox_configuration_file = os.path.join(repository_folder, ".ScriptCollection", "AgentSandboxConfiguration.ini")
         if not os.path.isfile(image_definition_file) or not os.path.isfile(agent_sandbox_configuration_file):
             return
-        scbuilder_image: str = None
+        image_value: str = None
         for line in GeneralUtilities.read_nonempty_lines_from_file(image_definition_file):
-            if line.startswith("SCBuilder;"):
+            if line.startswith(f"{image};"):
                 columns = line.split(";")
-                scbuilder_image = f"{columns[1]}:{columns[2]}"
+                image_value = f"{columns[1]}:{columns[2]}"
                 break
-        if scbuilder_image is None:
+        if image_value is None:
             return
-        self.sc.log.log(f"Set image of agent-sandbox to '{scbuilder_image}'...", LogLevel.Debug)
+        self.sc.log.log(f"Set '{key}' of agent-sandbox to '{image_value}'...", LogLevel.Debug)
         section_header = "[AgentSandboxConfiguration]"
-        image_line = f"image = {scbuilder_image}"
+        image_line = f"{key} = {image_value}"
         lines: list[str] = GeneralUtilities.read_lines_from_file(agent_sandbox_configuration_file)
         updated_lines: list[str] = []
         current_section: str = None
@@ -269,7 +275,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             stripped_line = line.strip()
             if stripped_line.startswith("[") and stripped_line.endswith("]"):
                 current_section = stripped_line
-            elif current_section == section_header and re.match(r"^image\s*=", stripped_line):
+            elif current_section == section_header and re.match(rf"^{re.escape(key)}\s*=", stripped_line):
                 line = image_line
                 image_was_set = True
             updated_lines.append(line)
