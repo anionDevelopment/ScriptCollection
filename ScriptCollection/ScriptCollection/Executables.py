@@ -30,6 +30,8 @@ def RunAgentInSandbox() -> int:
     parser.add_argument('-s','--dropcapabilities', default=None, required=False, choices=["true", "false"], help='Defines whether all capabilities should be dropped in the sandbox. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
     parser.add_argument('-a', '--additionalfolder', action='append', default=None, required=False, help='Folder which should additionally be mounted (read-write) into the sandbox under "/Workspace/Other/AdditionalResources/<folder-name>". Can be given multiple times.')
     parser.add_argument('-b','--providebuildenvironment', default=None, required=False, choices=["true", "false"], help='Defines whether the sandbox gets the same build-environment as a build-container of "scbuildcodeunits -c" (required environment-variables, configuration-folder, custom scripts, image-registries, trusted root-CAs and registered package-sources). The agent can then read every secret of the TFCPS-configuration-folder. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
+    parser.add_argument('--alloweddomain', action='append', default=None, required=False, help='Domain which the sandbox may reach via HTTPS: "example.com" allows exactly this host, ".example.com" the domain and all of its subdomains. If an allowlist is defined, everything except the allowlist is blocked. Can be given multiple times. If given at least once, it replaces the section "AllowedDomains" of ".ScriptCollection/AgentSandboxConfiguration.ini" completely.')
+    parser.add_argument('--egressproxyimage', default=None, required=False, help='Squid-image of the egress-proxy which enforces the allowlist: either an image-name defined in ".ScriptCollection/OCIImages/ImageDefinition.csv" or an image-address including tag. Required if the allowlist contains at least one domain. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
     parser.add_argument('-d','--mountdockersocket', action='store_true', required=False, default=False, help='Mounts the docker-socket of the host (/var/run/docker.sock) into the sandbox so that the agent can use docker. DANGEROUS: this effectively gives the agent administrator-access to the docker-daemon of the host and makes the restrictions of the sandbox ineffective. Can only be set via this argument (not in the configuration-file); a warning is printed to stderr.')
     args = parser.parse_args()
     repo=os.getcwd()
@@ -44,6 +46,8 @@ def RunAgentInSandbox() -> int:
         configuration_overrides.drop_capabilities = args.dropcapabilities == "true"
     if args.providebuildenvironment is not None:
         configuration_overrides.provide_build_environment = args.providebuildenvironment == "true"
+    configuration_overrides.allowed_domains = args.alloweddomain
+    configuration_overrides.egress_proxy_image = args.egressproxyimage
     additional_folders: list[str] = []
     if args.additionalfolder is not None:
         additional_folders = [GeneralUtilities.resolve_relative_path(additional_folder, os.getcwd()) for additional_folder in args.additionalfolder]

@@ -50,7 +50,7 @@ The configuration is generated per run and contains only what is needed:
 - `http_access deny CONNECT !https_port`
 - `http_access allow CONNECT allowed_domains`
 - `http_access deny all`
-- `cache deny all`, access-log to stdout (used for D7), no other features.
+- `cache deny all`, unbuffered access-log to `/var/log/squid/access.log` in the proxy-container (used for D7), `pinger_enable off` (the pinger needs `NET_RAW`, see D6), no other features.
 
 TLS is tunneled (CONNECT) and not intercepted, so the trusted root-CAs of the build-environment keep working unchanged.
 
@@ -58,15 +58,15 @@ TLS is tunneled (CONNECT) and not intercepted, so the trusted root-CAs of the bu
 
 | Mode | Condition | Docker arguments of the sandbox | Proxy |
 | --- | --- | --- | --- |
-| unrestricted | no allowlist defined (neither in the configuration-file nor on the command-line) | none (default bridge as today) | no |
+| unrestricted | no allowlist defined (no section `AllowedDomains` and no `--alloweddomain`) | none (default bridge as today) | no |
 | allowlist | allowlist defined with at least one domain | `--network scrais-<run-id>`, proxy-variables, `--dns 127.0.0.1` | yes |
-| none | allowlist defined without domain (`allowed_domains =`) | `--network none` | no |
+| none | allowlist defined without domain (empty section `AllowedDomains`) | `--network none` | no |
 
 Mode "none" needs neither network nor proxy nor `egress_proxy_image`. `--dns 127.0.0.1` makes external name resolution in the sandbox fail (nothing listens there), while the embedded DNS of docker still resolves the name of the proxy container (assumption: the embedded DNS answers container names itself and forwards only other names to the configured server; to be verified). This closes DNS as exfiltration channel. The proxy resolves names itself.
 
 ### D5: Configuration
 
-- `allowed_domains`: optional, comma-separated list, whitespace around entries is ignored. Absent means "no allowlist defined" (mode unrestricted); present with empty value means "allowlist without domain" (mode none). The difference between absent and empty is intended and documented. CLI: `--alloweddomain <entry>`, repeatable; if given at least once, it replaces the list of the configuration-file completely. There is deliberately no CLI-argument to remove an allowlist of the configuration-file for one run (not requested; it would make it too easy to bypass a restriction which was configured on purpose).
+- Section `AllowedDomains`: optional, one entry per domain (`<domain> = <comment>`). The value is a comment for the reader of the file (for example why the domain is needed), may be empty and does not influence the behavior. A comment as value and not as `#`-line is chosen because it belongs to exactly one entry. An own section and not a comma-separated key is chosen because every entry needs its own line for its comment; a domain listed twice is then rejected by the parser of the ini-file. Absent section means "no allowlist defined" (mode unrestricted); empty section means "allowlist without domain" (mode none). The difference between absent and empty is intended and documented. The key needs the `=` (also without comment), because the parser does not allow keys without value. CLI: `--alloweddomain <entry>`, repeatable; if given at least once, it replaces the list of the configuration-file completely. There is deliberately no CLI-argument to remove an allowlist of the configuration-file for one run (not requested; it would make it too easy to bypass a restriction which was configured on purpose).
 - `egress_proxy_image`: required only in mode allowlist. CLI: `--egressproxyimage`.
 - There is no key for unrestricted access: unrestricted is simply the absence of an allowlist.
 - Validation before any container or network is created: every entry must match a hostname-pattern (labels of letters, digits and hyphens, at least two labels, optional leading dot), must not be an IP-address and must not be covered by another entry (`api.example.com` is covered by `.example.com`; `example.com` is covered by `.example.com`). Rejecting redundant entries also avoids that Squid refuses or warns about overlapping `dstdomain`-entries.
@@ -83,7 +83,7 @@ There is no readiness-wait for Squid (no wait-loop, see behavior-rules). The san
 
 ### D7: Denied requests in verbose mode
 
-Before the proxy is removed, `scrais` reads `docker logs` of the proxy when `--verbose` is set and prints the denied entries (`TCP_DENIED`) with their host to stderr. Without `--verbose` nothing is printed.
+Before the proxy is removed, `scrais` reads the access-log of the proxy with `docker exec <proxy> cat /var/log/squid/access.log` when `--verbose` is set and prints the denied entries (`TCP_DENIED`) with their host to stderr. Without `--verbose` nothing is printed. `docker logs` was planned first, but the verification showed that `ubuntu/squid` runs Squid under the service-manager pebble, which does not forward the output of Squid to `docker logs`.
 
 ### D8: Start message
 
@@ -91,21 +91,22 @@ Printed to stderr before the sandbox starts in modes allowlist and none, one lin
 
 ## Risks / Trade-offs
 
-- [Absent versus empty] `allowed_domains =` (block all) and a missing key (unrestricted) look similar. → Documented explicitly; the start message makes the effective mode visible.
+- [Absent versus empty] An empty section `AllowedDomains` (block all) and a missing section (unrestricted) look similar. → Documented explicitly; the start message makes the effective mode visible.
 - [Domains of the agents are unknown] The coding-agents and package-managers may need more domains than expected (login, telemetry, CDNs). → Verbose output of denied requests (D7); documentation contains example lists marked as to be verified by the user.
 - [Proxy-unaware tools] Tools which ignore the proxy-variables cannot connect. → Fail-closed is intended; documented.
 - [Start order] A connection before Squid listens fails. → Documented; no wait-loop by rule. If this turns out to be a problem in practice, a bounded readiness-check is a separate decision of the user.
-- [Embedded DNS behavior] Assumption in D4 about the embedded DNS of docker on internal networks is not verified. → Verification task; if it does not hold, the proxy is addressed by a fixed IP-address in a dedicated subnet instead.
-- [Squid as root] The proxy container needs to drop privileges to the Squid user. → Verify with the chosen image; the proxy container is started with `--cap-drop all` plus only the capabilities the image needs (to be determined in the tasks).
+- [Embedded DNS behavior] Assumption in D4 about the embedded DNS of docker on internal networks. → Verified on Windows with Docker Desktop, not tested on a Linux-host with docker engine; if it does not hold there, the sandbox can not reach the proxy (fail-closed) and the proxy is addressed by a fixed IP-address in a dedicated subnet instead.
+- [Squid as root] The proxy container needs to drop privileges to the Squid user. → Verified: Squid runs as `_daemon_` in the chosen image and needs no capability; the proxy container is started with `--cap-drop all` and `--security-opt no-new-privileges:true`.
 - [Leftover resources after hard kill] → Prefix `scrais-` and documented cleanup command.
 - [Conflict with `sandbox-nested-docker`] Its spec forbids new arguments/keys of `scrais`. → Whichever change is archived second reconciles the requirement; nested docker daemons need the proxy-variables for pulls.
 
 ## Migration Plan
 
 1. Release with changelog entry. Existing configurations keep working unchanged.
-2. Users who want the restriction add `allowed_domains = ...` plus `egress_proxy_image = ...` (and the image to `ImageDefinition.csv`) to `AgentSandboxConfiguration.ini`.
-3. Rollback: removing `allowed_domains` restores the unrestricted behavior without downgrading ScriptCollection.
+2. Users who want the restriction add the section `AllowedDomains` plus `egress_proxy_image = ...` (and the image to `ImageDefinition.csv`) to `AgentSandboxConfiguration.ini`.
+3. Rollback: removing the section `AllowedDomains` restores the unrestricted behavior without downgrading ScriptCollection.
 
-## Open Questions
+## Decisions made during the implementation
 
-- Which concrete Squid-image with which pinned tag is named in the documentation (does not change the design, only the documented example).
+- Verification with real docker (Docker Desktop 29.9.2 on Windows, sandbox-image `aniondev/scbuilder:v1.2.19`, see tasks 3.5, 4.2 and 4.3): Squid runs in `ubuntu/squid:7.2-26.04_edge` as the unprivileged user `_daemon_` and needs no capability, so the proxy-container is started with `--cap-drop all` and `--security-opt no-new-privileges:true` (the pinger, which would need `NET_RAW`, is disabled). The assumption about the embedded DNS of docker (D4) holds on Windows with Docker Desktop: the name of the proxy-container is resolved, external names are not. A Linux-host with docker engine was not tested (user decision); the same behavior is expected because Docker Desktop runs the same docker-daemon in a Linux-VM, and a deviation would fail closed (see the risk about the embedded DNS).
+- Image: `ubuntu/squid:7.2-26.04_edge` (Canonical). It is the highest Squid-version and the only one on a supported Ubuntu-LTS-base (26.04); the 6.13-tags are based on Ubuntu 25.04, which is out of support. All tags of this repository are channel-tags which are rebuilt (also `_beta`); a digest is not used because `ImageDefinition.csv` pins by tag. The image is declared as `Squid` in `ImageDefinition.csv`, and `scbuildcodeunits` sets `egress_proxy_image` from it like it sets `image` from `SCBuilder`.

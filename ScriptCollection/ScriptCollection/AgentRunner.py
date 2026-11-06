@@ -11,6 +11,8 @@ from .OCIImages.OCIImageManager import OCIImageManager
 from .TFCPS.ContainerBuildEnvironment import ContainerBuildEnvironment
 from .TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
 from .AgentStatusReporting.AgentStatusReportingSession import AgentStatusReportingSession
+from .AgentSandboxNetwork.SandboxNetworkConfiguration import SandboxNetworkConfiguration, SandboxNetworkMode
+from .AgentSandboxNetwork.SandboxEgressProxy import SandboxEgressProxy
 
 
 class CodingAgent(Enum):
@@ -26,6 +28,8 @@ class AgentRunnerConfiguration:
     image: str = None
     drop_capabilities: bool = None
     provide_build_environment: bool = None
+    allowed_domains: list[str] = None
+    egress_proxy_image: str = None
 
     @GeneralUtilities.check_arguments
     def __init__(self):
@@ -33,6 +37,9 @@ class AgentRunnerConfiguration:
         self.image = None
         self.drop_capabilities = None
         self.provide_build_environment = None
+        # None means that no allowlist is defined (unrestricted network-access); an empty list is an allowlist without domain (no network-access).
+        self.allowed_domains = None
+        self.egress_proxy_image = None
 
 
 class SandboxBuildEnvironment:
@@ -65,6 +72,8 @@ class AgentRunner:
         GeneralUtilities.assert_condition(interactive or prompt is not None, "A prompt is required when the agent is not run in interactive mode.")
         self.__assert_is_git_root_dir(repository)
         agentRunnerConfiguration: AgentRunnerConfiguration = self.__load_configuration(repository, configuration_overrides)
+        # The network-configuration is validated before anything is prepared or started, so an invalid allowlist is rejected without side-effects.
+        network_configuration = SandboxNetworkConfiguration(agentRunnerConfiguration.allowed_domains, agentRunnerConfiguration.egress_proxy_image)
         initialization_script = self.__get_initialization_script(repository)
         additional_folder_volume_arguments = self.__get_additional_folder_volume_arguments(additional_folders)
         if mount_docker_socket:
@@ -73,7 +82,7 @@ class AgentRunner:
         build_environment: SandboxBuildEnvironment = None
         if agentRunnerConfiguration.provide_build_environment:
             build_environment = self.__prepare_build_environment(repository)
-        return self.__run_sandbox(repository, agentRunnerConfiguration, prompt, interactive, initialization_script, additional_folder_volume_arguments, build_environment)
+        return self.__run_sandbox(repository, agentRunnerConfiguration, prompt, interactive, initialization_script, additional_folder_volume_arguments, build_environment, network_configuration)
 
     @GeneralUtilities.check_arguments
     def __print_docker_socket_warning(self) -> None:
@@ -176,10 +185,25 @@ class AgentRunner:
             agentRunnerConfiguration.provide_build_environment = config_parser.getboolean(section, "provide_build_environment")
         else:
             agentRunnerConfiguration.provide_build_environment = False
+
+        # The allowlist and egress_proxy_image are not required either: without allowlist the network-access is unrestricted as before. The allowlist is
+        # the own section "AllowedDomains" with one entry per domain, whose value is a comment for the reader of the file (for example why the domain is
+        # needed); the comment does not influence the behavior. A missing section (no allowlist) and an empty section (allowlist without domain, which
+        # blocks the network-access) are distinguished deliberately. A domain which is listed twice is rejected by the parser.
+        allowed_domains_section = "AllowedDomains"
+        if configuration_overrides.allowed_domains is not None:
+            agentRunnerConfiguration.allowed_domains = configuration_overrides.allowed_domains
+        elif config_parser.has_section(allowed_domains_section):
+            agentRunnerConfiguration.allowed_domains = list(config_parser[allowed_domains_section].keys())
+
+        if configuration_overrides.egress_proxy_image is not None:
+            agentRunnerConfiguration.egress_proxy_image = configuration_overrides.egress_proxy_image
+        elif config_parser.has_option(section, "egress_proxy_image"):
+            agentRunnerConfiguration.egress_proxy_image = config_parser.get(section, "egress_proxy_image")
         return agentRunnerConfiguration
 
     @GeneralUtilities.check_arguments
-    def __run_sandbox(self, repository: str, agentRunnerConfiguration: AgentRunnerConfiguration, prompt: str, interactive: bool, initialization_script: str, additional_folder_volume_arguments: list[str], build_environment: SandboxBuildEnvironment) -> int:
+    def __run_sandbox(self, repository: str, agentRunnerConfiguration: AgentRunnerConfiguration, prompt: str, interactive: bool, initialization_script: str, additional_folder_volume_arguments: list[str], build_environment: SandboxBuildEnvironment, network_configuration: SandboxNetworkConfiguration) -> int:
         # build_environment is None if the build-environment is not provided.
         # The container always runs Linux.
         # The repository is the folder given by the caller (which was asserted to be the git-root-directory before).
@@ -196,6 +220,10 @@ class AgentRunner:
         with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False, newline="\n", encoding="utf-8") as entrypoint_file_handle:
             host_entrypoint_file = entrypoint_file_handle.name
             entrypoint_file_handle.write(entrypoint_script_content)
+        network_description = network_configuration.get_description()
+        if network_description is not None:
+            GeneralUtilities.write_message_to_stderr(network_description)
+        egress_proxy: SandboxEgressProxy = None
         try:
             # Make the entrypoint-script executable (chmod +x). On Linux-/macOS-hosts the execute-bit propagates into the container; on Windows-hosts this has no effect, which is why the script is additionally invoked via "sh" below.
             os.chmod(host_entrypoint_file, 0o755)
@@ -216,6 +244,11 @@ class AgentRunner:
                 docker_command = docker_command + ["--volume", f"{initialization_script_absolute_path.replace(os.sep, '/')}:/Workspace/Temp/InitializationScript.sh:ro"]
             if status_session is not None:
                 docker_command = docker_command + status_session.get_volume_arguments()
+            if network_configuration.get_mode() == SandboxNetworkMode.Allowlist:
+                # The egress-proxy is assigned before it is started, so the finally-block below also removes what a failing start created.
+                egress_proxy = SandboxEgressProxy(network_configuration.allowed_domains, self.__get_image_to_use(network_configuration.egress_proxy_image, host_repository_folder), self.verbose)
+                egress_proxy.start()
+            docker_command = docker_command + self.__get_network_arguments(network_configuration, egress_proxy)
             # The environment of the docker-client; it differs from the one of this process only if the build-environment is provided.
             docker_client_environment: dict[str, str] = None
             if build_environment is not None:
@@ -243,7 +276,20 @@ class AgentRunner:
         finally:
             if status_session is not None:
                 status_session.stop()
+            if egress_proxy is not None:
+                egress_proxy.stop()
             GeneralUtilities.ensure_file_does_not_exist(host_entrypoint_file)
+
+    @GeneralUtilities.check_arguments
+    def __get_network_arguments(self, network_configuration: SandboxNetworkConfiguration, egress_proxy: SandboxEgressProxy) -> list[str]:
+        # egress_proxy is the started egress-proxy in mode allowlist and None otherwise.
+        # Without allowlist no argument is added, so the sandbox is attached to the default bridge-network as before.
+        mode = network_configuration.get_mode()
+        if mode == SandboxNetworkMode.NoNetwork:
+            return ["--network", "none"]
+        if mode == SandboxNetworkMode.Allowlist:
+            return egress_proxy.get_sandbox_docker_arguments()
+        return []
 
     @GeneralUtilities.check_arguments
     def __get_image_to_use(self, configured_image: str, repository: str) -> str:

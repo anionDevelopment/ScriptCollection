@@ -10,7 +10,7 @@ Defines which network connections the agent in the sandbox of `scrais` can estab
 When no allowlist is defined, the sandbox SHALL have the same unrestricted network access as before the allowlist existed, and `scrais` SHALL NOT start any additional container or network.
 
 #### Scenario: No allowlist defined
-- **WHEN** `scrais` is started for a repository whose `AgentSandboxConfiguration.ini` contains no `allowed_domains` and no allowlist is given on the command-line
+- **WHEN** `scrais` is started for a repository whose `AgentSandboxConfiguration.ini` contains no section `AllowedDomains` and no allowlist is given on the command-line
 - **THEN** the sandbox can connect to every host and no proxy container and no network are created
 
 ### Requirement: Defined allowlist blocks everything else
@@ -33,7 +33,7 @@ When an allowlist is defined, the sandbox SHALL be able to connect only to the a
 - **THEN** the connection is not established
 
 #### Scenario: Empty allowlist
-- **WHEN** the configuration-file contains `allowed_domains =` without any entry
+- **WHEN** the configuration-file contains the section `AllowedDomains` without any entry
 - **THEN** every attempt of the agent to connect to a host outside of the sandbox fails
 
 ### Requirement: Domain entries match exactly or including subdomains
@@ -59,15 +59,30 @@ An allowlist entry without leading dot SHALL match exactly this host. An entry w
 - **THEN** `scrais` exits with an error naming `api.example.com` as covered by `.example.com` before a container is started
 
 ### Requirement: Allowlist via configuration-file and command-line
-The allowlist SHALL be definable in `AgentSandboxConfiguration.ini` and via a command-line argument of `scrais`. An allowlist given on the command-line SHALL replace the allowlist of the configuration-file completely.
+The allowlist SHALL be definable in `AgentSandboxConfiguration.ini` as section `AllowedDomains` with one entry per domain, and via a command-line argument of `scrais`. An allowlist given on the command-line SHALL replace the allowlist of the configuration-file completely.
 
 #### Scenario: Command-line replaces the allowlist
-- **WHEN** the configuration-file defines `allowed_domains = a.example.com` and the command-line gives the domain `b.example.com`
+- **WHEN** the section `AllowedDomains` of the configuration-file contains `a.example.com` and the command-line gives the domain `b.example.com`
 - **THEN** only `b.example.com` is allowed
 
 #### Scenario: Allowlist only on the command-line
-- **WHEN** the configuration-file defines no `allowed_domains` and the command-line gives the domain `b.example.com`
+- **WHEN** the configuration-file has no section `AllowedDomains` and the command-line gives the domain `b.example.com`
 - **THEN** only `b.example.com` is allowed
+
+#### Scenario: Domain listed twice
+- **WHEN** the section `AllowedDomains` contains `a.example.com` twice
+- **THEN** `scrais` exits with an error naming `a.example.com` before a container is started
+
+### Requirement: Every allowlist-entry can have a comment
+Every entry of the section `AllowedDomains` SHALL be able to carry a comment as its value (for example the reason why the domain is needed). The comment SHALL be optional and SHALL NOT influence which connections are allowed.
+
+#### Scenario: Entry with comment
+- **WHEN** the section `AllowedDomains` contains `api.example.com = API of the coding-agent`
+- **THEN** `api.example.com` is allowed exactly as without the comment
+
+#### Scenario: Entry without comment
+- **WHEN** the section `AllowedDomains` contains `api.example.com =`
+- **THEN** `api.example.com` is allowed
 
 ### Requirement: Restriction cannot be lifted from inside the sandbox
 The network restriction SHALL be enforced outside of the sandbox container and SHALL NOT require any capability in the sandbox container. In restricted mode the sandbox container SHALL NOT be able to resolve external host names itself.
