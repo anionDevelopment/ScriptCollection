@@ -151,6 +151,14 @@ Every .NET-codeunit-operation (build, testcases, linting, dependency-update) the
 - Sources which are not declared are never removed or changed: the registration is stored in the NuGet-configuration of the current user, which on a developer-machine is the configuration they also use for their own work.
 - Inside the build-container the source is registered the same way, which is why a build in a container needs no additional configuration.
 
+The same registration is available as command-line-tool, for a tool which restores dependencies without a codeunit-build (for example an agent in the sandbox of [`scrais`](./RunAgentInSandbox.md), which runs it before the agent starts). It registers the sources which are declared in the environment of the process which runs it:
+
+```cmd
+scregisterpackagesources -r <folder>
+```
+
+`-r` is the folder in which the tools of the technology (for example the dotnet-cli) are run; it defaults to the current working-directory.
+
 > Note: For PyPI-indexes the same mechanism is not implemented yet.
 
 #### OCI-registries
@@ -204,11 +212,12 @@ They are meant for machine-specific preparation-commands - for example logging i
 
 Which script is executed depends on where the build runs:
 
-| File                                                                         | Executed by                                                      | Executed where                                            |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------- |
-| `TFCPS/CustomPreCodeUnitBuildScript.py`                                      | `scbuildcodeunits`                                               | on the host, at the beginning of the build                |
-| `TFCPS/CustomPreCodeUnitBuildScriptForContainer.py`                          | `scbuildcodeunitsc` (`scbuildcodeunits -c`)                      | on the host, before the build-container is started        |
-| `TFCPS/CustomScriptsForContainer/CustomPreCodeUnitBuildScriptInContainer.py` | `scbuildcodeunitsc` (`scbuildcodeunits -c`) and a build-pipeline | inside the build-container, at the beginning of the build |
+| File                                                                         | Executed by                                                                 | Executed where                                            |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `TFCPS/CustomPreCodeUnitBuildScript.py`                                      | `scbuildcodeunits`                                                          | on the host, at the beginning of the build                |
+| `TFCPS/CustomPreCodeUnitBuildScriptForContainer.py`                          | `scbuildcodeunitsc` (`scbuildcodeunits -c`)                                 | on the host, before the build-container is started        |
+| `TFCPS/CustomPreCodeUnitBuildScriptForContainer.py`                          | `scrais` with [build-environment](./RunAgentInSandbox.md#build-environment) | on the host, before the sandbox is started                |
+| `TFCPS/CustomScriptsForContainer/CustomPreCodeUnitBuildScriptInContainer.py` | `scbuildcodeunitsc` (`scbuildcodeunits -c`) and a build-pipeline            | inside the build-container, at the beginning of the build |
 
 Every script is optional: a file which does not exist is skipped without an error.
 The scripts are executed with the folder they are located in as working-directory, so a script can use files located next to it.

@@ -15,6 +15,7 @@ from .TFCPS_CodeSpellCheck import TFCPS_CodeSpellCheck
 from .TFCPS_FindingsSorter import TFCPS_FindingsSorter
 from .TFCPS_OCIImageSecretScan import TFCPS_OCIImageSecretScan
 from .TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureVersion
+from .ContainerBuildEnvironment import ContainerBuildEnvironment
 
 
 class TFCPS_UpdateDependenciesHook(TFCPS_BuildCodeUnitsHook):
@@ -568,61 +569,19 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             update_argument="pip3 install scriptcollection --upgrade && "
         executable_arguments=["bash","-c", f"{update_argument}scshowversion && "+" ".join(executable_arguments)]
 
-        #run the optional user-specific script which prepares this host for a container-build (for example to log in to the registry the image is pulled from).
-        #it runs before the environment-variables are resolved, so it can also create the files their values are read from.
-        self.tfcps_tools_general.run_custom_script_if_available(self.tfcps_tools_general.get_custom_script_file("CustomPreCodeUnitBuildScriptForContainer.py"), self.__get_build_arguments(self.repository))
-
-        #mount the optional user-specific scripts which prepare the container itself. the whole folder (not only the pre-codeunit-build-hook
-        #itself) is mounted, so the hook can start a sibling script placed next to it (for example to keep the hook independent of a
-        #package it only installs, while the actual preparation-logic which needs that package lives in the sibling script; see
-        #get_custom_scripts_folder_for_container). The mount is writable (not read-only) because the scripts in that folder also use it as
-        #their own download-cache-folder. The build inside the container runs the hook (see __run_custom_pre_codeunit_build_script); if the
-        #folder does not exist on the host nothing is mounted and nothing is run.
+        #the build-environment (host-hook, mounts and environment-variables) is defined by ContainerBuildEnvironment, which is also used by
+        #the agent-sandbox of scrais, so that both containers get the same one. The hook runs before the environment-variables are resolved,
+        #so it can also create the files their values are read from.
+        container_build_environment: ContainerBuildEnvironment = ContainerBuildEnvironment(self.sc, self.tfcps_tools_general, self.repository)
+        container_build_environment.run_host_preparation_hook(self.__get_build_arguments(self.repository))
         mount_arguments: list[str] = []
-        custom_scripts_folder_for_inside_the_container: str = self.tfcps_tools_general.get_custom_scripts_folder_for_container()
-        if os.path.isdir(custom_scripts_folder_for_inside_the_container):
-            mount_arguments += ["-v", f"{custom_scripts_folder_for_inside_the_container}:{self.tfcps_tools_general.get_folder_of_custom_scripts_in_container()}"]
+        for mount in container_build_environment.get_mounts():
+            mount_arguments += ["-v", f"{mount.source}:{mount.target}{':ro' if mount.read_only else ''}"]
 
-        #mount the machine-wide image-registries-file of this host (if it exists), so the build inside the container takes the images from the same
-        #custom registries as a build on the host. Without the mount the build in the container would find no mapping at all - the
-        #configuration-folder inside the container belongs to the container-user and is empty - and would therefore fall back to the
-        #upstream-registries defined in the repository, which are rate-limited. The mount is read-only because a build never changes the file.
-        oci_image_manager = self.tfcps_tools_general.oci_image_manager
-        image_registries_file: str = oci_image_manager.get_image_registries_file_in_configuration_folder()
-        if os.path.isfile(image_registries_file):
-            mount_arguments += ["-v", f"{image_registries_file}:{oci_image_manager.get_image_registries_file_in_container()}:ro"]
-
-        #mount the 'TFCPS'-folder of the configuration-folder of this host (if it exists), so the build inside the container resolves the
-        #required environment-variables of the product (see TFCPS_Tools_General.get_required_environment_variables) and the
-        #OCI-registry-credentials (see ScriptCollectionCore.get_docker_registry_credentials_from_environment_variables) exactly like a
-        #build on the host does - including a registry which is not publicly readable, which without this mount could not be used inside
-        #the container at all, because the configuration-folder of the container-user does not contain the credentials of this host.
-        #The whole folder is mounted and not only EnvironmentVariables.csv in it, because a value of that file can point to a secret-file
-        #next to it ('file'-kind with a relative path, which is the recommended form) and such a value is resolved relative to the file
-        #itself - so with only the file mounted, every entry of that kind would fail inside the container. Only this folder (and not the
-        #whole configuration-folder) is mounted, so nothing else of it is exposed to the container. The mount is read-only because a build
-        #never changes it. The alternative way to provide a value is an environment-variable of the build-pipeline itself (the pipeline's
-        #own secret-store); both sources are used together, the file taking precedence.
-        tfcps_configuration_folder: str = self.sc.get_tfcps_configuration_folder()
-        if os.path.isdir(tfcps_configuration_folder):
-            mount_arguments += ["-v", f"{tfcps_configuration_folder}:{self.sc.get_tfcps_configuration_folder_in_container()}:ro"]
-
-        #install the host-declared trusted root-CA-certificates into the container (needed when the build pulls packages from a privately
-        #hosted registry whose certificate-chain is not publicly rooted - for example an internally hosted gitlab-nuget-source). The
-        #two env-var forms are detected automatically from both the machine-wide environment-variables-configuration-file and the
-        #environment of the current process; see __collect_trusted_root_ca_arguments. _Path-variables add file-mounts, the inline
-        #_ContentBase64-form is returned as a name->value dict that gets merged into required_environment_variables below so its
-        #value flows through the docker-client's own environment (not through argv) just like a required secret does.
-        trusted_root_ca_mount_arguments, trusted_root_ca_inline_env_vars = self.__collect_trusted_root_ca_arguments()
-        mount_arguments += trusted_root_ca_mount_arguments
-
-        #pass the environment-variables which are declared as required in <repository>/.ScriptCollection/ProductInformation.xml into the container
-        #so they do not have to be specified explicitly on every call. Their values are resolved from the user-specific
-        #configuration-file (see TFCPS_Tools_General.get_environment_variables_configuration_file), which only exists on the host.
-        #only the names are passed as arguments; the values are given to the docker-client through its own environment, because arguments
-        #are written to the log and are visible in the process-list of this host, which must not happen for a value which is typically a secret.
-        required_environment_variables: dict[str, str] = self.tfcps_tools_general.get_required_environment_variables(self.repository)
-        required_environment_variables.update(trusted_root_ca_inline_env_vars)
+        #only the names of the environment-variables are passed as arguments; the values are given to the docker-client through its own
+        #environment, because arguments are written to the log and are visible in the process-list of this host, which must not happen for
+        #a value which is typically a secret.
+        required_environment_variables: dict[str, str] = container_build_environment.get_environment_variables()
         env_arguments: list[str] = []
         for env_variable_name in required_environment_variables:
             env_arguments += ["-e", env_variable_name]
@@ -655,78 +614,6 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         stderr:str=result[2] or GeneralUtilities.empty_string
         return (exit_code==0,f"{stdout}\n{stderr}")
     
-    @GeneralUtilities.check_arguments
-    def __collect_trusted_root_ca_arguments(self) -> tuple[list[str], dict[str, str]]:
-        """Resolves the TrustedRootCA_<name>_Path and TrustedRootCA_<name>_ContentBase64 environment-variables of the current host into
-        docker-arguments which install those certificates into the trust-store of the build-container. Returns (mount_arguments, inline_env_vars):
-        - mount_arguments: '-v <host-path>:/Workspace/RootCAs/<name>.crt:ro' entries for each _Path-variable.
-        - inline_env_vars: a name->value dict for each _ContentBase64-variable; the caller merges it into required_environment_variables
-          so the values flow through the docker-client's own environment, not through argv.
-        Candidate-names are collected from two sources (identical to the OCI-registry-credentials, see
-        ScriptCollectionCore.__get_defined_oci_registry_names): the machine-wide environment-variables-configuration-file and the
-        environment of the current process. The value is then resolved through ScriptCollectionCore.resolve_environment_variable, so a
-        CSV-entry takes precedence over an environment-variable of the same name - consistent with every other environment-variable
-        this script-collection resolves. If a name is declared in the file but its value can not be determined there (for example a
-        'file'-entry pointing to a missing file), the resolver falls back to the environment and fails only if neither source yields a
-        value. The actual trust-store update happens in SCBuilder's EntryPoint.sh, which scans /Workspace/RootCAs and the
-        TrustedRootCA_*-environment-variables and runs update-ca-certificates once before any build-step. The <name>-part becomes the
-        filename inside /usr/local/share/ca-certificates/ and must therefore be unique across the two env-var-forms; a duplicate is
-        rejected here with a clear error, before the container is started."""
-        path_pattern = re.compile(r"^TrustedRootCA_(.+)_Path$", re.IGNORECASE)
-        content_b64_pattern = re.compile(r"^TrustedRootCA_(.+)_ContentBase64$", re.IGNORECASE)
-        #collect every candidate-variable-name from both sources before any value is resolved; this way a secret-value is read only for
-        #a name that is actually declared and the discovery is identical to the OCI-registry-credential-discovery. The configuration-
-        #file is scanned before the environment and a name found in both is kept with the casing of the file: on Windows, os.environ
-        #normalizes a variable-name to uppercase as soon as it is set, so without this preference the same declaration in both places
-        #would be treated as two different names and resolution would silently pick the environment-value instead of the file-value.
-        candidate_names: dict[str, str] = {}#lower-case variable-name -> canonical variable-name (file-casing preferred)
-        configuration_file = self.sc.get_environment_variables_configuration_file()
-        if os.path.isfile(configuration_file):
-            for entry in GeneralUtilities.read_csv_file(configuration_file, True):
-                if 0 == len(entry):
-                    continue
-                env_name = entry[0]
-                if path_pattern.match(env_name) is not None or content_b64_pattern.match(env_name) is not None:
-                    candidate_names.setdefault(env_name.lower(), env_name)
-        for env_name in os.environ.keys():
-            if path_pattern.match(env_name) is not None or content_b64_pattern.match(env_name) is not None:
-                candidate_names.setdefault(env_name.lower(), env_name)
-        seen_names: dict[str, str] = {}#lower-case <name>-part -> originating variable-name, used only to produce an informative error on duplicate <name>.
-        mount_arguments: list[str] = []
-        inline_env_vars: dict[str, str] = {}
-        #sorted so the log-output (and therefore the order of "-v"-/"-e"-arguments) stays deterministic across runs.
-        for env_name in sorted(candidate_names.values(), key=str.lower):
-            env_value = self.sc.resolve_environment_variable(env_name, f"the TrustedRootCA-mechanism (declared via \"{env_name}\")")
-            if not GeneralUtilities.string_has_content(env_value):
-                continue
-            path_match = path_pattern.match(env_name)
-            if path_match is not None:
-                ca_name = path_match.group(1)
-                self.__check_trusted_root_ca_name_is_unique(seen_names, ca_name, env_name)
-                host_path = env_value.strip()
-                if not os.path.isfile(host_path):
-                    raise ValueError(f"Environment-variable \"{env_name}\" points to a file which does not exist on this host: \"{host_path}\".")
-                with open(host_path, "r", encoding="utf-8", errors="replace") as pem_file:
-                    head = pem_file.read(64)
-                if "-----BEGIN CERTIFICATE-----" not in head:
-                    raise ValueError(f"Environment-variable \"{env_name}\" (\"{host_path}\") does not look like a PEM-encoded certificate (missing \"-----BEGIN CERTIFICATE-----\"-header).")
-                mount_arguments += ["-v", f"{host_path}:/Workspace/RootCAs/{ca_name}.crt:ro"]
-                continue
-            content_b64_match = content_b64_pattern.match(env_name)
-            if content_b64_match is not None:
-                ca_name = content_b64_match.group(1)
-                self.__check_trusted_root_ca_name_is_unique(seen_names, ca_name, env_name)
-                inline_env_vars[env_name] = env_value
-                continue
-        return mount_arguments, inline_env_vars
-
-    @GeneralUtilities.check_arguments
-    def __check_trusted_root_ca_name_is_unique(self, seen_names: dict[str, str], ca_name: str, env_name: str) -> None:
-        key = ca_name.lower()
-        if key in seen_names:
-            raise ValueError(f"Multiple TrustedRootCA-definitions for name \"{ca_name}\" found (\"{seen_names[key]}\" and \"{env_name}\"). The <name>-part becomes the filename in the trust-store and must therefore be unique across _Path and _ContentBase64.")
-        seen_names[key] = env_name
-
     @GeneralUtilities.check_arguments
     def __translate_path_into_container(self, host_path: str, container_repository_folder: str) -> str:
         normalized_repository = os.path.normpath(self.repository)

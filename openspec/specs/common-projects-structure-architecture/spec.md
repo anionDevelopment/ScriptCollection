@@ -6,7 +6,7 @@ Records the architectural and documentation-related constraints which every chan
 They are not derivable from the source-code itself:
 
 - They state what decides whether the product is in a healthy state and how the codeunits of the repository may depend on each other.
-- They require that the documentation which describes the current state of the product agrees with what the source-code actually does. A document which describes an older state of the product is still a syntactically valid document, and neither the compiler nor the pipeline notices it. Without this a reader can not decide whether a sentence of the documentation is a fact about the product or a leftover of a state which does not exist anymore.
+- They require that the documentation which describes the current state of the product agrees with what the source-code actually does. A document which describes an older state of the product is still a syntactically valid document, and neither the compiler nor the pipeline notices it. Without this a reader cannot decide whether a sentence of the documentation is a fact about the product or a leftover of a state which does not exist anymore.
 
 How findings of code-reviews, security-checks, bug-searches, performance-analyses and similar analyses are documented is specified in the specification `common-projects-structure-findings`.
 
