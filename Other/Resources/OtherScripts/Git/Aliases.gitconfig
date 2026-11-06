@@ -1,7 +1,6 @@
 [alias]
     checkintegrity = fsck --full
-    getdateoflastcommit = log -1 --format=%cd
-    getidoflastcommit = log --format="%H" -n 1
+    getidoflastcommit = rev-parse HEAD
     listfiles = ls-tree --full-tree -r --name-only HEAD
     listauthors = shortlog --summary --email
     listcommitcounts = shortlog -s -n
@@ -9,7 +8,7 @@
     removelastcommitpreservechanges = reset HEAD~ --soft; Preserves changes as unstaged changes.
     removelastcommitdeletechanges = !git reset HEAD~ && git reset --hard && git clean -f -d && :; undo uncommitted changes and all changes of the commit.
     pullsubmodules = submodule update --init --recursive
-    qc = !git add -A && git commit -m "updated" && :;quick commit
+    quickcommit = !git add -A && git commit -m "updated" && :
     removeuntrackedfiles = clean -fdx
     removeallremotes = !git remote | xargs -n1 git remote remove
     showaliases = !git config --get-regexp alias
@@ -18,6 +17,7 @@
     showdanglingobjects = fsck --lost-found
     showfirstcommits = rev-list --max-parents=0 HEAD
     showlastcommit = show --summary
+    showlastcommits = log -10 --graph --decorate --all --pretty=format:"%C(yellow)%h%Creset %C(cyan)%cI%Creset %C(green)%cn%Creset %s %C(red)%d%Creset"
     showconfig = config --list --show-origin
     showtrackedignored = ls-files -i --exclude-standard
     tree = log --graph --decorate --pretty=oneline --abbrev-commit

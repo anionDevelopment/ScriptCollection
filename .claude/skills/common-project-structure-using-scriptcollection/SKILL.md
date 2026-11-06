@@ -76,7 +76,7 @@ Relevant switches of `scbuildcodeunits`:
 - `-v`/`--verbosity`: the loglevel (higher value = more output; useful when analyzing a failing build).
 - `-f`/`--fastlane`: skips `RunTestcases.py` (useful for a quick check, but not sufficient to consider a change verified). It is only allowed on branches whose name starts with `fix/`, on every other branch the build fails.
 - `-n`/`--nocache`: does not use cached tools/resources.
-- `-u`/`--assertnonewchanges`: fails if the repository has uncommitted changes before the build or if the pipeline changes a not-git-ignored file (verifies the idempotency). It can not be combined with `-p`.
+- `-u`/`--assertnonewchanges`: fails if the repository has uncommitted changes before the build or if the pipeline changes a not-git-ignored file (verifies the idempotency). It cannot be combined with `-p`.
 - `-m`/`--addreadytomergeflag`: creates `.ScriptCollection/.IsReadyToMerge` after a successful build on a working-branch. On the branch `other/maintenance` this also happens without the switch.
 - `-p`/`--ispremerge`: marks the build as pre-merge-build, which removes `.ScriptCollection/.IsReadyToMerge` and additionally collects metrics and generates the lines-of-code-diagram.
 - `-b`/`--basemountfolder`: the folder which is mounted into the container, it must be the repository or a folder which contains it (only used with `-c`).
@@ -289,6 +289,6 @@ ScriptCollection does automatic version-bumps at multiple places when building c
 - Do not implement automation-logic redundantly in a repository if ScriptCollection already provides it. If something is missing or wrong in the automation, the fix usually belongs into the ScriptCollection-repository, not into the repository in which the problem was noticed.
 - Do not edit generated files (`Taskfile.yml`, generated diagrams, generated references, the synchronized skill-folders) manually. Change their source and regenerate them. See "Files which are generated and synchronized automatically".
 - Never bypass a failing script (for example by lowering the code-coverage-threshold or by regenerating baselines) without having understood the failure first.
-- The File `.ScriptCollection/.IsReadyToMerge` is not allowed to be created manually. It is managed automatically by the ScriptCollection system to indicate when a project is ready to be merged.
+- The file `.ScriptCollection/.IsReadyToMerge` is not allowed to be created manually. It is managed automatically by the ScriptCollection system to indicate when a project is ready to be merged.
 
 <!-- This file is generated. Do not modify. -->

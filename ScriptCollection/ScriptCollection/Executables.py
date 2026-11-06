@@ -14,6 +14,7 @@ from .SCLog import LogLevel, SCLog
 from .TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
 from .TFCPS.TFCPS_OCIImageSecretScan import TFCPS_OCIImageSecretScan
 from .TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
+from .TFCPS.DotNet.NuGetPackageSourceRegistration import NuGetPackageSourceRegistration
 from .OCIImages.OCIImageManager import OCIImageManager
 from .AgentRunner import AgentRunner, AgentRunnerConfiguration, CodingAgent
 
@@ -28,6 +29,7 @@ def RunAgentInSandbox() -> int:
     parser.add_argument('--image', default=None, required=False, help='OCI-image which should be used for the sandbox: either an image-name defined in ".ScriptCollection/OCIImages/ImageDefinition.csv" or an image-address including tag. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
     parser.add_argument('-s','--dropcapabilities', default=None, required=False, choices=["true", "false"], help='Defines whether all capabilities should be dropped in the sandbox. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
     parser.add_argument('-a', '--additionalfolder', action='append', default=None, required=False, help='Folder which should additionally be mounted (read-write) into the sandbox under "/Workspace/Other/AdditionalResources/<folder-name>". Can be given multiple times.')
+    parser.add_argument('-b','--providebuildenvironment', default=None, required=False, choices=["true", "false"], help='Defines whether the sandbox gets the same build-environment as a build-container of "scbuildcodeunits -c" (required environment-variables, configuration-folder, custom scripts, image-registries, trusted root-CAs and registered package-sources). The agent can then read every secret of the TFCPS-configuration-folder. Overrides the value from ".ScriptCollection/AgentSandboxConfiguration.ini".')
     parser.add_argument('-d','--mountdockersocket', action='store_true', required=False, default=False, help='Mounts the docker-socket of the host (/var/run/docker.sock) into the sandbox so that the agent can use docker. DANGEROUS: this effectively gives the agent administrator-access to the docker-daemon of the host and makes the restrictions of the sandbox ineffective. Can only be set via this argument (not in the configuration-file); a warning is printed to stderr.')
     args = parser.parse_args()
     repo=os.getcwd()
@@ -40,6 +42,8 @@ def RunAgentInSandbox() -> int:
     configuration_overrides.image = args.image
     if args.dropcapabilities is not None:
         configuration_overrides.drop_capabilities = args.dropcapabilities == "true"
+    if args.providebuildenvironment is not None:
+        configuration_overrides.provide_build_environment = args.providebuildenvironment == "true"
     additional_folders: list[str] = []
     if args.additionalfolder is not None:
         additional_folders = [GeneralUtilities.resolve_relative_path(additional_folder, os.getcwd()) for additional_folder in args.additionalfolder]
@@ -1349,6 +1353,16 @@ def ShowProjectVersion() -> int:
     repository = GeneralUtilities.resolve_relative_path(args.repository, os.getcwd()) if args.repository is not None else os.getcwd()
     sc: ScriptCollectionCore = ScriptCollectionCore()
     GeneralUtilities.write_message_to_stdout(sc.get_semver_version(repository))
+    return 0
+
+
+def RegisterPackageSources() -> int:
+    parser = argparse.ArgumentParser(description="Registers every package-source which is declared in the environment of this process by the environment-variables \"Dependency_<technology>_<name>_URL\" (and optionally \"_Username\" and \"_Password\") with its credentials on this machine, exactly like a codeunit-build does it. Package-sources which are not declared are not changed.")
+    parser.add_argument('-r', '--folder', required=False, default=None, help="Folder in which the tools of the technologies (for example the dotnet-cli) are run. Defaults to the current working directory.")
+    args = parser.parse_args()
+    folder = GeneralUtilities.resolve_relative_path(args.folder, os.getcwd()) if args.folder is not None else os.getcwd()
+    sc: ScriptCollectionCore = ScriptCollectionCore()
+    NuGetPackageSourceRegistration(sc, TFCPS_Tools_General(sc)).register_declared_package_sources(folder)
     return 0
 
 
