@@ -76,7 +76,7 @@ The findings-table MUST have a fixed set of columns in a fixed order.
   - `State`: the state of the finding, which is `open`, `accepted`, `not verifiable` or `fixed`
   - `Description`: what the finding is
   - `Impact`: what the finding causes, depending on its topic, for example the security-impact or the performance-impact
-  - `Notes`: every further information, especially the content of further columns which a list of findings had before it was moved into the table
+  - `Notes`: all further information, especially the content of further columns which a list of findings had before it was moved into the table
 
 #### Scenario: A finding reveals a critical security-problem
 

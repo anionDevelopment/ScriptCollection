@@ -53,7 +53,9 @@ The existing behavior of `drop_capabilities` SHALL stay as configured, unless th
 - **WHEN** a testcase builds the `docker run` arguments for a run in which docker is provided
 - **THEN** none of the forbidden arguments is contained, namely `--privileged`, a mount of the docker socket of the host,
   `--pid=host`, `--net=host`, `--ipc=host`, `--userns=host`, `--cap-add`, a security option which disables or relaxes
-  seccomp, AppArmor or SELinux (for example `seccomp=unconfined`), and a `--device` of the host
+  seccomp, AppArmor or SELinux (for example `seccomp=unconfined`), and a `--device` of the host, and the network arguments of
+  `agent-sandbox-network-access` (`--network <network of the run>`, `--network none`, `--dns 127.0.0.1`, proxy variables) are
+  contained unchanged
 
 ### Requirement: The sandbox is never weakened to provide docker
 
@@ -85,15 +87,41 @@ The warning about the host socket and the documentation section about it SHALL b
 - **WHEN** a user reads `RunAgentInSandbox.md`
 - **THEN** the section about the host docker socket is replaced by the section about docker in the sandbox, including prerequisites and limits
 
-### Requirement: The rest of the command-line interface stays unchanged
+### Requirement: Docker in the sandbox needs no argument or configuration key
 
+Providing docker in the sandbox SHALL NOT need an argument of `scrais` or a key of the configuration file.
 Except for the removal of `-d`/`--mountdockersocket`, this change SHALL NOT add, remove or rename an argument of `scrais` and SHALL NOT add a key to the configuration file.
-The names, short names, value formats and defaults of all other arguments SHALL stay as before.
+The names, short names, value formats and defaults of all other arguments and keys, including those of other capabilities (for example the allowlist of `agent-sandbox-network-access`), SHALL stay as they are.
 
 #### Scenario: Argument list is compared
 
-- **WHEN** the argument definitions of `scrais` before and after the change are compared
+- **WHEN** the argument definitions of `scrais` on the base of this change (including the arguments of other capabilities) are compared with the ones after this change
 - **THEN** the only difference is the missing `-d`/`--mountdockersocket`
+
+### Requirement: Docker in the sandbox respects the network restriction
+
+When the network access of the sandbox is restricted (see `agent-sandbox-network-access`), the private docker daemon and every container started by the agent SHALL NOT have more network access than the sandbox itself.
+The daemon SHALL pull images through the egress-proxy of the sandbox, so registries whose domains are in the allowlist can be used.
+
+#### Scenario: Pull from an allowed registry
+
+- **WHEN** the allowlist contains the domains of a registry and the agent executes `docker pull` of an image of this registry
+- **THEN** the image is pulled
+
+#### Scenario: Pull from a registry which is not allowed
+
+- **WHEN** the domains of the registry are not in the allowlist
+- **THEN** the pull fails and, with `--verbose`, the denied requests are listed
+
+#### Scenario: Nested container bypasses the proxy
+
+- **WHEN** a nested container connects directly to a host outside of the sandbox
+- **THEN** the connection is not established
+
+#### Scenario: Sandbox without network access
+
+- **WHEN** the section `AllowedDomains` is empty
+- **THEN** docker is still provided but every pull fails
 
 ### Requirement: The feature works on Windows, macOS and Linux hosts
 

@@ -1958,7 +1958,7 @@ class TFCPS_Tools_General:
             arch_tags.append(arch_tag)
             # Load tar → local image
             GeneralUtilities.write_message_to_stdout(f"Loading {tar_path}...")
-            result = self.__sc.run_program_argsasarray("docker",[ "load", "-i", tar_path])
+            result = self.__sc.run_program_argsasarray_with_retry("docker",[ "load", "-i", tar_path],amount_of_attempts=3,delay_in_seconds=5)
             # docker load outputs: "Loaded image: sha256:abc123..." or "Loaded image ID: ..."
             # we need the loaded image ID
             loaded_id = None

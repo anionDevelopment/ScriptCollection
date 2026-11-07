@@ -11,15 +11,13 @@ from packaging.version import Version
 from .CertificateGeneratorInformationBase import CertificateGeneratorInformationBase
 from ...GeneralUtilities import GeneralUtilities, VersionEcholon
 from ...SCLog import  LogLevel
-from ..PackageSource import PackageSource
+from .NuGetPackageSourceRegistration import NuGetPackageSourceRegistration
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_CodeUnitSpecific_Base_CLI
 
 class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
  
     is_library:bool = None
     csproj_file:bool = None
-    #the output of the dotnet-cli is localized. The language is set explicitly for the commands whose output gets parsed, because otherwise the parsing would only work on machines which are configured to use english.
-    __dotnet_cli_environment_variables:dict = {"DOTNET_CLI_UI_LANGUAGE": "en-US"}
     #the only accepted form of a version of a package-reference: an exact version in square brackets. Everything else is a version-range.
     __pinned_version_regex = re.compile(r"^\[[^,\[\]]+\]$")
 
@@ -29,78 +27,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         self.is_library="<OutputType>Library</OutputType>" in GeneralUtilities.read_text_from_file(self.csproj_file)#TODO do a real check by checking this property using xpath
         #every dotnet-operation of a codeunit (build, test, linting, ...) restores the dependencies of the codeunit, so the sources
         #they are downloaded from have to be available for all of them and not only for the build.
-        self.__ensure_declared_package_sources_are_available()
-
-    @GeneralUtilities.check_arguments
-    def __ensure_declared_package_sources_are_available(self) -> None:
-        """Ensures that every NuGet-source which is declared for this machine (see TFCPS_Tools_General.get_declared_package_sources) is
-        registered with its current credentials, so a codeunit can also use dependencies which are not available on nuget.org.
-        A source which is already registered under the declared name is removed and registered again, so an outdated registration (for
-        example one which points to another url) can not let the registration fail. Sources which are not declared are not touched at
-        all: the registration is stored in the NuGet-configuration of the current user, which - when the build runs directly on the
-        host - is the configuration the user also uses for their own work and which must not be destroyed by a build."""
-        package_sources: list[PackageSource] = self.tfcps_Tools_General.get_declared_package_sources("CSharp")
-        if len(package_sources) == 0:
-            return
-        codeunit_folder: str = self.get_codeunit_folder()
-        for package_source in package_sources:
-            registered_sources: dict[str, str] = self.__get_registered_nuget_sources(codeunit_folder)
-            name_of_source_with_same_name: str = None
-            name_of_source_with_same_url: str = None
-            for registered_name, registered_url in registered_sources.items():
-                if registered_name.lower() == package_source.name.lower():
-                    name_of_source_with_same_name = registered_name
-                elif self.__nuget_sources_are_equal(registered_url, package_source.url):
-                    #the same feed can already be registered under another name (which is the usual case on a machine on which the user
-                    #configured the feed manually). Such a source is updated instead of being added a second time, because a second
-                    #registration of the same url would let every restore query the feed twice.
-                    name_of_source_with_same_url = registered_name
-            if name_of_source_with_same_name is not None:
-                self.__remove_nuget_source(codeunit_folder, name_of_source_with_same_name)
-            if name_of_source_with_same_url is None:
-                arguments = ["nuget", "add", "source", package_source.url, "--name", package_source.name]
-            else:
-                #the credentials are set again even when the source already exists, because a token can have been rotated since it was registered.
-                arguments = ["nuget", "update", "source", name_of_source_with_same_url, "--source", package_source.url]
-            if package_source.has_credentials():
-                arguments = arguments+["--username", package_source.username, "--password", package_source.password]
-                if not GeneralUtilities.current_system_is_windows():
-                    #without this the password can not be encrypted, which lets the command fail on the operating-systems which do not support the encryption.
-                    arguments.append("--store-password-in-clear-text")
-            arguments_for_log = list(arguments)
-            if package_source.has_credentials():
-                arguments_for_log[arguments_for_log.index("--password")+1] = "***"#the password must not be written to the build-log
-            self._protected_sc.log.log(f"Add NuGet-source \"{package_source.name}\" ({package_source.url})..." if name_of_source_with_same_url is None else f"Update the already registered NuGet-source \"{name_of_source_with_same_url}\" ({package_source.url})...", LogLevel.Debug)
-            self._protected_sc.run_program_argsasarray("dotnet", arguments, codeunit_folder, arguments_for_log=arguments_for_log, print_live_output=False, env_vars=self.__dotnet_cli_environment_variables)
-
-    @GeneralUtilities.check_arguments
-    def __remove_nuget_source(self, folder: str, name: str) -> None:
-        """Removes the registration of the NuGet-source with the given name, so it can be registered again with its currently declared url and credentials."""
-        self._protected_sc.log.log(f"Remove the outdated registration of the NuGet-source \"{name}\"...", LogLevel.Debug)
-        self._protected_sc.run_program_argsasarray("dotnet", ["nuget", "remove", "source", name], folder, print_live_output=False, env_vars=self.__dotnet_cli_environment_variables)
-
-    @GeneralUtilities.check_arguments
-    def __get_registered_nuget_sources(self, folder: str) -> dict[str, str]:
-        """Returns the NuGet-sources which are registered for the given folder as a mapping of their name to their url. The sources are
-        read from the output of "dotnet nuget list source", which prints the name (with its state) and the url of a source in two
-        consecutive lines."""
-        result: dict[str, str] = {}
-        list_result = self._protected_sc.run_program_argsasarray("dotnet", ["nuget", "list", "source"], folder, throw_exception_if_exitcode_is_not_zero=False, print_live_output=False, env_vars=self.__dotnet_cli_environment_variables)
-        name_pattern = re.compile(r"^\s*\d+\.\s+(.+?)\s+\[[^\[\]]+\]\s*$")
-        current_name: str = None
-        for line in list_result[1].splitlines():
-            match = name_pattern.match(line)
-            if match is not None:
-                current_name = match.group(1).strip()
-            elif current_name is not None and GeneralUtilities.string_has_content(line):
-                result[current_name] = line.strip()
-                current_name = None
-        return result
-
-    @GeneralUtilities.check_arguments
-    def __nuget_sources_are_equal(self, url: str, other_url: str) -> bool:
-        """Compares two urls of package-sources. A trailing slash and the case are ignored because they do not address a different feed."""
-        return url.strip().rstrip("/").lower() == other_url.strip().rstrip("/").lower()
+        NuGetPackageSourceRegistration(self._protected_sc, self.tfcps_Tools_General).register_declared_package_sources(self.get_codeunit_folder())
 
     @GeneralUtilities.check_arguments
     def get_runtimes(self) -> list[str]:

@@ -8,6 +8,9 @@ Observed facts (code):
   CLI-only on purpose. `__run_sandbox` builds the `docker run` command; the entrypoint script (generated per start) runs the
   initialization script and then `exec`s the agent. `drop_capabilities` adds `--cap-drop all` and `no-new-privileges`.
 - Nested containers cannot be isolated by the sandbox if they run on the daemon of the host (sibling containers).
+- With an allowlist (`sandbox-network-egress-allowlist`, capability `agent-sandbox-network-access`) the sandbox is attached only to the
+  internal network `scrais-<run-id>`, gets the proxy-variables (`HTTPS_PROXY`, `HTTP_PROXY`, lowercase variants) and `--dns 127.0.0.1`;
+  with an empty allowlist it gets `--network none`. The section "Network access" of `RunAgentInSandbox.md` warns about `--mountdockersocket`.
 
 External facts (secondary sources, not tested here): Sysbox lets a container run docker without `--privileged` and without a socket mount via `--runtime=sysbox-runc`; it maps container root to an unprivileged host user, but is not a VM-equivalent boundary, needs installation on the docker host, and I could not confirm how it works with Docker Desktop on Windows.
 Docker Sandboxes run each agent in a microVM with a private docker daemon; Windows support is described as experimental, and its fit to the `scrais` model (own image, mounts, initialization script, all agents) is unknown.
@@ -51,6 +54,12 @@ Non-Goals: persistent image cache between runs, GPU access, nested docker for ag
 7. **`drop_capabilities`.** Stays as configured. Whether the nested daemon can run with `--cap-drop all` inside the isolating
    runtime must be verified; if not, docker is unavailable in that combination (message) and the setting is not changed silently.
 8. **Images.** The SCBuilder image must contain `dockerd` and the CLI; this is a prerequisite, not installed by `scrais`.
+9. **Network restriction.** Nothing extra is configured for the daemon: `dockerd` is started by the entrypoint and inherits the
+   proxy-variables of the container, and it resolves the name of the egress-proxy through the embedded DNS of docker (assumption, to be
+   verified). Nested containers are connected through the network-namespace of the sandbox, so they end up in the internal network
+   without route to the outside and can not bypass the allowlist. To pull from Docker Hub the allowlist needs at least
+   `registry-1.docker.io`, `auth.docker.io` and `production.cloudflare.docker.com` (secondary source, to be verified); the documentation
+   lists them as example.
 
 ## Cross-platform
 
@@ -68,8 +77,10 @@ Non-Goals: persistent image cache between runs, GPU access, nested docker for ag
   microVM backend is the better target; the abstraction keeps that door open.
 - Host support is the main uncertainty: it must be installed on the docker engine of the host and I could not confirm it for a
   Windows host with Docker Desktop. If it is not available there, the feature would work only on Linux hosts or WSL engines at first.
-- Nested containers have the same network access as the sandbox.
-- Starting a daemon in every run (when possible) costs startup time and enlarges the attack surface slightly compared to a switch. A switch or configuration key would avoid that but contradicts the unchanged-interface requirement.
+- Nested containers have at most the network access of the sandbox. Without allowlist that is unrestricted; with allowlist they can not
+  reach the outside directly and, unless the proxy is announced to them (open question 5), downloads in `docker build` and in nested
+  containers fail.
+- Starting a daemon in every run (when possible) costs startup time and enlarges the attack surface slightly compared to a switch. A switch or configuration key would avoid that but contradicts the requirement that docker needs no argument or configuration key.
 - Pulling images in every run costs time and bandwidth (no cache by design).
 
 ## Open Questions
@@ -78,3 +89,5 @@ Non-Goals: persistent image cache between runs, GPU access, nested docker for ag
 2. May the entrypoint contain a bounded readiness check for the daemon (decision 2)?
 3. Assumption to confirm: with no switch left, docker is provided automatically whenever the prerequisites are met (the alternative would be no way to use docker at all).
 4. Does the nested daemon work with `drop_capabilities = true` in the chosen runtime?
+5. Shall nested containers get the egress-proxy announced automatically (for example by the entry `proxies` in `~/.docker/config.json`
+   of the sandbox), so downloads in `docker build` and in nested containers work with an allowlist?

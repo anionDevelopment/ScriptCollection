@@ -18,8 +18,11 @@ The goal is docker inside the sandbox where everything the agent starts stays in
   weakened to make docker available.
 - **BREAKING**: the switch `-d`/`--mountdockersocket` is removed without replacement, together with its warning. `scrais` does
   not support mounting the host socket any more. Command lines which contain the switch fail in argument parsing.
-- New requirement: apart from this removal the command-line interface of `scrais` stays unchanged (no argument is added or
-  renamed, no configuration key is added).
+- New requirement: docker in the sandbox needs no argument or configuration key; apart from the removal of the switch this change
+  adds, removes or renames no argument and no configuration key, and the arguments and keys of other capabilities (for example the
+  allowlist) stay as they are.
+- New requirement: docker in the sandbox respects the network restriction of the allowlist; the daemon pulls through the
+  egress-proxy and nested containers have no more network access than the sandbox.
 - New requirement: the feature works on Windows, macOS and Linux hosts.
 - The concept (see design) uses one backend per platform behind a common interface (isolating runtime with nested docker, or microVM).
 - `RunAgentInSandbox.md` documents the feature and the removal of the old switch.
@@ -39,3 +42,5 @@ The goal is docker inside the sandbox where everything the agent starts stays in
 - Requirements on the host (an isolating runtime) and on the image (docker daemon and CLI). If they are not met, docker is simply not available.
 - Users of `--mountdockersocket` have to remove the switch; docker then works through the private daemon when the prerequisites are met.
 - This change is independent of `sandbox-agent-status-reporting-to-herdr`; both touch `AgentRunner.py` and `Executables.py`.
+- Interplay with `sandbox-network-egress-allowlist` (capability `agent-sandbox-network-access`): its arguments and keys stay unchanged,
+  its network arguments are not touched by the forbidden-argument guard, and the registries used by the agent must be in the allowlist.

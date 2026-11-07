@@ -36,17 +36,20 @@ cd C:\Projects\MyRepository
 scrais -i
 ```
 
-| Argument                    | Description                                                                                                                                                                   |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-p`, `--prompt`            | Prompt which is passed to the agent. Required in non-interactive mode, optional in interactive mode.                                                                          |
-| `-i`, `--interactive`       | Runs the agent interactively (with a terminal attached). Without this switch the agent runs non-interactively and ends when it has processed the prompt.                      |
-| `-c`, `--codingagent`       | Coding-agent to use: `claude`, `codex`, `copilot`, `opencode` or `vibe`. Overrides the [configuration-file](#configuration).                                                  |
-| `--image`                   | Image to use, see [Image](#image). Overrides the configuration-file.                                                                                                          |
-| `-s`, `--dropcapabilities`  | `true` or `false`, see [Configuration](#configuration). Overrides the configuration-file.                                                                                     |
-| `-a`, `--additionalfolder`  | Folder which is additionally mounted read-write into the container, see [Additional folders](#additional-folders). Can be given multiple times.                               |
-| `-d`, `--mountdockersocket` | Mounts the docker-socket of the host into the container, see [Docker-socket](#docker-socket). Dangerous; can only be set via this argument and not in the configuration-file. |
-| `-r`, `--repository`        | Repository whose [initialization-script](#initialization-scripts) is used. Defaults to the current working-directory.                                                         |
-| `-v`, `--verbose`           | Enables verbose output.                                                                                                                                                       |
+| Argument                          | Description                                                                                                                                                                     |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-p`, `--prompt`                  | Prompt which is passed to the agent. Required in non-interactive mode, optional in interactive mode.                                                                            |
+| `-i`, `--interactive`             | Runs the agent interactively (with a terminal attached). Without this switch the agent runs non-interactively and ends when it has processed the prompt.                        |
+| `-c`, `--codingagent`             | Coding-agent to use: `claude`, `codex`, `copilot`, `opencode` or `vibe`. Overrides the [configuration-file](#configuration).                                                    |
+| `--image`                         | Image to use, see [Image](#image). Overrides the configuration-file.                                                                                                            |
+| `-s`, `--dropcapabilities`        | `true` or `false`, see [Configuration](#configuration). Overrides the configuration-file.                                                                                       |
+| `-a`, `--additionalfolder`        | Folder which is additionally mounted read-write into the container, see [Additional folders](#additional-folders). Can be given multiple times.                                 |
+| `-b`, `--providebuildenvironment` | `true` or `false`, see [Build-environment](#build-environment). Overrides the configuration-file.                                                                               |
+| `--alloweddomain`                 | Domain of the [allowlist](#network-access). Can be given multiple times. If given at least once, it replaces the section `AllowedDomains` of the configuration-file completely. |
+| `--egressproxyimage`              | Squid-image of the egress-proxy, see [Network access](#network-access). Overrides the configuration-file.                                                                       |
+| `-d`, `--mountdockersocket`       | Mounts the docker-socket of the host into the container, see [Docker-socket](#docker-socket). Dangerous; can only be set via this argument and not in the configuration-file.   |
+| `-r`, `--repository`              | Repository whose [initialization-script](#initialization-scripts) is used. Defaults to the current working-directory.                                                           |
+| `-v`, `--verbose`                 | Enables verbose output.                                                                                                                                                         |
 
 Typical calls:
 
@@ -65,6 +68,9 @@ scrais -i -c vibe
 
 rem make two additional folders available to the agent
 scrais -i -a C:\Temp\MyFolder -a C:\Data\OtherFolder
+
+rem give the agent the build-environment of the host (for example a private NuGet-feed), only for this run
+scrais -i -b true
 ```
 
 > The repository which is mounted into the container is always the current working-directory. `-r` only selects which entry of the initialization-scripts-file is used, so it is normally not given.
@@ -91,6 +97,78 @@ A one-line warning is printed to stderr at every start.
 - Bind-mounts of `docker run -v` are resolved by the daemon on the host, not inside the container. Paths of the container (for example `/Workspace/<repository>`) do not exist there.
 - `scbuildcodeunits -c` and `scbuildcodeunitsc` detect that they run in a container. They then start the build-container with the volumes of the sandbox (`--volumes-from`), so the repository has the same path there, and copy the files of the [configuration-folder](./ConfigurationFolder.md) which would normally be mounted into the created container instead of mounting them. Copied files are not read-only.
 
+### Build-environment
+
+With `provide_build_environment = true` (or `--providebuildenvironment true`) the container gets the same build-environment as a build-container of `scbuildcodeunits -c`, so the agent can build the repository and restore its dependencies, also from private package-sources:
+
+- Before the container is started, `~/.ScriptCollection/TFCPS/CustomPreCodeUnitBuildScriptForContainer.py` is run on the host (if it exists). If it fails, the container is not started.
+- The [required environment-variables](./ConfigurationFolder.md#required-environment-variables) of the repository (including the ones of `TFCPS/AdditionalRequiredEnvironmentVariables.txt`) are resolved on the host and set in the container. Only their names are docker-arguments; the values are given to docker through its environment.
+- The `TFCPS`-folder (read-only), the folder `TFCPS/CustomScriptsForContainer` (read-write) and `GlobalCache/OCIImages/ImageRegistries.csv` (read-only) of the [configuration-folder](./ConfigurationFolder.md) are mounted to the same paths as in a build-container, if they exist.
+- The trusted root-CA-certificates (`TrustedRootCA_<name>_Path` and `TrustedRootCA_<name>_ContentBase64`) are installed in the trust-store of the container before the agent starts.
+- The declared [package-sources](./ConfigurationFolder.md#package-sources) are registered with `scregisterpackagesources` before the initialization-script and the agent start, so the agent can use them directly (for example with `dotnet restore`).
+
+The docker-socket is not mounted by this; see [Docker-socket](#docker-socket).
+
+Requirements for the image:
+
+- Its entrypoint has to install the root-CA-certificates and then run its command (`exec "$@"`), like the entrypoint of the SCBuilder-image does. With the build-environment the entrypoint of the image is therefore not replaced but runs the generated script as its command.
+- Its ScriptCollection has to contain `scregisterpackagesources` (ScriptCollection `4.4.68` or newer). ScriptCollection is not installed or updated in the container. With an older image the container ends with an error before the agent starts.
+
+> **Caution:** With the build-environment the agent can read every secret of `~/.ScriptCollection/TFCPS` (for example `EnvironmentVariables.csv` and the secret-files it refers to), also the ones which the repository does not need. A one-line warning is printed to stderr at every start. Enable it only for trusted repositories and prompts.
+
+### Network access
+
+Without the section `AllowedDomains` the network-access of the container is unrestricted, as before.
+If an allowlist is defined, everything except the allowlist is blocked:
+
+| Section `AllowedDomains` (or `--alloweddomain`)   | Network-access of the container                                                       |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| missing                                           | Unrestricted. Nothing additional is started.                                          |
+| contains `api.example.com =` and `.example.org =` | Only the listed domains, only via HTTPS (port 443) and only through the egress-proxy. |
+| present but empty                                 | None at all (`--network none`).                                                       |
+
+Note the difference between a missing section (unrestricted) and an empty section (no network-access).
+
+Every entry is one line `<domain> = <comment>`. The comment is optional (`<domain> =`), it is only for the reader of the file (for example why the domain is needed) and does not change what is allowed. The `=` is required also without comment. A domain which is listed twice is rejected.
+
+Matching of the entries:
+
+- `example.com` allows exactly this host (not `api.example.com`).
+- `.example.com` allows `example.com` and all of its subdomains (but not `example.com.evil.org`).
+- Entries are compared case-insensitively.
+- An entry with scheme, port, path or wildcard, an IP-address and an entry which is already covered by another entry (for example `api.example.com` next to `.example.com`) are rejected before anything is started.
+
+How the allowlist is enforced:
+
+- For every run, `scrais` creates an internal docker-network `scrais-<run-id>` which has no route to the outside, and starts the egress-proxy `scrais-proxy-<run-id>` from `egress_proxy_image` in it. Only the egress-proxy is additionally attached to the default bridge-network.
+- The egress-proxy (Squid) only allows `CONNECT` to port 443 of the allowed domains. TLS is tunneled and not intercepted, so no certificate has to be trusted and the [trusted root-CAs](#build-environment) keep working.
+- The container is only attached to the internal network. It gets `HTTPS_PROXY`, `HTTP_PROXY`, `https_proxy` and `http_proxy` set to the egress-proxy and `--dns 127.0.0.1`, so it can not resolve external names itself. The restriction needs no capability in the container and can not be lifted from inside of it, also not by root.
+- Tools which ignore the proxy-variables can not connect. Protocols other than HTTPS (for example git via SSH, plain HTTP) do not work.
+- At start, `scrais` prints the restriction to stderr. With `--verbose` it prints the requests which the egress-proxy denied after the run, so you can find out which domains a tool needs.
+- After the run, the egress-proxy and the network are removed, also if the run failed. If `scrais` is killed, they can remain; remove them with `docker rm --force scrais-proxy-<run-id>` and `docker network rm scrais-<run-id>` (`docker ps -a` and `docker network ls` show them).
+- The egress-proxy is started shortly before the container. A tool which connects immediately at start of the container, before Squid is ready, gets a connection-error.
+
+Requirements for `egress_proxy_image`: its default command starts Squid in the foreground with the configuration `/etc/squid/squid.conf` (which `scrais` generates and mounts read-only), Squid runs as an unprivileged user and can write `/var/log/squid/access.log`, and the image contains `cat` (used to read the denied requests with `--verbose`). The egress-proxy is started with `--cap-drop all` and `--security-opt no-new-privileges:true`. Example: `ubuntu/squid:7.2-26.04_edge` (verified). If `<repository>/.ScriptCollection/OCIImages/ImageDefinition.csv` defines the image-name `Squid`, `scbuildcodeunits` sets `egress_proxy_image` to it (address including tag) during the build, like it does for `image` and `SCBuilder`; to change the image, change the tag in `ImageDefinition.csv`.
+
+Example:
+
+```ini
+[AgentSandboxConfiguration]
+codingagent = claude
+image = aniondev/scbuilder:v1.2.13
+drop_capabilities = true
+egress_proxy_image = ubuntu/squid:7.2-26.04_edge
+
+[AllowedDomains]
+api.anthropic.com = API of Claude Code
+api.nuget.org = public NuGet-feed for dotnet restore
+.example.com =
+```
+
+The domains which a coding-agent or a package-manager needs (for example for login, telemetry or downloads from a CDN) are not documented here; determine them with `--verbose`.
+
+> **Caution:** The allowlist limits the destinations, not what is sent there. An agent can still send secrets to an allowed domain (for example into a repository on an allowed git-host). With [`--mountdockersocket`](#docker-socket) the agent can start a container with unrestricted network-access, so the allowlist is ineffective then. Nested containers are subject to the same restriction and need the proxy-variables too.
+
 ### Exit-code
 
 The exit-code of `scrais` is the exit-code of the container:
@@ -109,16 +187,19 @@ image = aniondev/scbuilder:v1.2.13
 drop_capabilities = true
 ```
 
-| Key                 | Meaning                                                                                                                                                                                         |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `codingagent`       | The agent which is started: `claude`, `codex`, `copilot`, `opencode` or `vibe`.                                                                                                                 |
-| `image`             | The image the container is started from, see [Image](#image).                                                                                                                                   |
-| `drop_capabilities` | If `true`, the container is started with `--cap-drop all` and `--security-opt no-new-privileges:true`. This hardens the sandbox but can break tools in the image which need a Linux-capability. |
+| Key                         | Meaning                                                                                                                                                                                                                                                                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `codingagent`               | The agent which is started: `claude`, `codex`, `copilot`, `opencode` or `vibe`.                                                                                                                                                                                                                     |
+| `image`                     | The image the container is started from, see [Image](#image).                                                                                                                                                                                                                                       |
+| `drop_capabilities`         | If `true`, the container is started with `--cap-drop all` and `--security-opt no-new-privileges:true`. This hardens the sandbox but can break tools in the image which need a Linux-capability.                                                                                                     |
+| `provide_build_environment` | Optional. If `true`, the container gets the [build-environment](#build-environment). If it is neither defined here nor given as argument, the build-environment is not provided.                                                                                                                    |
+| `[AllowedDomains]`          | Optional own section. The [allowlist](#network-access) of domains, one entry `<domain> = <comment>` per domain. If the section is missing, the network-access is unrestricted. If it is present, everything except these domains is blocked; an empty section blocks the network-access completely. |
+| `egress_proxy_image`        | Required if the [allowlist](#network-access) contains at least one domain, otherwise ignored. The Squid-image of the egress-proxy, in the same forms as [`image`](#image).                                                                                                                          |
 
-Every key can also be given as command-line-argument (`--codingagent`, `--image`, `--dropcapabilities`).
+Every key can also be given as command-line-argument (`--codingagent`, `--image`, `--dropcapabilities`, `--providebuildenvironment`, `--alloweddomain`, `--egressproxyimage`).
 A value given on the command-line overrides the value from the file.
 The file itself is optional: it is only required for the values which are not given on the command-line.
-If a value is neither given on the command-line nor defined in the file, `scrais` aborts with an error which names the missing value.
+If a value (except the optional ones) is neither given on the command-line nor defined in the file, `scrais` aborts with an error which names the missing value.
 
 ### Image
 
@@ -145,10 +226,11 @@ Credentials, settings, skills etc. which the agent needs inside the container ha
 ## What the container looks like
 
 - The repository is mounted read-write to `/Workspace/<repository-folder-name>`, which is also the working-directory of the agent. Every change of the agent ends up directly in the repository on the host.
-- The entrypoint of the image is replaced by a generated script (`/Workspace/Entrypoint.sh`). It runs the initialization-script (if there is one) and then replaces itself with the agent (`exec`), so signals like Ctrl+C reach the agent directly. This also means that a custom entrypoint of the image is not run.
+- The entrypoint of the image is replaced by a generated script (`/Workspace/Entrypoint.sh`). It runs the initialization-script (if there is one) and then replaces itself with the agent (`exec`), so signals like Ctrl+C reach the agent directly. This also means that a custom entrypoint of the image is not run. Only with the [build-environment](#build-environment) the entrypoint of the image is kept and runs the generated script as its command.
 - The [additional folders](#additional-folders) are mounted read-write to `/Workspace/Other/AdditionalResources/<folder-name>`.
 - If the [status is reported to herdr](#status-report-to-herdr), a dedicated host-folder is mounted read-write to `/Workspace/Temp/AgentStatus`.
-- Nothing else of the host is mounted. The network is not restricted.
+- With the [build-environment](#build-environment), the parts of the configuration-folder described there are mounted.
+- Nothing else of the host is mounted. The network is only restricted if an [allowlist](#network-access) is defined.
 
 ## Status-report to herdr
 
