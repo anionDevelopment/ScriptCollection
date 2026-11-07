@@ -1,4 +1,5 @@
 import os
+import re
 from urllib import request
 import time
 import ssl
@@ -101,7 +102,21 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
  
     @GeneralUtilities.check_arguments
     def linting(self) -> None:
-        pass#TODO
+        self.__warn_if_dockerfile_has_no_healthcheck()
+
+    @GeneralUtilities.check_arguments
+    def __warn_if_dockerfile_has_no_healthcheck(self) -> None:
+        dockerfile = os.path.join(self.get_codeunit_folder(), self.get_codeunit_name(), "Dockerfile")
+        if not TFCPS_CodeUnitSpecific_Docker_Functions.dockerfile_contains_healthcheck(GeneralUtilities.read_text_from_file(dockerfile)):
+            self._protected_sc.log.log(f'Dockerfile "{dockerfile}" does not contain a HEALTHCHECK-instruction. It is recommended to add one so that the state of a container of this image can be determined.', LogLevel.Warning)
+
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def dockerfile_contains_healthcheck(dockerfile_content: str) -> bool:
+        """Returns whether the Dockerfile-content contains a HEALTHCHECK-instruction which defines a healthcheck.
+        Instructions are case-insensitive in a Dockerfile. 'HEALTHCHECK NONE' only disables a healthcheck inherited from the base-image,
+        so it does not count as a healthcheck."""
+        return re.search(r"^\s*HEALTHCHECK\s+(?!NONE\b)\S", dockerfile_content, re.MULTILINE | re.IGNORECASE) is not None
 
     @GeneralUtilities.check_arguments
     def do_common_tasks(self,current_codeunit_version:str )-> None:
