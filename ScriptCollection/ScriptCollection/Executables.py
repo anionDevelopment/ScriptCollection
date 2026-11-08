@@ -1436,3 +1436,15 @@ def ShowTrustedRootCAs() -> int:
     for entry in entries:
         GeneralUtilities.write_message_to_stdout(entry)
     return 0
+
+
+def WebpToPng() -> int:
+    parser = argparse.ArgumentParser(description="Converts a webp-file to a png-file. If the webp-file is animated, only the first frame is converted.")
+    parser.add_argument('-i', '--inputfile', required=True, help="Path to the webp-file which should be converted.")
+    parser.add_argument('-o', '--outputfile', required=True, help="Path to the png-file which should be created.")
+    parser.add_argument('-r', '--replace', action='store_true', required=False, default=False, help="Overwrites the output-file if it already exists. Without this flag the conversion fails if the output-file already exists.")
+    args = parser.parse_args()
+    input_file = GeneralUtilities.resolve_relative_path(args.inputfile, os.getcwd())
+    output_file = GeneralUtilities.resolve_relative_path(args.outputfile, os.getcwd())
+    ScriptCollectionCore().convert_webp_to_png(input_file, output_file, args.replace)
+    return 0

@@ -145,6 +145,7 @@ scgeneratetaskfilefromworkspacefile = "ScriptCollection.Executables:GenerateTask
 scruncommandinfolder = "ScriptCollection.Executables:RunCommandInFolder"
 sctrustedrootcatobase64 = "ScriptCollection.Executables:TrustedRootCAToBase64"
 sctrustedrootcas = "ScriptCollection.Executables:ShowTrustedRootCAs"
+scwebp2png = "ScriptCollection.Executables:WebpToPng"
 
 [tool.setuptools]
 zip-safe = false
