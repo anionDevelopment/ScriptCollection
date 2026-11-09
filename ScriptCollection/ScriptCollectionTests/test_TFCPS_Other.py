@@ -1158,6 +1158,46 @@ items:
             # assert
             self.assertEqual(["--build-arg", "image_debian=docker.io/library/debian:13.4-slim"], actual_result)
 
+    def test_dockerfile_contains_healthcheck_returns_true_for_healthcheck_instruction(self) -> None:
+        # arrange
+        dockerfile_content = "FROM debian\nHEALTHCHECK --interval=30s CMD curl -f http://localhost/ || exit 1\nCMD [\"app\"]\n"
+
+        # act
+        actual_result = TFCPS_CodeUnitSpecific_Docker_Functions.dockerfile_contains_healthcheck(dockerfile_content)
+
+        # assert
+        self.assertTrue(actual_result)
+
+    def test_dockerfile_contains_healthcheck_is_case_insensitive(self) -> None:
+        # arrange
+        dockerfile_content = "FROM debian\n  healthcheck CMD /healthcheck.sh\n"
+
+        # act
+        actual_result = TFCPS_CodeUnitSpecific_Docker_Functions.dockerfile_contains_healthcheck(dockerfile_content)
+
+        # assert
+        self.assertTrue(actual_result)
+
+    def test_dockerfile_contains_healthcheck_returns_false_without_healthcheck_instruction(self) -> None:
+        # arrange
+        dockerfile_content = "FROM debian\n# HEALTHCHECK CMD /healthcheck.sh\nRUN echo HEALTHCHECK\nCMD [\"app\"]\n"
+
+        # act
+        actual_result = TFCPS_CodeUnitSpecific_Docker_Functions.dockerfile_contains_healthcheck(dockerfile_content)
+
+        # assert
+        self.assertFalse(actual_result)
+
+    def test_dockerfile_contains_healthcheck_returns_false_for_healthcheck_none(self) -> None:
+        # arrange
+        dockerfile_content = "FROM debian\nHEALTHCHECK NONE\n"
+
+        # act
+        actual_result = TFCPS_CodeUnitSpecific_Docker_Functions.dockerfile_contains_healthcheck(dockerfile_content)
+
+        # assert
+        self.assertFalse(actual_result)
+
     def test_generate_certificate_for_development_purposes_generates_the_certificate_under_the_expected_name(self) -> None:
         # The name of the generated files is what every Dockerfile which embeds the certificate refers to, so it is part of
         # the contract of this function and not an implementation-detail.

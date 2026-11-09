@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile
 import uuid
 import xml.etree.ElementTree as ET
+from PIL import Image
 from ..ScriptCollection.GeneralUtilities import GeneralUtilities
 from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
 
@@ -1573,5 +1574,56 @@ class ScriptCollectionCoreTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 sc.get_real_git_folder(folder)
 
+
+    @staticmethod
+    def __create_webp_file(file: str, color: tuple[int, int, int]) -> None:
+        Image.new("RGB", (4, 3), color).save(file, "WEBP", lossless=True)
+
+    def test_convert_webp_to_png_creates_png_with_same_content(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            input_file = os.path.join(folder, "input.webp")
+            output_file = os.path.join(folder, "output.png")
+            ScriptCollectionCoreTests.__create_webp_file(input_file, (10, 20, 30))
+            ScriptCollectionCore().convert_webp_to_png(input_file, output_file, False)
+            with Image.open(output_file) as result:
+                self.assertEqual("PNG", result.format)
+                self.assertEqual((4, 3), result.size)
+                self.assertEqual((10, 20, 30), result.convert("RGB").getpixel((0, 0)))
+
+    def test_convert_webp_to_png_fails_if_output_file_exists_and_replace_is_not_set(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            input_file = os.path.join(folder, "input.webp")
+            output_file = os.path.join(folder, "output.png")
+            ScriptCollectionCoreTests.__create_webp_file(input_file, (10, 20, 30))
+            GeneralUtilities.write_binary_to_file(output_file, b"existing")
+            with self.assertRaises(ValueError):
+                ScriptCollectionCore().convert_webp_to_png(input_file, output_file, False)
+            self.assertEqual(b"existing", GeneralUtilities.read_binary_from_file(output_file))
+
+    def test_convert_webp_to_png_overwrites_output_file_if_replace_is_set(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            input_file = os.path.join(folder, "input.webp")
+            output_file = os.path.join(folder, "output.png")
+            ScriptCollectionCoreTests.__create_webp_file(input_file, (10, 20, 30))
+            GeneralUtilities.write_binary_to_file(output_file, b"existing")
+            ScriptCollectionCore().convert_webp_to_png(input_file, output_file, True)
+            with Image.open(output_file) as result:
+                self.assertEqual("PNG", result.format)
+
+    def test_convert_webp_to_png_fails_if_input_file_does_not_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            output_file = os.path.join(folder, "output.png")
+            with self.assertRaises(ValueError):
+                ScriptCollectionCore().convert_webp_to_png(os.path.join(folder, "missing.webp"), output_file, False)
+            self.assertFalse(os.path.exists(output_file))
+
+    def test_convert_webp_to_png_fails_if_input_file_is_not_webp(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            input_file = os.path.join(folder, "input.webp")
+            output_file = os.path.join(folder, "output.png")
+            Image.new("RGB", (4, 3), (10, 20, 30)).save(input_file, "PNG")
+            with self.assertRaises(ValueError):
+                ScriptCollectionCore().convert_webp_to_png(input_file, output_file, False)
+            self.assertFalse(os.path.exists(output_file))
 
 # TODO all testcases should be independent of epew

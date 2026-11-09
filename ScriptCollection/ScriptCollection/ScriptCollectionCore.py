@@ -34,13 +34,14 @@ import qrcode
 import pycdlib
 import send2trash
 from pypdf import PdfReader, PdfWriter
+from PIL import Image
 from packaging.version import Version
 from .GeneralUtilities import GeneralUtilities,Platform
 from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.69"
+version = "4.4.70"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -3648,6 +3649,17 @@ TXDX
             GeneralUtilities.write_binary_to_file(file, content[:-2])
         elif content.endswith(b"\n") or content.endswith(b"\r"):
             GeneralUtilities.write_binary_to_file(file, content[:-1])
+
+    @GeneralUtilities.check_arguments
+    def convert_webp_to_png(self, input_file: str, output_file: str, replace_existing_output_file: bool) -> None:
+        if not os.path.isfile(input_file):
+            raise ValueError(f"File '{input_file}' does not exist.")
+        if os.path.exists(output_file) and not replace_existing_output_file:
+            raise ValueError(f"File '{output_file}' already exists.")
+        with Image.open(input_file) as image:
+            if image.format != "WEBP":
+                raise ValueError(f"File '{input_file}' is not a webp-file.")
+            image.save(output_file, "PNG")
 
     @GeneralUtilities.check_arguments
     def format_html_content(self, content: str, add_html_declaration: bool = False) -> str:
