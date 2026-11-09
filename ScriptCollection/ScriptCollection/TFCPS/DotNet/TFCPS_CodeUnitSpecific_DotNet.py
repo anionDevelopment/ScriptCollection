@@ -1,4 +1,5 @@
 import os
+import platform
 import glob
 import re
 import shutil
@@ -52,13 +53,13 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         return result
 
     @GeneralUtilities.check_arguments
-    def build(self,generate_open_api_spec:bool) -> None:
+    def build(self,generate_open_api_spec:bool, enable_windows_targeting_on_linux:bool) -> None:
         runtimes: list[str] = self.get_runtimes()
         if self.is_library:
-            self.standardized_tasks_build_for_dotnet_library_project(runtimes)
+            self.standardized_tasks_build_for_dotnet_library_project(runtimes, enable_windows_targeting_on_linux)
             GeneralUtilities.assert_condition(not generate_open_api_spec,"OpenAPI-Specification can not be generated for a library.")
         else:
-            self.standardized_tasks_build_for_dotnet_project(runtimes)
+            self.standardized_tasks_build_for_dotnet_project(runtimes, enable_windows_targeting_on_linux)
             if generate_open_api_spec:
                 self.generate_openapi_file(runtimes[0])
 
@@ -164,7 +165,25 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             raise ValueError(f"The project \"{csproj_file}\" is built for the runtime(s) {', '.join(missing)}, but does not state them. Add \"<RuntimeIdentifiers>{';'.join(runtimes)}</RuntimeIdentifiers>\" to the project-file, so that the restore of the codeunit resolves the dependencies of these runtimes.")
 
     @GeneralUtilities.check_arguments
-    def __standardized_tasks_build_for_dotnet_build(self, csproj_file: str, originaloutputfolder: str, files_to_sign: dict[str, str], commitid: str, runtimes: list[str],  target_environmenttype_mapping:  dict[str, str], copy_license_file_to_target_folder: bool, repository_folder: str, codeunit_name: str) -> None:
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def get_windows_targeting_arguments(runtimes: list[str], host_operating_system: str, enable_windows_targeting_on_linux: bool) -> list[str]:
+        """Returns the msbuild-arguments which allow to build the given windows-runtimes on a linux-host.
+
+        Projects which target windows (for example "net10.0-windows" with windows forms) can not be restored or built on a
+        non-windows-host by default (NETSDK1100). Setting EnableWindowsTargeting allows to compile them for windows on linux;
+        the result can still only be executed on windows. This is only done when it is explicitly enabled, because otherwise
+        the build would silently produce windows-binaries which were never executed on the build-host."""
+        if not enable_windows_targeting_on_linux:
+            return []
+        if host_operating_system != "Linux":
+            return []
+        if not any(runtime.startswith("win") for runtime in runtimes):
+            return []
+        return ["-p:EnableWindowsTargeting=true"]
+
+    @GeneralUtilities.check_arguments
+    def __standardized_tasks_build_for_dotnet_build(self, csproj_file: str, originaloutputfolder: str, files_to_sign: dict[str, str], commitid: str, runtimes: list[str],  target_environmenttype_mapping:  dict[str, str], copy_license_file_to_target_folder: bool, repository_folder: str, codeunit_name: str, enable_windows_targeting_on_linux: bool) -> None:
         self._protected_sc.assert_is_git_repository(repository_folder)
         csproj_filename = os.path.basename(csproj_file)
         self._protected_sc.log.log(f"Build {csproj_filename}...")
@@ -184,12 +203,16 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         GeneralUtilities.ensure_directory_does_not_exist(os.path.join(csproj_file_folder, "obj"))
         self._protected_sc.run_program("dotnet", "clean", csproj_file_folder)
         self.__ensure_lock_files_exist(codeunit_folder, codeunit_name)
-        self._protected_sc.run_program_argsasarray("dotnet", ["restore", "--locked-mode"], codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
+        host_operating_system: str = platform.system()
+        # The restore covers all runtimes, so it needs the windows-targeting as soon as one of them is a windows-runtime.
+        restore_windows_targeting_arguments: list[str] = TFCPS_CodeUnitSpecific_DotNet_Functions.get_windows_targeting_arguments(runtimes, host_operating_system, enable_windows_targeting_on_linux)
+        self._protected_sc.run_program_argsasarray("dotnet", ["restore", "--locked-mode"]+restore_windows_targeting_arguments, codeunit_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
         for runtime in runtimes:
             outputfolder = originaloutputfolder+runtime
             GeneralUtilities.ensure_directory_does_not_exist(outputfolder)
             GeneralUtilities.ensure_directory_exists(outputfolder)
-            self._protected_sc.run_program_argsasarray("dotnet", ["build", "--no-restore", csproj_file_name, "-c", dotnet_build_configuration, "-o", outputfolder, "--runtime", runtime], csproj_file_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
+            build_windows_targeting_arguments: list[str] = TFCPS_CodeUnitSpecific_DotNet_Functions.get_windows_targeting_arguments([runtime], host_operating_system, enable_windows_targeting_on_linux)
+            self._protected_sc.run_program_argsasarray("dotnet", ["build", "--no-restore", csproj_file_name, "-c", dotnet_build_configuration, "-o", outputfolder, "--runtime", runtime]+build_windows_targeting_arguments, csproj_file_folder,print_live_output=self.get_verbosity()==LogLevel.Debug)
             if copy_license_file_to_target_folder:
                 license_file = os.path.join(repository_folder, "License.txt")
                 target = os.path.join(outputfolder, f"{codeunit_name}.License.txt")
@@ -231,12 +254,12 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             self._protected_sc.log.log(f"The lock-file \"{lock_file}\" does not exist, so the build-result of \"{csproj_file_name_without_extension}\" does not contain the versions which were used.", LogLevel.Warning)
 
     @GeneralUtilities.check_arguments
-    def standardized_tasks_build_for_dotnet_project(self,runtimes:list[str]) -> None:
-        self.__standardized_tasks_build_for_dotnet_project(runtimes)
+    def standardized_tasks_build_for_dotnet_project(self,runtimes:list[str], enable_windows_targeting_on_linux:bool) -> None:
+        self.__standardized_tasks_build_for_dotnet_project(runtimes, enable_windows_targeting_on_linux)
 
     @GeneralUtilities.check_arguments
-    def standardized_tasks_build_for_dotnet_library_project(self,runtimes:list[str]) -> None:
-        self.__standardized_tasks_build_for_dotnet_project(runtimes)
+    def standardized_tasks_build_for_dotnet_library_project(self,runtimes:list[str], enable_windows_targeting_on_linux:bool) -> None:
+        self.__standardized_tasks_build_for_dotnet_project(runtimes, enable_windows_targeting_on_linux)
         self.__standardized_tasks_build_nupkg_for_dotnet_create_package(runtimes)
 
  
@@ -255,7 +278,7 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
             return result
 
     @GeneralUtilities.check_arguments
-    def __standardized_tasks_build_for_dotnet_project(self,runtimes:list[str]) -> None:
+    def __standardized_tasks_build_for_dotnet_project(self,runtimes:list[str], enable_windows_targeting_on_linux:bool) -> None:
         target_environment_type: str=self.get_target_environment_type()
         copy_license_file_to_target_folder: bool=True
         codeunitname: str = self.get_codeunit_name()
@@ -270,8 +293,8 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         codeunit_folder = os.path.join(repository_folder, codeunitname)
         csproj_file = os.path.join(codeunit_folder, codeunitname, codeunitname + ".csproj")
         csproj_test_file = os.path.join(codeunit_folder, codeunitname+"Tests", codeunitname+"Tests.csproj")
-        self.__standardized_tasks_build_for_dotnet_build(csproj_file,  os.path.join(outputfolder, "BuildResult_DotNet_"), files_to_sign, commitid, runtimes, target_environment_type,  copy_license_file_to_target_folder, repository_folder, codeunitname)
-        self.__standardized_tasks_build_for_dotnet_build(csproj_test_file,  os.path.join(outputfolder, "BuildResultTests_DotNet_"), files_to_sign, commitid, runtimes, target_environment_type,  copy_license_file_to_target_folder, repository_folder, codeunitname)
+        self.__standardized_tasks_build_for_dotnet_build(csproj_file,  os.path.join(outputfolder, "BuildResult_DotNet_"), files_to_sign, commitid, runtimes, target_environment_type,  copy_license_file_to_target_folder, repository_folder, codeunitname, enable_windows_targeting_on_linux)
+        self.__standardized_tasks_build_for_dotnet_build(csproj_test_file,  os.path.join(outputfolder, "BuildResultTests_DotNet_"), files_to_sign, commitid, runtimes, target_environment_type,  copy_license_file_to_target_folder, repository_folder, codeunitname, enable_windows_targeting_on_linux)
         self.generate_sbom_for_dotnet_project(codeunit_folder)
         self.copy_source_files_to_output_directory()
 
