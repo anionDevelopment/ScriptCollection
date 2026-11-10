@@ -1626,4 +1626,35 @@ class ScriptCollectionCoreTests(unittest.TestCase):
                 ScriptCollectionCore().convert_webp_to_png(input_file, output_file, False)
             self.assertFalse(os.path.exists(output_file))
 
+    def test_push_nuget_build_artifact_runs_outside_of_the_folder_of_the_package(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            # a NuGet.config with "<clear />" next to the package would hide the package-sources of the user-level-configuration if the push
+            # was done in that folder, so the push must be done from the temp-folder and the package must be given by its absolute path.
+            nupkg_file = os.path.join(folder, "MyPackage.1.0.0.nupkg")
+            GeneralUtilities.write_binary_to_file(nupkg_file, b"")
+            sc = ScriptCollectionCore()
+            with patch.object(sc, "run_program_argsasarray") as run_program_argsasarray:
+                # act
+                sc.push_nuget_build_artifact(nupkg_file, "MySource", "MyApiKey")
+                # assert
+                run_program_argsasarray.assert_called_once()
+                arguments = run_program_argsasarray.call_args.args
+                self.assertEqual("dotnet", arguments[0])
+                self.assertEqual(["nuget", "push", os.path.abspath(nupkg_file), "--force-english-output", "--source", "MySource", "--api-key", "MyApiKey"], arguments[1])
+                self.assertEqual(GeneralUtilities.get_temp_folder(), arguments[2])
+                self.assertNotIn("MyApiKey", run_program_argsasarray.call_args.kwargs["arguments_for_log"])
+
+    def test_push_nuget_build_artifact_without_api_key_does_not_pass_an_api_key(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            nupkg_file = os.path.join(folder, "MyPackage.1.0.0.nupkg")
+            GeneralUtilities.write_binary_to_file(nupkg_file, b"")
+            sc = ScriptCollectionCore()
+            with patch.object(sc, "run_program_argsasarray") as run_program_argsasarray:
+                # act
+                sc.push_nuget_build_artifact(nupkg_file, "MySource")
+                # assert
+                self.assertNotIn("--api-key", run_program_argsasarray.call_args.args[1])
+
 # TODO all testcases should be independent of epew
