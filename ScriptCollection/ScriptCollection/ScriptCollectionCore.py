@@ -41,7 +41,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.70"
+version = "4.4.71"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -754,14 +754,17 @@ class ScriptCollectionCore:
 
     @GeneralUtilities.check_arguments
     def push_nuget_build_artifact(self, nupkg_file: str, registry_address: str, api_key: str = None):
-        nupkg_file_name = os.path.basename(nupkg_file)
-        nupkg_file_folder = os.path.dirname(nupkg_file)
-        argument = f"nuget push {nupkg_file_name} --force-english-output --source {registry_address}"
-        argument_for_log = argument
+        # dotnet reads the NuGet-configuration of the working-directory and of all of its parent-folders. The build-artifact usually lies
+        # inside a repository, and a NuGet.config of that repository which contains "<clear />" would hide the package-sources which are
+        # registered in the user-level-configuration, so that a source given by its name would be reported as invalid. Therefore the push is
+        # done from the temp-folder, where only the user-level- and the machine-wide-configuration apply.
+        absolute_nupkg_file = os.path.abspath(nupkg_file)
+        arguments = ["nuget", "push", absolute_nupkg_file, "--force-english-output", "--source", registry_address]
+        arguments_for_log = list(arguments)
         if api_key is not None:
-            argument = f"{argument} --api-key {api_key}"
-            argument_for_log = f"{argument_for_log} --api-key ***"
-        self.run_program("dotnet", argument, nupkg_file_folder, arguments_for_log=argument_for_log)
+            arguments = arguments + ["--api-key", api_key]
+            arguments_for_log = arguments_for_log + ["--api-key", "***"]
+        self.run_program_argsasarray("dotnet", arguments, GeneralUtilities.get_temp_folder(), arguments_for_log=arguments_for_log)
 
     @GeneralUtilities.check_arguments
     def dotnet_build(self, folder: str, projectname: str, configuration: str):
