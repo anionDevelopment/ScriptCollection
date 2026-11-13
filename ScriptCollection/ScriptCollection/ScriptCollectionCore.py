@@ -4396,14 +4396,19 @@ OCR-content:
             return False
         return True
 
-    def reclaim_space_from_docker(self,remove_containers:bool,remove_volumes:bool,remove_images:bool, amount_of_attempts: int = 5):
+    def reclaim_space_from_docker(self,remove_containers:bool,remove_named_volumes:bool,remove_images:bool, amount_of_attempts: int = 5):
         self.log.log("Reclaim disk space from docker...",LogLevel.Debug)
         if remove_containers:
             self.run_program_with_retry("docker","container prune -f",amount_of_attempts=amount_of_attempts)
-        if remove_volumes:
-            self.run_program_with_retry("docker","volume prune -f",amount_of_attempts=amount_of_attempts)
+            self.run_program_with_retry("docker","network prune -f",amount_of_attempts=amount_of_attempts)# networks are only unused when the containers which used them are removed.
+        if remove_named_volumes:
+            self.run_program_with_retry("docker","volume prune -a -f",amount_of_attempts=amount_of_attempts)# since docker 23 "volume prune" without "-a" only removes anonymous volumes.
+        else:
+            self.run_program_with_retry("docker","volume prune -f",amount_of_attempts=amount_of_attempts)# removes only anonymous volumes.
         if remove_images:
             self.run_program_with_retry("docker","image prune -a -f",amount_of_attempts=amount_of_attempts)
+        else:
+            self.run_program_with_retry("docker","image prune -f",amount_of_attempts=amount_of_attempts)# removes only dangling images (untagged leftovers of builds).
         self.run_program_with_retry("docker","builder prune -a -f",amount_of_attempts=amount_of_attempts)
         self.run_program_with_retry("docker","buildx prune -a -f",amount_of_attempts=amount_of_attempts,throw_exception_if_exitcode_is_not_zero=False) # buildx prune is not available on every machine.
         self.run_program_with_retry("docker","system df",print_live_output=self.log.loglevel==LogLevel.Debug,amount_of_attempts=amount_of_attempts)
