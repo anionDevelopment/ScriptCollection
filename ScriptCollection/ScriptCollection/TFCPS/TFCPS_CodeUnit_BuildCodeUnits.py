@@ -441,6 +441,25 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         if os.path.isfile(openspec_configuration_file):
             self.sc.log.log("Update openspec-instruction-files...")
             self.sc.run_with_epew("openspec", "update --force", self.repository)
+            self.__replace_openspec_skill_links_by_copies()
+
+    @GeneralUtilities.check_arguments
+    def __replace_openspec_skill_links_by_copies(self) -> None:
+        """openspec (since v2.0.0) writes its skills to '.agents/skills' and links them into the skill-folders of the configured tools
+        (for example '.claude/skills') if the operating-system allows to create symbolic links, otherwise it writes copies. openspec has no
+        option to always write copies, so the links are replaced by copies here. This way the content of the repository does not depend on
+        the operating-system on which the build ran.
+        The skill-folders of all tools are located in folders in the root of the repository whose names start with a dot, so only these
+        folders are searched (and not for example the codeunit-folders, which may contain large folders like 'node_modules').
+        Submodules are not changed, because their content belongs to another repository."""
+        shared_skills_folder: str = os.path.join(self.repository, ".agents", "skills")
+        if os.path.isdir(shared_skills_folder):
+            submodule_folders: list[str] = [os.path.join(self.repository, submodule) for submodule in self.sc.get_git_submodules(self.repository)]
+            for name in os.listdir(self.repository):
+                tool_folder: str = os.path.join(self.repository, name)
+                if name.startswith(".") and name not in [".git", ".agents"] and os.path.isdir(tool_folder) and not os.path.islink(tool_folder):
+                    for replaced_link in GeneralUtilities.replace_symlinks_by_copies(tool_folder, shared_skills_folder, submodule_folders):
+                        self.sc.log.log(f"Replaced symbolic link \"{replaced_link}\" by a copy of its target.", LogLevel.Debug)
 
     @GeneralUtilities.check_arguments
     def __validate_openspec(self,repository:str) -> None:
