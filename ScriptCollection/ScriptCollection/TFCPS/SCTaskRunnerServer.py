@@ -103,8 +103,13 @@ class SCTaskRunnerServer:
         self.__sc.log.log(f"SCTaskRunner for operating-system '{self.operating_system_name}' is listening on {protocol}://{host}:{port}.")
         server.serve_forever()
 
+    @staticmethod
+    def is_valid_set_of_environment_variables(environment_variables) -> bool:
+        """Whether the given (deserialized) value is a set of environment-variables a job can be started with."""
+        return isinstance(environment_variables, dict) and all(isinstance(name, str) and isinstance(value, str) and len(name) > 0 and "=" not in name for name, value in environment_variables.items())
+
     @GeneralUtilities.check_arguments
-    def __start_job(self, archive_stream, archive_size: int, codeunit_name: str, program: str, arguments: list[str], working_directory: str, result_folder: str) -> str:  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
+    def __start_job(self, archive_stream, archive_size: int, codeunit_name: str, program: str, arguments: list[str], working_directory: str, result_folder: str, environment_variables: dict[str, str]) -> str:  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
         """Starts a job for the repository-archive which can be read from archive_stream (the body of the request which
         submitted the job; archive_size is its announced length). The archive is taken as a stream instead of as bytes
         because it contains the complete repository of the client and is therefore regularly several hundred megabytes,
@@ -128,13 +133,15 @@ class SCTaskRunnerServer:
         job = _RunnerJob(job_id, workspace_folder, result_folder)
         with self.__jobs_lock:
             self.__jobs[job_id] = job
-        thread = threading.Thread(target=self.__extract_payload_and_run_job, args=(job, archive_file, program, arguments, working_directory), daemon=True)
+        thread = threading.Thread(target=self.__extract_payload_and_run_job, args=(job, archive_file, program, arguments, working_directory, environment_variables), daemon=True)
         thread.start()
-        self.__sc.log.log(f"Accepted job '{job_id}': run '{program} {' '.join(arguments)}' in '{working_directory}' of codeunit '{codeunit_name}', result-folder '{result_folder}' ({archive_size} transferred bytes of repository-content).")
+        #Only the names of the environment-variables are logged: their values are secrets of the client (for example the
+        #key which signs an app for a store).
+        self.__sc.log.log(f"Accepted job '{job_id}': run '{program} {' '.join(arguments)}' in '{working_directory}' of codeunit '{codeunit_name}', result-folder '{result_folder}', environment-variables [{', '.join(sorted(environment_variables.keys()))}] ({archive_size} transferred bytes of repository-content).")
         return job_id
 
     @GeneralUtilities.check_arguments
-    def __extract_payload_and_run_job(self, job: _RunnerJob, archive_file: str, program: str, arguments: list[str], working_directory: str) -> None:
+    def __extract_payload_and_run_job(self, job: _RunnerJob, archive_file: str, program: str, arguments: list[str], working_directory: str, environment_variables: dict[str, str]) -> None:
         """Extracts the transferred repository-archive into the workspace of the job and runs the requested program
         afterwards. The extraction happens here - in the thread of the job - and not in the request which submitted the
         job, because extracting the repository of a large codeunit takes minutes during which no data flows: the client
@@ -151,7 +158,7 @@ class SCTaskRunnerServer:
         finally:
             GeneralUtilities.ensure_file_does_not_exist(archive_file)
         self.__sc.log.log(f"Job '{job.job_id}' works on the repository '{self.__get_origin_of_the_transferred_repository(job.workspace_folder)}'.")
-        self.__run_job(job, program, arguments, working_directory)
+        self.__run_job(job, program, arguments, working_directory, environment_variables)
 
     @GeneralUtilities.check_arguments
     def __get_origin_of_the_transferred_repository(self, workspace_folder: str) -> str:
@@ -204,14 +211,18 @@ class SCTaskRunnerServer:
                 remaining_amount_of_bytes = remaining_amount_of_bytes-len(chunk)
 
     @GeneralUtilities.check_arguments
-    def __run_job(self, job: _RunnerJob, program: str, arguments: list[str], working_directory: str) -> None:
+    def __run_job(self, job: _RunnerJob, program: str, arguments: list[str], working_directory: str, environment_variables: dict[str, str]) -> None:
+        """Runs the program of the job. The environment-variables of the job are set in addition to the ones of this
+        runner and only for this program."""
         command_folder = os.path.join(job.workspace_folder, working_directory)
         try:
             self.__sc.log.log(f"Job '{job.job_id}' runs '{program} {' '.join(arguments)}' in '{command_folder}'...")
             moment_of_the_start = time.time()
             moment_of_the_last_progress_log = moment_of_the_start
             amount_of_lines = 0
-            with subprocess.Popen([program] + arguments, cwd=command_folder, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace") as process:
+            environment_of_the_program = dict(os.environ)
+            environment_of_the_program.update(environment_variables)
+            with subprocess.Popen([program] + arguments, cwd=command_folder, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", env=environment_of_the_program) as process:
                 for line in process.stdout:
                     with job.lock:
                         job.log = job.log + line
@@ -447,9 +458,17 @@ class SCTaskRunnerServer:
                 arguments = json.loads(base64.b64decode(self.headers.get("X-Arguments")).decode("utf-8"))
                 working_directory = self.headers.get("X-Working-Directory", ".")
                 result_folder = self.headers.get("X-Result-Folder")
+                #A client of a version which does not know environment-variables does not send this header.
+                environment_variables_header = self.headers.get("X-Environment-Variables")
+                environment_variables = {} if environment_variables_header is None else json.loads(base64.b64decode(environment_variables_header).decode("utf-8"))
+                if not SCTaskRunnerServer.is_valid_set_of_environment_variables(environment_variables):
+                    self.__send_text(400, "The header X-Environment-Variables must contain a json-object whose names and values are texts.")
+                    return
                 #the body is handed over as a stream (and not read here) so the archive is written to disk chunk-wise, see __start_job.
-                job_id = outer._SCTaskRunnerServer__start_job(self.rfile, content_length, codeunit_name, program, arguments, working_directory, result_folder)
-                self.__send_json(200, {"job_id": job_id})
+                job_id = outer._SCTaskRunnerServer__start_job(self.rfile, content_length, codeunit_name, program, arguments, working_directory, result_folder, environment_variables)
+                #The names of the applied environment-variables are part of the answer, so that a client can tell this runner
+                #from one which does not support environment-variables and would ignore them (see TFCPS_RemoteBuild).
+                self.__send_json(200, {"job_id": job_id, "applied_environment_variables": sorted(environment_variables.keys())})
 
             def do_DELETE(self):  # pylint:disable=invalid-name
                 self.__handle(self.__delete)

@@ -14,7 +14,7 @@ Some build-steps can only be produced on a specific operating-system, or require
 Neither the (Linux) Debian-build-pipeline nor (for macOS/iOS) a Windows-developer-client can produce these.
 ScriptCollection therefore delegates such operating-system-/toolchain-bound steps to a **remote task-runner** that provides the required operating-system (or, for Android, the required toolchain inside a Linux-container).
 
-The mechanism is generic and available to every codeunit-type (it lives in `TFCPS_CodeUnitSpecific_Base`, not only in the flutter-codeunit): `self.run_program_on_remote_runner(required_os, program, arguments, working_directory, result_folder, folders_which_are_not_transferred)`.
+The mechanism is generic and available to every codeunit-type (it lives in `TFCPS_CodeUnitSpecific_Base`, not only in the flutter-codeunit): `self.run_program_on_remote_runner(required_os, program, arguments, working_directory, result_folder, folders_which_are_not_transferred, environment_variables)`.
 The actual transport/synchronization is implemented in `TFCPS_RemoteBuild`; the runners are the codeunits `SCTaskRunnerWindows`, `SCTaskRunnerMacOS`, `SCTaskRunnerIOS` and `SCTaskRunnerAndroid` (in the SCBuilder-repository), which each expose an HTTP-server.
 `RunnerOperatingSystem.MacOS` and `RunnerOperatingSystem.IOS` are deliberately two separate values (not one shared "macOS" value) so that a macOS-desktop-build and an iOS-build of the same repository can be delegated to two different runners.
 
@@ -50,6 +50,35 @@ Flutter's `linux`-target is *not* part of this mechanism, even though it is also
    local repository is touched.
 4. The client deletes the job on the runner, which **deletes the runner-workspace immediately**, so no repository-content
    remains on the runner.
+
+## Secrets for a build-step (environment-variables of a job)
+
+A build-step can need a secret which must not be part of the transferred repository, for example the key which signs an app for a store.
+Such a secret is given to the job as an **environment-variable**: `run_program_on_remote_runner(..., environment_variables)` sends them in the header `X-Environment-Variables` of the submit, and the runner sets them (in addition to its own environment) **only for the program of that job**.
+
+- The values are neither part of the transferred repository nor of the result nor of a log: the runner logs only their names.
+- The runner states the names of the environment-variables it applied in the answer of the submit.
+  A runner of a version which does not support environment-variables ignores them, so a client refuses such a runner if it sends environment-variables - otherwise the job would run without them (for example an app which is meant to be signed for a store would be built with the debug-key).
+
+### Signing of android-apps
+
+`TFCPS_CodeUnitSpecific_Android` uses this to sign the release-build of a **productive build** (target-environment-type `Productive`) with the upload-key, so that the app-bundle in the artifact `BuildResult_AAB` can be uploaded to Google Play:
+
+| Environment-variable on the machine which builds (for example the build-pipeline) | Content | Environment-variable for gradle on the runner |
+| --------------------------------------------------------------------------------- | ------- | --------------------------------------------- |
+| `Android_Signing_Keystore` | base64-encoding of the keystore-file (line-breaks are ignored) | `SC_ANDROID_SIGNING_STORE_FILE` (path of a temporary file) |
+| `Android_Signing_StorePassword` | password of the keystore | `SC_ANDROID_SIGNING_STORE_PASSWORD` |
+| `Android_Signing_KeyAlias` | alias of the upload-key | `SC_ANDROID_SIGNING_KEY_ALIAS` |
+| `Android_Signing_KeyPassword` | password of the upload-key | `SC_ANDROID_SIGNING_KEY_PASSWORD` |
+
+- For a productive build all four are required; the build fails if one is missing.
+- On the runner the keystore is written into a temporary file outside of the workspace of the job, which is removed when gradle ends.
+- The `signingConfig` of the release-build-type in the `build.gradle` of the codeunit reads the `SC_ANDROID_SIGNING_*`-variables (see the docstring of `TFCPS_CodeUnitSpecific_Android_Functions`).
+- After the build it is verified that the app-bundle is signed and that it is not signed with the debug-key.
+- Every other build (for example `QualityCheck` on a developer-machine) is signed with the debug-key of the runner, so the app can be built and installed for testing without the upload-key.
+- A containerized build (`scbuildcodeunits -c`) gives only the declared environment-variables to the build-container. A machine which does containerized productive builds therefore declares the four `Android_Signing_*`-variables in `<configuration-folder>/TFCPS/AdditionalRequiredEnvironmentVariables.txt` (and not the repository in its `ProductInformation.xml`, because then every build - also the one of a developer - would require them).
+
+The runner has to run a version of ScriptCollection which supports environment-variables of a job (4.4.73 or newer).
 
 ## Which error reaches the client
 

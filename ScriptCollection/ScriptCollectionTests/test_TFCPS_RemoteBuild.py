@@ -1,4 +1,6 @@
 import os
+import json
+import base64
 import tarfile
 import tempfile
 import unittest
@@ -235,3 +237,26 @@ class TFCPS_RemoteBuildTests(unittest.TestCase):
 
             # assert
             self.assertIn(file_of_a_similarly_named_folder, actual_files)
+
+    def test_the_environment_variables_are_part_of_the_submission_of_a_job(self) -> None:
+        # act
+        headers = TFCPS_RemoteBuild.get_headers_of_job_submission("MyCodeunit", "bash", ["gradlew"], "MyCodeunit/MyCodeunit", "MyCodeunit/MyCodeunit/build/outputs", {"NAME": "value"})
+
+        # assert
+        self.assertEqual({"NAME": "value"}, json.loads(base64.b64decode(headers["X-Environment-Variables"]).decode("utf-8")))
+        self.assertEqual(["gradlew"], json.loads(base64.b64decode(headers["X-Arguments"]).decode("utf-8")))
+
+    def test_a_runner_which_applied_the_environment_variables_is_accepted(self) -> None:
+        TFCPS_RemoteBuild.assert_runner_applied_environment_variables({"job_id": "job1", "applied_environment_variables": ["A", "B"]}, {"B": "2", "A": "1"}, "https://runner.example.com")
+
+    def test_a_runner_which_does_not_support_environment_variables_is_refused_if_there_are_some(self) -> None:
+        with self.assertRaises(ValueError) as raised:
+            TFCPS_RemoteBuild.assert_runner_applied_environment_variables({"job_id": "job1"}, {"A": "1"}, "https://runner.example.com")
+        self.assertIn("does not support environment-variables", str(raised.exception))
+
+    def test_a_runner_which_does_not_support_environment_variables_is_accepted_if_there_are_none(self) -> None:
+        TFCPS_RemoteBuild.assert_runner_applied_environment_variables({"job_id": "job1"}, {}, "https://runner.example.com")
+
+    def test_a_runner_which_applied_other_environment_variables_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            TFCPS_RemoteBuild.assert_runner_applied_environment_variables({"job_id": "job1", "applied_environment_variables": ["A"]}, {"A": "1", "B": "2"}, "https://runner.example.com")
