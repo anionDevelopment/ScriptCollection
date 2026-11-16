@@ -1258,15 +1258,15 @@ def ReclaimSpaceFromDocker()->int:
     sc = ScriptCollectionCore()
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--removecontainers', action='store_true', default=False)
-    parser.add_argument('-v', '--removevolumes', action='store_true', default=False)
-    parser.add_argument('-i', '--removeimages', action='store_true', default=False)
+    parser.add_argument('-n', '--removenamedvolumes', action='store_true', default=False, help="Also removes unused named volumes. Without this option only unused anonymous volumes are removed.")
+    parser.add_argument('-i', '--removeimages', action='store_true', default=False, help="Removes all unused images. Without this option only dangling images are removed.")
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
     args = parser.parse_args()
     sc:ScriptCollectionCore=ScriptCollectionCore()
     verbosity=int(args.verbosity)
     sc.log.loglevel=LogLevel(verbosity)
-    sc.reclaim_space_from_docker(args.removecontainers,args.removevolumes,args.removeimages)
+    sc.reclaim_space_from_docker(args.removecontainers,args.removenamedvolumes,args.removeimages)
     return 0
 
 

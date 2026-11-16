@@ -2091,11 +2091,11 @@ class TFCPS_Tools_General:
         changelog_file = os.path.join(repository_folder, "Other", "Resources", "Changelog", f"v{current_version}.md")
         if (not os.path.isfile(changelog_file)):
             GeneralUtilities.ensure_file_exists(changelog_file)
-            GeneralUtilities.write_text_to_file(changelog_file, """# Release notes
+            GeneralUtilities.write_text_to_file(changelog_file, f"""# Release notes
 
 ## Changes
 
-- Updated geo-ip-database.
+- Updated submodule {submodule_name}.
 """)
 
     @GeneralUtilities.check_arguments
@@ -2110,6 +2110,19 @@ class TFCPS_Tools_General:
         latest_version: str = stdOut[0][0]
         if current_version != latest_version:
             GeneralUtilities.write_text_to_file(resrepo_commit_id_file, latest_version)
+
+    @GeneralUtilities.check_arguments
+    def log_newer_major_versions_of_dependency(self, dependency_name: str, available_versions: list[str], used_version: str) -> None:
+        """Logs if a newer major-version of the given dependency is available than the used one.
+        An update with an echolon like LatestPatchOrLatestMinor does not take over a new major-version, so without this message it would not be visible that the dependency falls behind.
+        Being 1 major-version behind is logged as information, being 2 or more major-versions behind is logged as warning.
+        used_version is the version which is used after the update (if an update was done)."""
+        amount_of_major_versions_behind: int = GeneralUtilities.get_amount_of_major_versions_behind(available_versions, used_version)
+        if amount_of_major_versions_behind == 0:
+            return
+        loglevel: LogLevel = LogLevel.Information if amount_of_major_versions_behind == 1 else LogLevel.Warning
+        latest_version: str = GeneralUtilities.get_latest_version(available_versions)
+        self.__sc.log.log(f"Dependency {dependency_name} is used in version {used_version}, which is {amount_of_major_versions_behind} major-version(s) behind the latest available version {latest_version}. A new major-version has to be taken over deliberately.", loglevel)
 
     @GeneralUtilities.check_arguments
     def get_dependencies_which_are_ignored_from_updates(self, codeunit_folder: str) -> list[str]:

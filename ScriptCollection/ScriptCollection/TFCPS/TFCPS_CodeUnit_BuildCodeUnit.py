@@ -34,6 +34,19 @@ class TFCPS_CodeUnit_BuildCodeUnit:
         self.is_pre_merge=is_pre_merge
         self.fast_lane=fast_lane
 
+    def __check_article_links(self) -> None:
+        reference_content_folder: str = os.path.join(self.codeunit_folder, "Other", "Reference", "ReferenceContent")
+        articles_folder: str = os.path.join(reference_content_folder, "Articles")
+        if not os.path.isdir(articles_folder):
+            return
+        index_file: str = os.path.join(reference_content_folder, "index.md")
+        index_content: str = GeneralUtilities.read_text_from_file(index_file)
+        GeneralUtilities.assert_file_exists(index_file)
+        for article_file in sorted(os.listdir(articles_folder)):
+            if article_file.lower().endswith(".md") and os.path.isfile(os.path.join(articles_folder, article_file)):
+                if f"(./Articles/{article_file})" not in index_content:
+                    self.sc.log.log(f"Article \"{article_file}\" is not linked in \"{index_file}\".", LogLevel.Warning)
+    
     @GeneralUtilities.check_arguments
     def build_codeunit(self) -> None:
         codeunit_file: str = str(os.path.join(self.codeunit_folder, f"{self.codeunit_name}.codeunit.xml"))
@@ -77,6 +90,7 @@ class TFCPS_CodeUnit_BuildCodeUnit:
                 self.sc.log.log(line, LogLevel.Warning)
             for line in GeneralUtilities.string_to_lines(linting_result[2]):
                 self.sc.log.log(line, LogLevel.Warning)
+        self.__check_article_links()
 
         self.sc.log.log("Generate reference...")
         try:

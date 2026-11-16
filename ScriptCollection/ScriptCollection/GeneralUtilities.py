@@ -247,6 +247,17 @@ class GeneralUtilities:
     
     @staticmethod
     @check_arguments
+    def get_amount_of_major_versions_behind(available_versions:list[str],current_version:str) -> int:
+        """Returns how many major-versions the given current version is behind the latest of the given available versions.
+        The difference of the major-parts is used and not the amount of available major-versions, so a skipped major-version (for example 1.x.x and 3.x.x without 2.x.x) still counts as 2.
+        Returns 0 if the current version has the latest major-version or if no version is available."""
+        if len(available_versions)==0:
+            return 0
+        latest_major:int=GeneralUtilities.get_major_part_of_version(GeneralUtilities.get_latest_version(available_versions))
+        return max(0,latest_major-GeneralUtilities.get_major_part_of_version(current_version))
+
+    @staticmethod
+    @check_arguments
     def get_latest_version(versions:list[str]) -> str:
         GeneralUtilities.assert_condition(0<len(versions),"Version-list can not be empty.")
         latest = max(versions, key=Version)
@@ -714,6 +725,37 @@ class GeneralUtilities:
                     else:
                         GeneralUtilities.__rmtree(folder)
             GeneralUtilities.__rmtree(path)
+
+    @staticmethod
+    @check_arguments
+    def replace_symlinks_by_copies(folder: str, link_target_folder: str, excluded_folders: list[str]) -> list[str]:
+        """Replaces every symbolic link inside folder (recursively) which points to a file or folder inside link_target_folder by a copy of
+        its target. Symbolic links which point to somewhere else are kept unchanged. Nothing inside excluded_folders (and nothing at all if
+        folder itself is one of them) is changed. Returns the paths of the replaced symbolic links.
+        A ValueError is raised for a symbolic link which points into link_target_folder but whose target does not exist."""
+        result: list[str] = []
+        normalized_link_target_folder: str = os.path.normcase(os.path.realpath(link_target_folder))
+        # abspath instead of realpath: a symbolic link which points into an excluded folder is not excluded itself.
+        normalized_excluded_folders: list[str] = [os.path.normcase(os.path.abspath(excluded_folder)) for excluded_folder in excluded_folders]
+        if os.path.normcase(os.path.abspath(folder)) in normalized_excluded_folders:
+            return result
+        for root, dirs, files in os.walk(folder):
+            dirs[:] = [name for name in dirs if os.path.normcase(os.path.abspath(os.path.join(root, name))) not in normalized_excluded_folders]
+            for name in dirs+files:
+                path: str = os.path.join(root, name)
+                if os.path.islink(path):
+                    target: str = os.path.realpath(path)
+                    normalized_target: str = os.path.normcase(target)
+                    if normalized_target == normalized_link_target_folder or normalized_target.startswith(normalized_link_target_folder+os.sep):
+                        if not os.path.exists(target):
+                            raise ValueError(f"The target \"{target}\" of the symbolic link \"{path}\" does not exist.")
+                        os.unlink(path)
+                        if os.path.isdir(target):
+                            shutil.copytree(target, path)
+                        else:
+                            shutil.copyfile(target, path)
+                        result.append(path)
+        return result
 
     @staticmethod
     @check_arguments

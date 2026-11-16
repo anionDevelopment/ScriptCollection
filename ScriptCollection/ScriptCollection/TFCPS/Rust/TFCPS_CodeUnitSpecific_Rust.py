@@ -6,6 +6,7 @@ from lxml import etree
 from ...GeneralUtilities import GeneralUtilities, Dependency
 from ...SCLog import LogLevel
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base, TFCPS_CodeUnitSpecific_Base_CLI
+from .CargoLockFile import CargoLockFile
 
 class TFCPS_CodeUnitSpecific_Rust_Functions(TFCPS_CodeUnitSpecific_Base):
     """Implements the tasks of a codeunit which contains a cargo-project.
@@ -65,6 +66,7 @@ class TFCPS_CodeUnitSpecific_Rust_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def linting(self) -> None:
+        self._protected_sc.normalize_invisible_characters_of_files_in_folder(self.get_codeunit_folder(), ["rs"])
         # "--all-targets" includes the testcases in the check, and "-D warnings" makes clippy exit with a non-zero
         # exit-code for a warning as well, because a warning is a linting-issue too.
         self.__run_cargo("clippy --all-targets --all-features -- -D warnings")
@@ -73,6 +75,9 @@ class TFCPS_CodeUnitSpecific_Rust_Functions(TFCPS_CodeUnitSpecific_Base):
     def do_common_tasks(self, current_codeunit_version: str) -> None:
         self.do_common_tasks_base(current_codeunit_version)
         self.__set_version_in_cargo_file(self.get_version_of_project())
+        # The lock-file contains the versions of the local packages (this project and its path-dependencies, for
+        # example the copies of dependent codeunits), so it must be adjusted to the versions of their cargo-files.
+        CargoLockFile.synchronize_versions_of_local_packages(self.get_cargo_file())
 
     @GeneralUtilities.check_arguments
     def generate_reference(self) -> None:

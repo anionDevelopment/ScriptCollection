@@ -4,6 +4,7 @@ from urllib import request
 import time
 import ssl
 from datetime import timedelta,datetime
+from typing import Callable
 from ...GeneralUtilities import GeneralUtilities, Platform
 from ...SCLog import  LogLevel
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_CodeUnitSpecific_Base_CLI
@@ -11,8 +12,13 @@ from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_Code
 
 class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
 
+    # Maps the name of a dependency (the name of its folder in "Other/Resources/Dependencies") to the function which returns its
+    # available versions. The function gets the currently used version as argument.
+    __available_versions_functions:dict[str,Callable[[str],list[str]]]=None
+
     def __init__(self,current_file:str,verbosity:LogLevel,targetenvironmenttype:str,use_cache:bool,is_pre_merge:bool):
         super().__init__(current_file, verbosity,targetenvironmenttype,use_cache,is_pre_merge)
+        self.__available_versions_functions=dict[str,Callable[[str],list[str]]]()
 
     @GeneralUtilities.check_arguments
     def build(self,platforms:list[Platform],custom_arguments:dict[str,str]) -> None:
@@ -136,16 +142,44 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
         pass#TODO
     
     @GeneralUtilities.check_arguments
+    def register_available_versions_function(self,dependency_name:str,available_versions_function:Callable[[str],list[str]])->None:
+        """Registers the function which returns the available versions of the given dependency.
+        The dependencies of a docker-codeunit are the folders in "Other/Resources/Dependencies", and there is no general way to find out
+        where the available versions of such a dependency come from (npm, nuget, pypi, the tags of a git-repository, ...). So the
+        "Other/UpdateDependencies.py"-script of the codeunit registers one function per dependency before it calls update_dependencies.
+        The function gets the currently used version as argument and must return only versions in the format "<major>.<minor>.<patch>"."""
+        GeneralUtilities.assert_condition(dependency_name not in self.__available_versions_functions,f"A function for the available versions of dependency {dependency_name} is already registered.")
+        self.__available_versions_functions[dependency_name]=available_versions_function
+
+    @GeneralUtilities.check_arguments
+    def __get_dependencies_folder(self)->str:
+        return os.path.join(self.get_codeunit_folder(),"Other","Resources","Dependencies")
+
+    @GeneralUtilities.check_arguments
     def get_dependencies(self)->dict[str,set[str]]:
-        return dict[str,set[str]]()#TODO
-    
+        """Returns the dependencies which are pinned in "Other/Resources/Dependencies/<dependency>/Version.txt"."""
+        result:dict[str,set[str]]=dict[str,set[str]]()
+        dependencies_folder:str=self.__get_dependencies_folder()
+        if not os.path.isdir(dependencies_folder):
+            return result
+        resources_folder:str=os.path.dirname(dependencies_folder)
+        for dependency_name in sorted(os.listdir(dependencies_folder)):
+            if os.path.isfile(os.path.join(dependencies_folder,dependency_name,"Version.txt")):
+                result[dependency_name]={self.tfcps_Tools_General.get_dependency_version_in_resources_folder(resources_folder,dependency_name)}
+        return result
+
     @GeneralUtilities.check_arguments
     def get_available_versions(self,dependencyname:str)->list[str]:
-        return []#TODO
+        if dependencyname not in self.__available_versions_functions:
+            raise ValueError(f"No function for the available versions of dependency {dependencyname} is registered. Register one using register_available_versions_function or add the dependency to the ignored dependencies in the codeunit-file.")
+        current_version:str=next(iter(self.get_dependencies()[dependencyname]))
+        return self.__available_versions_functions[dependencyname](current_version)
 
     @GeneralUtilities.check_arguments
     def set_dependency_version(self,name:str,new_version:str)->None:
-        raise ValueError(f"Operation is not implemented.")
+        version_file:str=os.path.join(self.__get_dependencies_folder(),name,"Version.txt")
+        GeneralUtilities.assert_file_exists(version_file)
+        GeneralUtilities.write_text_to_file(version_file,new_version)
 
     @GeneralUtilities.check_arguments
     @GeneralUtilities.deprecated("Use image_is_working_via_network instead, which tests the image over a user-defined docker-network without publishing a host-port.")

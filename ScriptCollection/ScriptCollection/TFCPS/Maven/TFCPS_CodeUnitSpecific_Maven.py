@@ -58,6 +58,7 @@ class TFCPS_CodeUnitSpecific_Maven_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def linting(self) -> None:
+        self._protected_sc.normalize_invisible_characters_of_files_in_folder(self.get_codeunit_folder(), ["java"])
         # checkstyle is configured in the pom-file of the codeunit, so that the ruleset belongs to the codeunit
         # and not to this implementation.
         self.__run_maven("-B checkstyle:check")

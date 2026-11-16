@@ -6,6 +6,7 @@ from ..ScriptCollectionCore import ScriptCollectionCore
 from ..GeneralUtilities import VersionEcholon
 from ..SCLog import LogLevel
 from .AbstractImageHandler import AbstractImageHandler
+from .OCIRegistryClient import OCIRegistryClient
 from .ConcreteImageHandlers.ImageHandlerDebian import ImageHandlerDebian
 from .ConcreteImageHandlers.ImageHandlerDebianSlim import ImageHandlerDebianSlim
 from .ConcreteImageHandlers.ImageHandlerGeneric import ImageHandlerGeneric
@@ -17,6 +18,7 @@ class OCIImageManager:
 
     __sc:ScriptCollectionCore=None
     image_handler:list[AbstractImageHandler] = None
+    registry_client:OCIRegistryClient = None
     #image-names for which it was already logged that the fallback-registry is used. The lookup happens for every image of
     #the repository and often several times per build, so without this the same hint would flood the log.
     __images_with_reported_fallback_registry:set[str] = None
@@ -30,21 +32,23 @@ class OCIImageManager:
         self.__sc=sc
         self.__images_with_reported_fallback_registry=set()
         self.__availability_of_image=dict()
+        self.registry_client=OCIRegistryClient(self.__sc)
+        #the order matters: the first handler which can handle a tag is used, so the specific handlers have to be listed before the generic ones.
         self.image_handler=[
-            ImageHandlerDebian(),
-            ImageHandlerDebianSlim(),
-            ImageHandlerGeneric(),
-            ImageHandlerGenericV(),
             ImageHandlerGitlabCE(),
             ImageHandlerGitlabEE(),
+            ImageHandlerDebianSlim(),
+            ImageHandlerDebian(),
+            ImageHandlerGenericV(),
+            ImageHandlerGeneric(),
         ]
 
     @GeneralUtilities.check_arguments
-    def get_image_handler(self,image_name:str)->AbstractImageHandler:
-        for image_handler in self.image_handler: 
-            if image_handler.can_handle(image_name):
+    def get_image_handler(self,image_name:str,tag:str)->AbstractImageHandler:
+        for image_handler in self.image_handler:
+            if image_handler.can_handle(image_name,tag):
                 return image_handler
-        raise ValueError(f"No image-handler available for image \"{image_name}\".")
+        raise ValueError(f"No image-handler available for tag \"{tag}\" of image \"{image_name}\".")
 
     @GeneralUtilities.check_arguments
     def get_repository_image_definition_file(self,repository:str)->str:
@@ -189,7 +193,10 @@ class OCIImageManager:
 
     @GeneralUtilities.check_arguments
     def update_default_tag_for_images_in_image_definitions_file(self,repository:str,search_in_custom_registry_only_if_available:bool)->None:
-        file=f"{repository}/.ScriptCollection/OCIImages/ImageDefinition.csv"
+        """Updates the default-tag of every image in the image-definition-file of the repository to the latest available tag with the same format.
+        If search_in_custom_registry_only_if_available is True then only the custom registry which is defined for an image on this machine is
+        asked for newer tags, so that only tags are chosen which are available there; an image without custom registry keeps its tag then."""
+        file=self.get_repository_image_definition_file(repository)
         GeneralUtilities.assert_file_exists(file)
         lines=GeneralUtilities.read_nonempty_lines_from_file(file)
         new_lines:list[str]=[]
@@ -205,41 +212,61 @@ class OCIImageManager:
             registry_address=line_parts[1]
             default_tag=line_parts[2]
             tag=default_tag
-            try:
-                addresses_to_check=[]
-                if self.custom_registry_is_defined(image_name):
-                    #the custom registry-address is used directly (and not get_registry_address_for_image) because this function does not
-                    #pull an image but asks the registry which tags it has, so it does not matter whether that registry currently provides
-                    #the image with the tag which is defined at the moment.
-                    addresses_to_check.append(self.get_custom_registry_address_for_image(image_name))
-                else:
-                    if search_in_custom_registry_only_if_available:
-                        raise ValueError(f"No custom registry defined for image {image_name}.")
-                if not search_in_custom_registry_only_if_available:
-                    addresses_to_check.append(registry_address)
-                newest_versions:set[Version]={default_tag}
-                current_version=Version(default_tag)
-                for address in addresses_to_check:
-                    newest_versions_for_address=self.get_latest_of_image(image_name,address,current_version,VersionEcholon.LatestVersion)
-                    if newest_versions_for_address is not None:
-                        newest_versions.update(newest_versions_for_address)
-                GeneralUtilities.assert_condition(len(newest_versions)>0,f"Could not find any version for image {image_name} in registry {registry_address}.")
-                newest_version=max(newest_versions)
-                tag=self.version_to_tag(image_name,newest_version)
-            except Exception as e:
-                self.__sc.log.log(f"Could not get tag for image {image_name} from registry {registry_address}. Reason: {str(e)}",LogLevel.Warning)
+            addresses_to_check=self.__get_registry_addresses_to_search_for_newer_tags(image_name,registry_address,search_in_custom_registry_only_if_available)
+            if len(addresses_to_check)==0:
+                self.__sc.log.log(f"The tag of image \"{image_name}\" is not updated because no custom registry is defined for it in \"{self.get_global_docker_image_registries_file()}\".",LogLevel.Warning)
+            else:
+                try:
+                    tag=self.get_latest_tag_of_image(image_name,addresses_to_check,default_tag,VersionEcholon.LatestVersion)
+                except Exception as e:
+                    self.__sc.log.log(f"Could not determine the latest tag of image \"{image_name}\" using the registries {', '.join(addresses_to_check)}. Reason: {type(e).__name__}: {str(e)}",LogLevel.Warning)
+            if tag!=default_tag:
+                self.__sc.log.log(f"Update tag of image \"{image_name}\" from \"{default_tag}\" to \"{tag}\".",LogLevel.Information)
             new_lines.append(f"{image_name};{registry_address};{tag}")
         GeneralUtilities.write_lines_to_file(file,new_lines)
 
     @GeneralUtilities.check_arguments
-    def get_latest_of_image(self,image_name:str,registry_address:str,current_version:Version,echolon: VersionEcholon)->Version:
-        result= None
-        image_handler=self.get_image_handler(image_name)
-        if echolon not in (VersionEcholon.NoUpdate, VersionEcholon.CustomAlgorithm):
-            available_tags:list[str]=self.get_available_tags_of_image(image_name,registry_address)
-            available_versions:set[Version]={image_handler.tag_to_version(image_name,tag) for tag in available_tags}
-            #the current version must always be a candidate so that the result is never a downgrade
-            available_versions.add(current_version)
+    def __get_registry_addresses_to_search_for_newer_tags(self,image_name:str,upstream_registry_address:str,search_in_custom_registry_only_if_available:bool)->list[str]:
+        result:list[str]=[]
+        if self.custom_registry_is_defined(image_name):
+            #the custom registry-address is used directly (and not get_registry_address_for_image) because this function does not
+            #pull an image but asks the registry which tags it has, so it does not matter whether that registry currently provides
+            #the image with the tag which is defined at the moment.
+            result.append(self.get_custom_registry_address_for_image(image_name))
+        if not search_in_custom_registry_only_if_available:
+            result.append(upstream_registry_address)
+        return result
+
+    @GeneralUtilities.check_arguments
+    def get_latest_tag_of_image(self,image_name:str,registry_addresses:list[str],current_tag:str,echolon:VersionEcholon)->str:
+        """Returns the tag the image should be updated to according to the echolon, considering the tags of all given registry-addresses
+        (always without tag, for example "docker.io/library/debian").
+        Only tags with the same format as the current tag are candidates (see AbstractImageHandler.tag_has_same_format). The current tag is
+        always a candidate, so the result is never a downgrade."""
+        image_handler=self.get_image_handler(image_name,current_tag)
+        if echolon==VersionEcholon.NoUpdate:
+            return current_tag
+        candidate_tags:list[str]=[current_tag]
+        for registry_address in registry_addresses:
+            for tag in self.registry_client.get_tags(registry_address):
+                if tag not in candidate_tags and image_handler.tag_has_same_format(image_name,tag,current_tag):
+                    candidate_tags.append(tag)
+        if echolon==VersionEcholon.CustomAlgorithm:
+            return image_handler.get_latest_tag_custom(image_name,current_tag,candidate_tags)
+        tags_by_version:dict[Version,str]={}
+        for tag in candidate_tags:
+            #setdefault, because different tags can represent the same version (like "13.4" and "13.04"); then the first one (the current tag if affected) is used.
+            tags_by_version.setdefault(image_handler.tag_to_version(image_name,tag),tag)
+        current_version=image_handler.tag_to_version(image_name,current_tag)
+        return tags_by_version[self.choose_version(set(tags_by_version.keys()),current_version,echolon)]
+
+    @GeneralUtilities.check_arguments
+    def choose_version(self,available_versions:set[Version],current_version:Version,echolon:VersionEcholon)->Version:
+        """Returns the version out of the available versions which should be used according to the echolon.
+        available_versions must contain current_version. The echolons NoUpdate and CustomAlgorithm are not handled here because they do
+        not choose out of the available versions."""
+        GeneralUtilities.assert_condition(current_version in available_versions,f"The available versions do not contain the current version {current_version}.")
+        result:Version=None
         match echolon:
             case VersionEcholon.LatestPatch:#caution: this never updates the minor or major version
                 #take the latest available patch-version for the current minor-version of the image.
@@ -260,11 +287,8 @@ class OCIImageManager:
             case VersionEcholon.LatestVersion:#usual case for most images
                 #take the latest available version of the image.
                 result=max(available_versions)
-            case VersionEcholon.CustomAlgorithm:
-                #the image-handler decides which version to use for the given current version.
-                result=image_handler.get_latest_version_custom(image_name,registry_address,current_version)
-            case VersionEcholon.NoUpdate:
-                result = current_version
+            case _:
+                raise ValueError(f"Echolon \"{echolon.name}\" does not choose a version out of the available versions.")
         return result
 
     @GeneralUtilities.check_arguments
@@ -292,24 +316,6 @@ class OCIImageManager:
         if len(higher_values)==0:
             return None
         return min(higher_values)
-    
-    @GeneralUtilities.check_arguments
-    def get_available_tags_of_image(self,image_name:str,registry_address:str)->list[str]:
-        """registry_address must have one of these formats: "myregistry.example.com/debian" or "docker.io/debian" or "docker.io/myuser/debian".
-        returns something like ["13.2-slim", "13.2", "13.3-slim", "13.3"]."""
-        return self.get_image_handler(image_name).get_available_tags_of_image(image_name,registry_address)
-
-    @GeneralUtilities.check_arguments
-    def tag_to_version(self,image_name:str,tag:str)->Version:
-        """registry_address must have one of these formats: "myregistry.example.com/debian" or "docker.io/debian" or "docker.io/myuser/debian"."""
-        return self.get_image_handler(image_name).tag_to_version(image_name, tag)
-
-    @GeneralUtilities.check_arguments
-    def version_to_tag(self,image_name:str,version:Version)->str:
-        """registry_address must have one of these formats: "myregistry.example.com/debian" or "docker.io/debian" or "docker.io/myuser/debian".
-        returns something like "13.3-slim".
-        If there are multiple tags available for a certain version then the image-handler decides which one will be returned."""
-        return self.get_image_handler(image_name).version_to_tag(image_name,version)
 
     @GeneralUtilities.check_arguments
     def get_images_used_in_docker_compose_file(self,docker_compose_file:str)->dict[str,tuple[str,str,str]]:#returns dict[service_name,[image_name,image_address,current_tag]]
@@ -346,15 +352,14 @@ class OCIImageManager:
             image_name=service_information[0]
             image_address=service_information[1]
             current_tag=service_information[2]
-            image_handler=self.get_image_handler(image_name)
+            image_handler=self.get_image_handler(image_name,current_tag)
             effective_echolon=per_image_echolons.get(image_name,default_echolon)
             if effective_echolon is None:
-                effective_echolon=image_handler.get_default_echolon_for_update()
+                effective_echolon=image_handler.get_default_echolon_for_update(image_name)
             if verbose:
                 self.__sc.log.log(f"Service \"{service}\": checking image \"{image_address}:{current_tag}\" using echolon \"{effective_echolon.name}\".",LogLevel.Information)
-            new_versions_for_address=self.get_latest_of_image(image_name,image_address,self.tag_to_version(image_name,current_tag),effective_echolon)
-            new_tag=self.version_to_tag(image_name,new_versions_for_address)
-            if new_tag is not None and new_tag != current_tag:
+            new_tag=self.get_latest_tag_of_image(image_name,[image_address],current_tag,effective_echolon)
+            if new_tag != current_tag:
                 new_image_reference = f"{image_address}:{new_tag}"
                 if verbose:
                     self.__sc.log.log(f"Service \"{service}\": updating image \"{image_address}\" from tag \"{current_tag}\" to tag \"{new_tag}\".",LogLevel.Information)

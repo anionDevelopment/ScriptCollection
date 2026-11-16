@@ -102,6 +102,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
                         if len(dependency_versions)==1:
                             GeneralUtilities.write_message_to_stdout("Update dependency "+dependencyname+" (which is currently used in version "+dependency_version+") to version "+desired_version+".")
                         self.set_dependency_version(dependencyname,desired_version)
+                    self.tfcps_Tools_General.log_newer_major_versions_of_dependency(dependencyname,available_versions,desired_version)
                 except Exception:
                     GeneralUtilities.write_message_to_stderr(f"Error while updating {dependencyname}.")
                     raise
