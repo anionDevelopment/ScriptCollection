@@ -8,7 +8,7 @@
 - [ ] 1.4 Verify copilot: `~/.copilot/hooks/*.json` fires with `--allow-all-tools`, including the filter on the `notification` type; record the tested version.
 - [ ] 1.5 Verify opencode: the plugin is loaded and the events `session.status`, `permission.asked`, `permission.replied` arrive; record the tested version.
 - [ ] 1.6 Verify vibe: `~/.vibe/hooks.toml` fires in interactive and in non-interactive mode; record the tested version.
-- [ ] 1.7 Check whether a pane stays labelled after `release-agent`.
+- [ ] 1.7 Check whether a pane stays labeled after `release-agent`.
 - [ ] 1.8 Update design.md decision 5 and the open questions with the results.
 
 ## 2. Core in scrais (agent-agnostic)

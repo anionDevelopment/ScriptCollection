@@ -73,7 +73,8 @@ rem give the agent the build-environment of the host (for example a private NuGe
 scrais -i -b true
 ```
 
-> The repository which is mounted into the container is always the current working-directory. `-r` only selects which entry of the initialization-scripts-file is used, so it is normally not given.
+> The repository which is mounted into the container is always the current working-directory.
+> `-r` only selects which entry of the initialization-scripts-file is used, so it is normally not given.
 
 ### Additional folders
 
@@ -91,7 +92,10 @@ By default the agent has no access to docker.
 With `--mountdockersocket` the docker-socket of the host (`/var/run/docker.sock`) is mounted into the container, so the `docker`-CLI of the image works with the docker-daemon of the host.
 A one-line warning is printed to stderr at every start.
 
-> **Caution:** Whoever can use the docker-socket is de facto administrator of the docker-daemon of the host. The agent can start arbitrary (also privileged) containers with arbitrary host-mounts, read and change files outside of the repository, read secrets of other containers and execute code which survives the end of the run. The restrictions of the sandbox (mounted folders, `drop_capabilities`) are ineffective then. Use this switch only for trusted repositories and prompts.
+> **Caution:** Whoever can use the docker-socket is de facto administrator of the docker-daemon of the host.
+> The agent can start arbitrary (also privileged) containers with arbitrary host-mounts, read and change files outside of the repository, read secrets of other containers and execute code which survives the end of the run.
+> The restrictions of the sandbox (mounted folders, `drop_capabilities`) are ineffective then.
+> Use this switch only for trusted repositories and prompts.
 
 - The switch is deliberately not available in the [configuration-file](#configuration), so that it is a conscious decision for every run.
 - Bind-mounts of `docker run -v` are resolved by the daemon on the host, not inside the container. Paths of the container (for example `/Workspace/<repository>`) do not exist there.
@@ -114,7 +118,9 @@ Requirements for the image:
 - Its entrypoint has to install the root-CA-certificates and then run its command (`exec "$@"`), like the entrypoint of the SCBuilder-image does. With the build-environment the entrypoint of the image is therefore not replaced but runs the generated script as its command.
 - Its ScriptCollection has to contain `scregisterpackagesources` (ScriptCollection `4.4.68` or newer). ScriptCollection is not installed or updated in the container. With an older image the container ends with an error before the agent starts.
 
-> **Caution:** With the build-environment the agent can read every secret of `~/.ScriptCollection/TFCPS` (for example `EnvironmentVariables.csv` and the secret-files it refers to), also the ones which the repository does not need. A one-line warning is printed to stderr at every start. Enable it only for trusted repositories and prompts.
+> **Caution:** With the build-environment the agent can read every secret of `~/.ScriptCollection/TFCPS` (for example `EnvironmentVariables.csv` and the secret-files it refers to), also the ones which the repository does not need.
+> A one-line warning is printed to stderr at every start.
+> Enable it only for trusted repositories and prompts.
 
 ### Network access
 
@@ -129,7 +135,10 @@ If an allowlist is defined, everything except the allowlist is blocked:
 
 Note the difference between a missing section (unrestricted) and an empty section (no network-access).
 
-Every entry is one line `<domain> = <comment>`. The comment is optional (`<domain> =`), it is only for the reader of the file (for example why the domain is needed) and does not change what is allowed. The `=` is required also without comment. A domain which is listed twice is rejected.
+Every entry is one line `<domain> = <comment>`.
+The comment is optional (`<domain> =`), it is only for the reader of the file (for example why the domain is needed) and does not change what is allowed.
+The `=` is required also without comment.
+A domain which is listed twice is rejected.
 
 Matching of the entries:
 
@@ -148,7 +157,10 @@ How the allowlist is enforced:
 - After the run, the egress-proxy and the network are removed, also if the run failed. If `scrais` is killed, they can remain; remove them with `docker rm --force scrais-proxy-<run-id>` and `docker network rm scrais-<run-id>` (`docker ps -a` and `docker network ls` show them).
 - The egress-proxy is started shortly before the container. A tool which connects immediately at start of the container, before Squid is ready, gets a connection-error.
 
-Requirements for `egress_proxy_image`: its default command starts Squid in the foreground with the configuration `/etc/squid/squid.conf` (which `scrais` generates and mounts read-only), Squid runs as an unprivileged user and can write `/var/log/squid/access.log`, and the image contains `cat` (used to read the denied requests with `--verbose`). The egress-proxy is started with `--cap-drop all` and `--security-opt no-new-privileges:true`. Example: `ubuntu/squid:7.2-26.04_edge` (verified). If `<repository>/.ScriptCollection/OCIImages/ImageDefinition.csv` defines the image-name `Squid`, `scbuildcodeunits` sets `egress_proxy_image` to it (address including tag) during the build, like it does for `image` and `SCBuilder`; to change the image, change the tag in `ImageDefinition.csv`.
+Requirements for `egress_proxy_image`: its default command starts Squid in the foreground with the configuration `/etc/squid/squid.conf` (which `scrais` generates and mounts read-only), Squid runs as an unprivileged user and can write `/var/log/squid/access.log`, and the image contains `cat` (used to read the denied requests with `--verbose`).
+The egress-proxy is started with `--cap-drop all` and `--security-opt no-new-privileges:true`.
+Example: `ubuntu/squid:7.2-26.04_edge` (verified).
+If `<repository>/.ScriptCollection/OCIImages/ImageDefinition.csv` defines the image-name `Squid`, `scbuildcodeunits` sets `egress_proxy_image` to it (address including tag) during the build, like it does for `image` and `SCBuilder`; to change the image, change the tag in `ImageDefinition.csv`.
 
 Example:
 
@@ -167,7 +179,10 @@ api.nuget.org = public NuGet-feed for dotnet restore
 
 The domains which a coding-agent or a package-manager needs (for example for login, telemetry or downloads from a CDN) are not documented here; determine them with `--verbose`.
 
-> **Caution:** The allowlist limits the destinations, not what is sent there. An agent can still send secrets to an allowed domain (for example into a repository on an allowed git-host). With [`--mountdockersocket`](#docker-socket) the agent can start a container with unrestricted network-access, so the allowlist is ineffective then. Nested containers are subject to the same restriction and need the proxy-variables too.
+> **Caution:** The allowlist limits the destinations, not what is sent there.
+> An agent can still send secrets to an allowed domain (for example into a repository on an allowed git-host).
+> With [`--mountdockersocket`](#docker-socket) the agent can start a container with unrestricted network-access, so the allowlist is ineffective then.
+> Nested containers are subject to the same restriction and need the proxy-variables too.
 
 ### Exit-code
 
@@ -236,7 +251,8 @@ Credentials, settings, skills etc. which the agent needs inside the container ha
 
 When `scrais` runs in a pane of [herdr](https://github.com/herdrdev/herdr), the state of the agent in the container is shown in herdr. herdr can not determine it on its own, because it only sees `scrais` and `docker` in the pane.
 
-The feature is active automatically and has no argument and no configuration-key. It works in the same way for all [supported agents](#supported-agents):
+The feature is active automatically and has no argument and no configuration-key.
+It works in the same way for all [supported agents](#supported-agents):
 
 - A hook of the agent in the container calls `scrais-agent-status <token>`, which appends the token to an event-file.
 - `scrais` on the host reads this file, accepts only the exact tokens `working`, `idle` and `blocked`, and reports the state with the CLI of herdr (source `scrais`, agent `scrais-<codingagent>`).
@@ -252,7 +268,8 @@ The agent always runs, independent of this feature:
 
 ### Prerequisite for the image
 
-The SCBuilder-image fulfills the prerequisite beginning with version `v1.2.19`. Another image has to provide:
+The SCBuilder-image fulfills the prerequisite beginning with version `v1.2.19`.
+Another image has to provide:
 
 1. The executable `scrais-agent-status` on the `PATH`. It must always exit with code 0 and must not write to stdout, because the hooks of some agents interpret stdout as a response:
 
@@ -270,15 +287,16 @@ The SCBuilder-image fulfills the prerequisite beginning with version `v1.2.19`. 
 
 The hook-configurations of the SCBuilder-image are located in the folder `SCBuilder/AgentStatus` of its repository:
 
-| `codingagent` | Stored in                                           | `working`                                   | `blocked`                                                        | `idle`                 |
-| ------------- | --------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------- | ---------------------- |
-| `claude`      | `/etc/claude-code/managed-settings.json`            | `UserPromptSubmit`, `PostToolUse`           | `AskUserQuestion`, `PermissionRequest`, `Notification`           | `Stop`                 |
-| `codex`       | `/etc/codex/requirements.toml`                      | `UserPromptSubmit`, `PostToolUse`           | `PermissionRequest`                                              | `Stop`, `Interrupt`    |
-| `copilot`     | `~/.copilot/hooks/scrais-agent-status.json`         | `userPromptSubmitted`, `postToolUse`        | `notification`                                                   | `agentStop`            |
-| `opencode`    | `~/.config/opencode/plugins/scrais-agent-status.js` | `session.status`, `permission.replied`      | `permission.asked`                                               | `session.status`       |
-| `vibe`        | `~/.vibe/hooks.toml`                                | `pre_tool`, `post_tool`                     | not available                                                    | `post_agent`           |
+| `codingagent` | Stored in                                           | `working`                              | `blocked`                                              | `idle`              |
+| ------------- | --------------------------------------------------- | -------------------------------------- | ------------------------------------------------------ | ------------------- |
+| `claude`      | `/etc/claude-code/managed-settings.json`            | `UserPromptSubmit`, `PostToolUse`      | `AskUserQuestion`, `PermissionRequest`, `Notification` | `Stop`              |
+| `codex`       | `/etc/codex/requirements.toml`                      | `UserPromptSubmit`, `PostToolUse`      | `PermissionRequest`                                    | `Stop`, `Interrupt` |
+| `copilot`     | `~/.copilot/hooks/scrais-agent-status.json`         | `userPromptSubmitted`, `postToolUse`   | `notification`                                         | `agentStop`         |
+| `opencode`    | `~/.config/opencode/plugins/scrais-agent-status.js` | `session.status`, `permission.replied` | `permission.asked`                                     | `session.status`    |
+| `vibe`        | `~/.vibe/hooks.toml`                                | `pre_tool`, `post_tool`                | not available                                          | `post_agent`        |
 
-The mapping is derived from the documentation and the source-code of the versions which are pinned in SCBuilder (claude 2.1.296, codex 0.162.1, copilot 1.0.96, opencode 1.19.0, vibe 2.26.1). It is not verified yet with running agents.
+The mapping is derived from the documentation and the source-code of the versions which are pinned in SCBuilder (claude 2.1.296, codex 0.162.1, copilot 1.0.96, opencode 1.19.0, vibe 2.26.1).
+It is not verified yet with running agents.
 
 ### Limits
 

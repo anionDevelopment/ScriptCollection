@@ -5,7 +5,8 @@
 ScriptCollection reads its machine-wide configuration from the folder `~/.ScriptCollection` (the `.ScriptCollection`-folder in the current user's home-directory).
 The folder is created automatically when needed; all configuration-files inside it are optional and only take effect when they exist.
 
-> Note: `~/.ScriptCollection` is the **user-/machine-wide** configuration-folder. It must not be confused with the **per-repository** folder `<repository>/.ScriptCollection`, which contains repository-specific data (see [Per-repository configuration](#per-repository-configuration) below).
+> Note: `~/.ScriptCollection` is the **user-/machine-wide** configuration-folder.
+> It must not be confused with the **per-repository** folder `<repository>/.ScriptCollection`, which contains repository-specific data (see [Per-repository configuration](#per-repository-configuration) below).
 
 Structure of `~/.ScriptCollection`:
 
@@ -81,7 +82,9 @@ The mount-path is an own path and not the configuration-folder of the container-
 A self-hosted build-runner follows the same approach: it mounts only `TFCPS` and `GlobalCache/OCIImages` (read-only) into the configuration-folder of the user of the job-container, see [Build-runner-configuration](./BuildRunnerConfiguration.md).
 There the file is taken from that configuration-folder.
 
-> Note: If the custom registry requires authentication, the credentials have to be available where the pull happens as well. They are declared as [environment-variables](#oci-registries) - resolved from `TFCPS/EnvironmentVariables.csv` or from the environment of the build-pipeline, exactly like a required environment-variable of a product. Without credentials the images of that registry are taken from the fallback-registry, unless they are already available in the local image-store of the docker-daemon.
+> Note: If the custom registry requires authentication, the credentials have to be available where the pull happens as well.
+> They are declared as [environment-variables](#oci-registries) - resolved from `TFCPS/EnvironmentVariables.csv` or from the environment of the build-pipeline, exactly like a required environment-variable of a product.
+> Without credentials the images of that registry are taken from the fallback-registry, unless they are already available in the local image-store of the docker-daemon.
 
 ### `GlobalCache/TranslationServiceProperties.txt`
 
@@ -151,7 +154,8 @@ Every .NET-codeunit-operation (build, testcases, linting, dependency-update) the
 - Sources which are not declared are never removed or changed: the registration is stored in the NuGet-configuration of the current user, which on a developer-machine is the configuration they also use for their own work.
 - Inside the build-container the source is registered the same way, which is why a build in a container needs no additional configuration.
 
-The same registration is available as command-line-tool, for a tool which restores dependencies without a codeunit-build (for example an agent in the sandbox of [`scrais`](./RunAgentInSandbox.md), which runs it before the agent starts). It registers the sources which are declared in the environment of the process which runs it:
+The same registration is available as command-line-tool, for a tool which restores dependencies without a codeunit-build (for example an agent in the sandbox of [`scrais`](./RunAgentInSandbox.md), which runs it before the agent starts).
+It registers the sources which are declared in the environment of the process which runs it:
 
 ```cmd
 scregisterpackagesources -r <folder>
