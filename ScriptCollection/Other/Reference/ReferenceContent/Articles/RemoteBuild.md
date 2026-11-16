@@ -8,6 +8,8 @@ Some build-steps can only be produced on a specific operating-system, or require
 - Flutter `macos`-desktop-builds and `ios`-builds must be built on macOS.
 - Flutter `appbundle`-builds (Android) require the Android-SDK/NDK, which lives only in the dedicated
   `SCTaskRunnerAndroid`-image, not in SCBuilder itself.
+- All gradle-tasks of a native android-codeunit (`TFCPS_CodeUnitSpecific_Android`: build, linting, testcases) require the
+  Android-SDK as well and run on the same runner.
 
 Neither the (Linux) Debian-build-pipeline nor (for macOS/iOS) a Windows-developer-client can produce these.
 ScriptCollection therefore delegates such operating-system-/toolchain-bound steps to a **remote task-runner** that provides the required operating-system (or, for Android, the required toolchain inside a Linux-container).

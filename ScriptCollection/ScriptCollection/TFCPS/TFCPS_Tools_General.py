@@ -2091,11 +2091,11 @@ class TFCPS_Tools_General:
         changelog_file = os.path.join(repository_folder, "Other", "Resources", "Changelog", f"v{current_version}.md")
         if (not os.path.isfile(changelog_file)):
             GeneralUtilities.ensure_file_exists(changelog_file)
-            GeneralUtilities.write_text_to_file(changelog_file, """# Release notes
+            GeneralUtilities.write_text_to_file(changelog_file, f"""# Release notes
 
 ## Changes
 
-- Updated geo-ip-database.
+- Updated submodule {submodule_name}.
 """)
 
     @GeneralUtilities.check_arguments

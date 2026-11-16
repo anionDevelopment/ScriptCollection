@@ -171,6 +171,10 @@ npm i -g vega-embed
 
 The following tools are only required for code-units of the respective type.
 
+#### Android-code-units
+
+- No local tool: every gradle-task (build of the app-bundle and of the apk, android-lint, the testcases with their coverage-report and the SBOM via the cyclonedx-gradle-plugin) runs with the gradle-wrapper of the project on an android-runner (see [Remote-build](./RemoteBuild.md)).
+
 #### C/C++-code-units
 
 - `MSBuild`: builds the windows-target. It is located with `vswhere` (contained in every Visual-Studio-installation), so Visual Studio with the "Desktop development with C++"-workload is required for that target.
