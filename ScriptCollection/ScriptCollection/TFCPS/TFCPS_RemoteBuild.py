@@ -93,14 +93,20 @@ class TFCPS_RemoteBuild:
         return len(self.__load_runner_endpoints()) > 0
 
     @GeneralUtilities.check_arguments
-    def run_program_on_runner(self, required_os: RunnerOperatingSystem, repository_folder: str, codeunit_name: str, program: str, arguments: list[str], working_directory: str, result_folder: str, folders_which_are_not_transferred: list[str], poll_interval_in_seconds: int = 3, timeout_in_seconds: int = 60*60) -> None:
+    def run_program_on_runner(self, required_os: RunnerOperatingSystem, repository_folder: str, codeunit_name: str, program: str, arguments: list[str], working_directory: str, result_folder: str, folders_which_are_not_transferred: list[str], environment_variables: dict[str, str], poll_interval_in_seconds: int = 3, timeout_in_seconds: int = 60*60) -> None:
         """Runs the given program on a runner which provides the given operating-system, see the docstring of this class.
 
         'folders_which_are_not_transferred' are folders (as paths inside the repository) which are left out of the
         archive which is sent to the runner, because their content only applies to this machine (for example the
         '.dart_tool'-folder of a flutter-package, whose 'package_config.json' states the folder of every package of
         the app as an absolute path of this machine). Such a folder is generated again by the toolchain of the
-        runner while it builds; transferring it makes the runner use the paths of this machine instead."""
+        runner while it builds; transferring it makes the runner use the paths of this machine instead.
+
+        'environment_variables' are set (in addition to the ones of the runner) for the program on the runner only. They
+        are the way to give a secret to a build-step (for example the key which signs an app for a store): they are
+        neither part of the transferred repository nor of the result nor of a log - the runner logs only their names.
+        A runner which does not support them is refused if environment-variables are given (see
+        assert_runner_applied_environment_variables)."""
         endpoints = self.__load_runner_endpoints()
         if len(endpoints) == 0:
             raise ValueError("No remote-build-runner is configured. Define runners either in "
@@ -115,18 +121,13 @@ class TFCPS_RemoteBuild:
         archive_file = self.__create_repository_archive(repository_folder, folders_which_are_not_transferred_relative)
         job_id: str = None
         try:
-            metadata_headers = {
-                "Content-Type": "application/octet-stream",
-                "X-Codeunit-Name": codeunit_name,
-                "X-Program": program,
-                "X-Arguments": base64.b64encode(json.dumps(arguments).encode("utf-8")).decode("ascii"),
-                "X-Working-Directory": working_directory_relative,
-                "X-Result-Folder": result_folder_relative,
-            }
+            metadata_headers = TFCPS_RemoteBuild.get_headers_of_job_submission(codeunit_name, program, arguments, working_directory_relative, result_folder_relative, environment_variables)
             with open(archive_file, "rb") as archive_content:
                 archive_bytes = archive_content.read()
             _, submit_response = self.__http(endpoint, "POST", "/jobs", _timeout_of_a_request_in_seconds, metadata_headers, archive_bytes)
-            job_id = json.loads(submit_response.decode("utf-8"))["job_id"]
+            submit_answer = json.loads(submit_response.decode("utf-8"))
+            job_id = submit_answer["job_id"]
+            TFCPS_RemoteBuild.assert_runner_applied_environment_variables(submit_answer, environment_variables, endpoint.url)
             self.__wait_for_job(endpoint, job_id, required_os, poll_interval_in_seconds, timeout_in_seconds)
             #The result-archive is packed completely before it is sent, which transports nothing while it runs - hence
             #the timeout of a long-running request here.
@@ -140,6 +141,33 @@ class TFCPS_RemoteBuild:
                 except Exception as exception:
                     self.__sc.log.log_exception(f"Could not delete remote job '{job_id}' on runner '{endpoint.url}'.", exception, LogLevel.Warning)
             GeneralUtilities.ensure_file_does_not_exist(archive_file)
+
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def get_headers_of_job_submission(codeunit_name: str, program: str, arguments: list[str], working_directory_relative: str, result_folder_relative: str, environment_variables: dict[str, str]) -> dict[str, str]:
+        """Returns the headers of the request which submits a job (its body is the repository-archive)."""
+        return {
+            "Content-Type": "application/octet-stream",
+            "X-Codeunit-Name": codeunit_name,
+            "X-Program": program,
+            "X-Arguments": base64.b64encode(json.dumps(arguments).encode("utf-8")).decode("ascii"),
+            "X-Working-Directory": working_directory_relative,
+            "X-Result-Folder": result_folder_relative,
+            "X-Environment-Variables": base64.b64encode(json.dumps(environment_variables).encode("utf-8")).decode("ascii"),
+        }
+
+    @staticmethod
+    @GeneralUtilities.check_arguments
+    def assert_runner_applied_environment_variables(submit_answer: dict, environment_variables: dict[str, str], runner_url: str) -> None:
+        """A runner states in the answer of a submit the names of the environment-variables it sets for the job. A runner
+        which does not support environment-variables ignores them without saying so, and the job would then run without
+        them (for example an app which is meant to be signed for a store would be built unsigned). That is refused here.
+        A job without environment-variables runs on such a runner as before."""
+        if len(environment_variables) == 0:
+            return
+        applied_environment_variables = submit_answer.get("applied_environment_variables")
+        GeneralUtilities.assert_condition(applied_environment_variables is not None, f"The runner '{runner_url}' does not support environment-variables for a job, so it would run the job without them. Update the runner to a version of ScriptCollection which supports them.")
+        GeneralUtilities.assert_condition(sorted(applied_environment_variables) == sorted(environment_variables.keys()), f"The runner '{runner_url}' did not apply exactly the requested environment-variables (requested: {', '.join(sorted(environment_variables.keys()))}; applied: {', '.join(sorted(applied_environment_variables))}).")
 
     @GeneralUtilities.check_arguments
     def __wait_for_job(self, endpoint: RunnerEndpoint, job_id: str, required_os: RunnerOperatingSystem, poll_interval_in_seconds: int, timeout_in_seconds: int) -> None:

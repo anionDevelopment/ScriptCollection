@@ -16,6 +16,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from packaging import version
 import requests
+import yaml
 from lxml import etree
 from ..GeneralUtilities import GeneralUtilities,Platform
 from ..ScriptCollectionCore import ScriptCollectionCore,VSCodeWorkspaceShellTask
@@ -1110,10 +1111,28 @@ class TFCPS_Tools_General:
         return result
 
     @GeneralUtilities.check_arguments
+    def __check_for_tasks_which_will_be_overwritten(self, repository_folder: str) -> None:
+        """Asserts that there is no task in the existing taskfile which would be lost when the taskfile is re-generated from the code-workspace-file."""
+        task_file: str = os.path.join(repository_folder, "Taskfile.yml")
+        if not os.path.isfile(task_file):
+            return
+        task_file_content = yaml.safe_load(GeneralUtilities.read_text_from_file(task_file))
+        if not isinstance(task_file_content, dict):
+            return
+        existing_tasks = task_file_content.get("tasks")
+        if not isinstance(existing_tasks, dict):
+            return
+        workspace_file: str = self.__sc.find_file_by_extension(repository_folder, "code-workspace")
+        task_labels_in_workspace_file: set[str] = set(task.label for task in self.__sc.parse_tasks_from_codeworkspace_file(workspace_file))
+        for task_name in existing_tasks.keys():
+            GeneralUtilities.assert_condition(str(task_name) in task_labels_in_workspace_file, f"The task \"{task_name}\" in the taskfile \"{task_file}\" is not defined in the code-workspace-file \"{workspace_file}\" and would be deleted when re-generating the taskfile based on the code-workspace file. Add the task to the code-workspace file to prevent this error.")
+
+    @GeneralUtilities.check_arguments
     def generate_tasksfile_from_workspace_file(self, repository_folder: str, append_cli_args_at_end: bool = False) -> None:
         """This function works platform-independent also for non-local-executions if the ScriptCollection commandline-commands are available as global command on the target-system."""
         if self.__sc.program_runner.will_be_executed_locally():  # works only locally, but much more performant than always running an external program
             self.__sc.log.log("Generate taskfile from code-workspace-file...")
+            self.__check_for_tasks_which_will_be_overwritten(repository_folder)
             self.__sc.assert_is_git_repository(repository_folder)
             workspace_file: str = self.__sc.find_file_by_extension(repository_folder, "code-workspace")
             task_file: str = repository_folder + "/Taskfile.yml"

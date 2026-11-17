@@ -4,7 +4,8 @@
 
 The agent in the sandbox of `scrais` has unrestricted network access today: the container is attached to the default bridge network of docker and can reach every host on every port.
 Since the sandbox can get the build-environment (see capability `agent-sandbox-build-environment`), the agent can hold secrets like the credentials of private package-sources.
-A manipulated or misbehaving agent can send them anywhere. Restricting the outgoing traffic to a small list of known HTTPS-domains is the most effective protection against this exfiltration.
+A manipulated or misbehaving agent can send them anywhere.
+Restricting the outgoing traffic to a small list of known HTTPS-domains is the most effective protection against this exfiltration.
 
 ## What Changes
 

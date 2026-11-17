@@ -2,10 +2,8 @@
 
 ## Why
 
-An agent started with `scrais` can not restore dependencies from private package-sources (for example the NuGet-feed of
-`CCOTLibrary` which `CCOTFunctionsBitcoin` needs), while `scbuildcodeunits -c` can build the same repository in a container.
-The reason is that `scbuildcodeunits -c` provides a build-environment to its container (required environment-variables, the
-`TFCPS`-configuration-folder, custom scripts, image-registries-file, trusted root-CAs) and `scrais` provides none of it.
+An agent started with `scrais` can not restore dependencies from private package-sources (for example the NuGet-feed of `CCOTLibrary` which `CCOTFunctionsBitcoin` needs), while `scbuildcodeunits -c` can build the same repository in a container.
+The reason is that `scbuildcodeunits -c` provides a build-environment to its container (required environment-variables, the `TFCPS`-configuration-folder, custom scripts, image-registries-file, trusted root-CAs) and `scrais` provides none of it.
 
 ## What Changes
 

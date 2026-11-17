@@ -1243,7 +1243,7 @@ class GeneralUtilitiesTests(unittest.TestCase):
             replaced = GeneralUtilities.replace_symlinks_by_copies(tool_folder, shared_folder, [])
 
             # assert
-            assert replaced == []
+            assert not replaced
             assert os.path.islink(link)
 
     def test_replace_symlinks_by_copies_keeps_links_in_excluded_folders(self) -> None:
@@ -1284,5 +1284,5 @@ class GeneralUtilitiesTests(unittest.TestCase):
             replaced = GeneralUtilities.replace_symlinks_by_copies(tool_folder, shared_folder, [tool_folder])
 
             # assert
-            assert replaced == []
+            assert not replaced
             assert os.path.islink(link)

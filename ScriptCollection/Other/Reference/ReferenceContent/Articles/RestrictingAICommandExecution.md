@@ -85,15 +85,11 @@ So the repository is the fixed working-directory of every allowed invocation, an
 > }
 > ```
 >
-> `.` is resolved against the current working-directory, which is the repository-root when the agent runs
-> commands from there (the default). Because the rule no longer contains a machine-specific absolute path,
-> it is **identical for every developer and every checkout-location**, so you can commit it and put it into
-> the shared `settings.json` (instead of only the personal, git-ignored `settings.local.json`).
+> `.` is resolved against the current working-directory, which is the repository-root when the agent runs commands from there (the default).
+> Because the rule no longer contains a machine-specific absolute path, it is **identical for every developer and every checkout-location**, so you can commit it and put it into the shared `settings.json` (instead of only the personal, git-ignored `settings.local.json`).
 >
-> Note that with `-b .` the working-directory is "wherever the command is invoked from" rather than a fixed
-> absolute path. As long as the agent's working-directory is reliably the repository-root, this is equivalent
-> and safe; if the working-directory could be redirected (for example by a chained `cd` in the same
-> invocation), an absolute `-b` gives the stronger guarantee.
+> Note that with `-b .` the working-directory is "wherever the command is invoked from" rather than a fixed absolute path.
+> As long as the agent's working-directory is reliably the repository-root, this is equivalent and safe; if the working-directory could be redirected (for example by a chained `cd` in the same invocation), an absolute `-b` gives the stronger guarantee.
 
 The net effect is a sharp reduction of what the agent can do, while still letting it do the intended work:
 
