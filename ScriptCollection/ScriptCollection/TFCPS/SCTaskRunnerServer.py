@@ -304,6 +304,30 @@ class SCTaskRunnerServer:
             raise ValueError(f"The result-folder '{job.result_folder}' of job '{job.job_id}' is not inside the workspace of that job.")
         return result_folder
 
+    def __get_amount_of_running_jobs(self) -> int:
+        """Returns the amount of jobs which are currently running. A job counts as running from its submit until its
+        program has ended, which includes the extraction of its repository."""
+        with self.__jobs_lock:
+            jobs = list(self.__jobs.values())
+        amount_of_running_jobs = 0
+        for job in jobs:
+            with job.lock:
+                if job.state == "running":
+                    amount_of_running_jobs = amount_of_running_jobs+1
+        return amount_of_running_jobs
+
+    def __get_metrics(self) -> str:  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
+        """Returns the metrics of this runner in the text-based exposition-format of Prometheus, so that the utilization
+        of a runner can be monitored by a monitoring-system which scrapes it. Only the amount of running jobs is exposed:
+        anything about a job itself (its repository, its program) is information of the client which submitted it."""
+        metric_name = "sctaskrunner_running_jobs"
+        lines = [
+            f"# HELP {metric_name} Amount of jobs which are currently running on this runner.",
+            f"# TYPE {metric_name} gauge",
+            f"{metric_name} {self.__get_amount_of_running_jobs()}",
+        ]
+        return "\n".join(lines)+"\n"
+
     @GeneralUtilities.check_arguments
     def __delete_job(self, job_id: str) -> None:  # pylint:disable=unused-private-member  # accessed via name-mangling inside the nested request-handler
         with self.__jobs_lock:
@@ -391,6 +415,9 @@ class SCTaskRunnerServer:
                     return
                 if self.path == "/os":
                     self.__send_text(200, outer.operating_system_name)
+                    return
+                if self.path == "/metrics":
+                    self.__send(200, outer._SCTaskRunnerServer__get_metrics().encode("utf-8"), "text/plain; version=0.0.4; charset=utf-8")
                     return
                 parts = self.path.strip("/").split("/")
                 if len(parts) >= 2 and parts[0] == "jobs":

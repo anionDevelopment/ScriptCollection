@@ -77,6 +77,21 @@ def get_origin_of_the_transferred_repository(server: SCTaskRunnerServer, workspa
     return server._SCTaskRunnerServer__get_origin_of_the_transferred_repository(workspace_folder)
 
 
+def add_job_with_state(server: SCTaskRunnerServer, job_id: str, state: str) -> None:
+    """Registers a job with the given state at the server, the same way the server registers a job it accepted."""
+    job = _RunnerJob(job_id, job_id, ".")
+    job.state = state
+    # pylint:disable=protected-access
+    server._SCTaskRunnerServer__jobs[job_id] = job
+
+
+def get_metrics(server: SCTaskRunnerServer) -> str:
+    """Calls the private SCTaskRunnerServer.__get_metrics for a test, the same way extract_payload_and_run_job above
+    accesses another private method."""
+    # pylint:disable=protected-access
+    return server._SCTaskRunnerServer__get_metrics()
+
+
 class CapturedLog:
     """Captures what the runner logs while something runs, so that a test can state what has to be in that log without
     the log of the testcase appearing in the output of the testrun. The runner logs to the console, which is the only
@@ -314,3 +329,29 @@ class SCTaskRunnerServerTests(unittest.TestCase):
         self.assertFalse(SCTaskRunnerServer.is_valid_set_of_environment_variables({"NAME": 1}))
         self.assertFalse(SCTaskRunnerServer.is_valid_set_of_environment_variables({"": "value"}))
         self.assertFalse(SCTaskRunnerServer.is_valid_set_of_environment_variables({"NA=ME": "value"}))
+
+    def test_the_metrics_state_that_no_job_is_running_when_there_is_no_job(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as work_folder:
+            server = create_server(work_folder)
+
+            # act
+            metrics = get_metrics(server)
+
+            # assert
+            self.assertEqual("# HELP sctaskrunner_running_jobs Amount of jobs which are currently running on this runner.\n# TYPE sctaskrunner_running_jobs gauge\nsctaskrunner_running_jobs 0\n", metrics)
+
+    def test_the_metrics_state_only_the_amount_of_running_jobs(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as work_folder:
+            server = create_server(work_folder)
+            add_job_with_state(server, "job1", "running")
+            add_job_with_state(server, "job2", "running")
+            add_job_with_state(server, "job3", "completed")
+            add_job_with_state(server, "job4", "failed")
+
+            # act
+            metrics = get_metrics(server)
+
+            # assert
+            self.assertIn("\nsctaskrunner_running_jobs 2\n", metrics)

@@ -154,3 +154,17 @@ The runners are the codeunits `SCTaskRunnerWindows`, `SCTaskRunnerMacOS`, `SCTas
 `SCTaskRunnerWindows`, `SCTaskRunnerMacOS` and `SCTaskRunnerIOS` run natively on a Windows- respectively macOS-host (there are no macOS-containers, and the native toolchains - Visual Studio, Xcode - are required).
 `SCTaskRunnerAndroid` runs as a **container** instead - unlike a Windows- or macOS-toolchain, the Android-SDK/NDK works inside a Linux-container, so it is delivered as a permanently-running container-image (analogous in spirit to how SCGitHubRunner is a permanently-running container) instead of a native installation.
 All of them share the same server-logic, which lives in `ScriptCollection.TFCPS.SCTaskRunnerServer`.
+
+### Metrics
+
+Every runner provides the endpoint `GET /metrics`, which returns the metrics of the runner in the text-based exposition-format of Prometheus.
+Like every other endpoint it requires the basic-auth-credentials of the runner.
+It contains only the amount of jobs which are currently running, without any detail about these jobs:
+
+```text
+# HELP sctaskrunner_running_jobs Amount of jobs which are currently running on this runner.
+# TYPE sctaskrunner_running_jobs gauge
+sctaskrunner_running_jobs 2
+```
+
+A job counts as running from its submit until its program has ended, which includes the extraction of its repository.
