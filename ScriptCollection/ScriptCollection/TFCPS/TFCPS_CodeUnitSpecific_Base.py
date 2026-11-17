@@ -365,7 +365,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         return self.__use_cache
 
     @GeneralUtilities.check_arguments
-    def run_program_on_remote_runner(self, required_os: RunnerOperatingSystem, program: str, arguments: list[str], working_directory: str, result_folder: str, folders_which_are_not_transferred: list[str]) -> None:
+    def run_program_on_remote_runner(self, required_os: RunnerOperatingSystem, program: str, arguments: list[str], working_directory: str, result_folder: str, folders_which_are_not_transferred: list[str], environment_variables: dict[str, str]) -> None:
         """Runs the given program for this codeunit on a remote task-runner that provides the given operating-system (see
         TFCPS_RemoteBuild and the SCTaskRunnerWindows/SCTaskRunnerMacOS-codeunits). This is used for operating-system-bound
         build-steps (e.g. flutter-windows- or flutter-ios-builds) which can not run on the current operating-system. After
@@ -374,8 +374,11 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         working_directory and result_folder must be folders inside this codeunit.
         folders_which_are_not_transferred are the folders of this codeunit whose content only applies to this machine
         and which are therefore left out of the repository-archive the runner gets (see
+        TFCPS_RemoteBuild.run_program_on_runner).
+        environment_variables are set for the program on the runner only; they are the way to give a secret (for example
+        a signing-key) to the build-step without transferring it as part of the repository (see
         TFCPS_RemoteBuild.run_program_on_runner)."""
-        TFCPS_RemoteBuild(self._protected_sc).run_program_on_runner(required_os, self.get_repository_folder(), self.get_codeunit_name(), program, arguments, working_directory, result_folder, folders_which_are_not_transferred)
+        TFCPS_RemoteBuild(self._protected_sc).run_program_on_runner(required_os, self.get_repository_folder(), self.get_codeunit_name(), program, arguments, working_directory, result_folder, folders_which_are_not_transferred, environment_variables)
 
     @GeneralUtilities.check_arguments
     def get_codeunit_folder(self)->str:

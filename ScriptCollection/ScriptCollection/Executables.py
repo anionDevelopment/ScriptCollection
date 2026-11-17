@@ -17,6 +17,8 @@ from .TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
 from .TFCPS.DotNet.NuGetPackageSourceRegistration import NuGetPackageSourceRegistration
 from .OCIImages.OCIImageManager import OCIImageManager
 from .AgentRunner import AgentRunner, AgentRunnerConfiguration, CodingAgent
+from .LinuxServerSecurityCheck.LinuxServerSecurityChecker import LinuxServerSecurityChecker
+from .LinuxServerSecurityCheck.LinuxSystemAccess import LinuxSystemAccess
 
 
 def RunAgentInSandbox() -> int:
@@ -1451,3 +1453,20 @@ def WebpToPng() -> int:
         output_file = GeneralUtilities.resolve_relative_path(args.outputfile, os.getcwd())
     ScriptCollectionCore().convert_webp_to_png(input_file, output_file, args.replace)
     return 0
+
+
+def LinuxServerSecurityCheck() -> int:
+    parser = argparse.ArgumentParser(description=f"Runs read-only checks on a linux-server to detect signs of a compromise or of suspicious activities (for example backdoor-accounts, processes running from temporary folders, reverse-shells, crypto-miners, persistence in cron or systemd, unexpected setuid-files, modified package-files, rootkit-indicators). Nothing is changed on the system. Must be executed as root. Every finding is printed to stdout as one line with the prefix \"[High]\", \"[Mid]\" or \"[Low]\". Exit-code: the amount of high-findings (capped at {LinuxServerSecurityChecker.maximal_exit_code_for_findings}), or {LinuxServerSecurityChecker.exit_code_for_application_error} if an error occurred in the check itself.")
+    parser.add_argument('-o', '--outputfile', required=False, default=None, help="Optional file to which the findings are additionally appended (with timestamp).")
+    verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
+    parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
+    args = parser.parse_args()
+    try:
+        output_file = GeneralUtilities.resolve_relative_path(args.outputfile, os.getcwd()) if args.outputfile is not None else None
+        log: SCLog = SCLog(output_file, LogLevel(int(args.verbosity)))
+        log.add_overhead_to_logfile = True
+        return LinuxServerSecurityChecker(log, LinuxSystemAccess(), LinuxServerSecurityChecker.get_default_checks()).run()
+    except Exception as exception:  # pylint:disable=broad-exception-caught
+        # an error must be distinguishable from findings, because "nothing found" and "the check could not be done" have opposite meanings for the caller.
+        GeneralUtilities.write_message_to_stderr(f"The security-check could not be executed: {exception}\n{traceback.format_exc()}")
+        return LinuxServerSecurityChecker.exit_code_for_application_error

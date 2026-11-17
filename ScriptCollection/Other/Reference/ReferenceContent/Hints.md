@@ -173,3 +173,29 @@ Three things which are worth knowing:
 - **The line-endings of the file follow the repository.** A restore on windows writes it with CRLF while the build
   normalizes it, so the first diff after a manual restore can look like the whole file changed. `git diff
   --ignore-cr-at-eol` shows what actually differs.
+
+## Security-check of a linux-server
+
+`sclinuxserversecuritycheck` checks a linux-server for signs of a compromise or of suspicious activities, for example backdoor-accounts, processes which run from temporary folders or which disguise themselves as kernel-threads, reverse-shells, crypto-miners, persistence in cron, systemd and shell-startup-files, unexpected setuid-files, modified package-files and rootkit-indicators.
+It only reads the system and changes nothing (except the optional output-file).
+It must be executed as root, because most of the checked information is only readable for root.
+
+```cmd
+sclinuxserversecuritycheck
+sclinuxserversecuritycheck -o /var/log/securitycheck.log
+```
+
+Every finding is printed to stdout as one line, for example `[High] [ProcessesRunningFromTemporaryFolders] Process runs from a temporary folder: ...`.
+With `-o` the findings are additionally appended (with timestamp) to the given file.
+
+Exit-codes:
+
+| Exit-code | Meaning                                                                                  |
+| --------- | ---------------------------------------------------------------------------------------- |
+| 0         | No high-finding.                                                                         |
+| 1 - 254   | Amount of high-findings (capped at 254, because exit-codes on linux are limited to 255). |
+| 255       | An error occurred in the check itself (the findings of the other checks are printed).    |
+
+A finding is a hint which has to be assessed by a human: also a legitimate configuration can cause a finding (for example a monitoring-container which mounts the root-folder of the host).
+
+To add a check, derive a class from `SecurityCheckBase` (in `LinuxServerSecurityCheck/Checks`), implement `run` using only the read-only methods of `SystemAccessBase` and add an instance to `LinuxServerSecurityChecker.get_default_checks`.

@@ -57,17 +57,17 @@ def write_git_configuration(workspace_folder: str, content: str) -> None:
 
 
 def extract_payload_and_run_job(server: SCTaskRunnerServer, job: _RunnerJob, archive_file: str, program: str, arguments: list[str]) -> None:
-    """Calls the private SCTaskRunnerServer.__extract_payload_and_run_job for a test, the same way the other tests of
-    this repository access a private method."""
+    """Calls the private SCTaskRunnerServer.__extract_payload_and_run_job (without environment-variables) for a test,
+    the same way the other tests of this repository access a private method."""
     # pylint:disable=protected-access
-    server._SCTaskRunnerServer__extract_payload_and_run_job(job, archive_file, program, arguments, ".")
+    server._SCTaskRunnerServer__extract_payload_and_run_job(job, archive_file, program, arguments, ".", {})
 
 
-def run_job(server: SCTaskRunnerServer, job: _RunnerJob, program: str, arguments: list[str]) -> None:
+def run_job(server: SCTaskRunnerServer, job: _RunnerJob, program: str, arguments: list[str], environment_variables: dict[str, str]) -> None:
     """Calls the private SCTaskRunnerServer.__run_job for a test, the same way extract_payload_and_run_job above
     accesses another private method."""
     # pylint:disable=protected-access
-    server._SCTaskRunnerServer__run_job(job, program, arguments, ".")
+    server._SCTaskRunnerServer__run_job(job, program, arguments, ".", environment_variables)
 
 
 def get_origin_of_the_transferred_repository(server: SCTaskRunnerServer, workspace_folder: str) -> str:
@@ -75,6 +75,21 @@ def get_origin_of_the_transferred_repository(server: SCTaskRunnerServer, workspa
     extract_payload_and_run_job above accesses another private method."""
     # pylint:disable=protected-access
     return server._SCTaskRunnerServer__get_origin_of_the_transferred_repository(workspace_folder)
+
+
+def add_job_with_state(server: SCTaskRunnerServer, job_id: str, state: str) -> None:
+    """Registers a job with the given state at the server, the same way the server registers a job it accepted."""
+    job = _RunnerJob(job_id, job_id, ".")
+    job.state = state
+    # pylint:disable=protected-access
+    server._SCTaskRunnerServer__jobs[job_id] = job
+
+
+def get_metrics(server: SCTaskRunnerServer) -> str:
+    """Calls the private SCTaskRunnerServer.__get_metrics for a test, the same way extract_payload_and_run_job above
+    accesses another private method."""
+    # pylint:disable=protected-access
+    return server._SCTaskRunnerServer__get_metrics()
 
 
 class CapturedLog:
@@ -164,7 +179,7 @@ class SCTaskRunnerServerTests(unittest.TestCase):
 
             # act
             with CapturedLog() as captured_log:
-                run_job(server, job, sys.executable, ["-c", "import sys;[print('line'+str(number)) for number in range(40)];sys.exit(3)"])
+                run_job(server, job, sys.executable, ["-c", "import sys;[print('line'+str(number)) for number in range(40)];sys.exit(3)"], {})
             logged_by_the_runner = captured_log.get_content()
 
             # assert
@@ -185,7 +200,7 @@ class SCTaskRunnerServerTests(unittest.TestCase):
             #The program composes what it prints, so that the searched text is not part of the command - which the
             #runner logs and which would therefore contain it regardless of what the program printed.
             with CapturedLog() as captured_log:
-                run_job(server, job, sys.executable, ["-c", "print('output-of-'+'the-program')"])
+                run_job(server, job, sys.executable, ["-c", "print('output-of-'+'the-program')"], {})
             logged_by_the_runner = captured_log.get_content()
 
             # assert
@@ -275,3 +290,68 @@ class SCTaskRunnerServerTests(unittest.TestCase):
 
             # assert
             self.assertIn("is not inside the workspace", str(raised.exception))
+
+    def test_the_environment_variables_of_a_job_are_set_for_its_program(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as work_folder:
+            server = create_server(work_folder)
+            job = create_job(work_folder, ".")
+            GeneralUtilities.ensure_directory_exists(job.workspace_folder)
+
+            # act
+            with CapturedLog():
+                run_job(server, job, sys.executable, ["-c", "import os; print('value: '+os.environ['SC_TEST_VARIABLE'])"], {"SC_TEST_VARIABLE": "value-of-the-job"})
+
+            # assert
+            self.assertEqual("completed", job.state)
+            self.assertIn("value: value-of-the-job", job.log)
+
+    def test_the_environment_variables_of_a_job_are_not_set_for_the_runner(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as work_folder:
+            server = create_server(work_folder)
+            job = create_job(work_folder, ".")
+            GeneralUtilities.ensure_directory_exists(job.workspace_folder)
+
+            # act
+            with CapturedLog():
+                run_job(server, job, sys.executable, ["-c", "print('done')"], {"SC_TEST_VARIABLE_OF_A_JOB": "secret-value"})
+
+            # assert
+            self.assertNotIn("SC_TEST_VARIABLE_OF_A_JOB", os.environ)
+
+    def test_valid_set_of_environment_variables(self) -> None:
+        self.assertTrue(SCTaskRunnerServer.is_valid_set_of_environment_variables({}))
+        self.assertTrue(SCTaskRunnerServer.is_valid_set_of_environment_variables({"NAME": "value"}))
+
+    def test_invalid_set_of_environment_variables(self) -> None:
+        self.assertFalse(SCTaskRunnerServer.is_valid_set_of_environment_variables(["NAME"]))
+        self.assertFalse(SCTaskRunnerServer.is_valid_set_of_environment_variables({"NAME": 1}))
+        self.assertFalse(SCTaskRunnerServer.is_valid_set_of_environment_variables({"": "value"}))
+        self.assertFalse(SCTaskRunnerServer.is_valid_set_of_environment_variables({"NA=ME": "value"}))
+
+    def test_the_metrics_state_that_no_job_is_running_when_there_is_no_job(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as work_folder:
+            server = create_server(work_folder)
+
+            # act
+            metrics = get_metrics(server)
+
+            # assert
+            self.assertEqual("# HELP sctaskrunner_running_jobs Amount of jobs which are currently running on this runner.\n# TYPE sctaskrunner_running_jobs gauge\nsctaskrunner_running_jobs 0\n", metrics)
+
+    def test_the_metrics_state_only_the_amount_of_running_jobs(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as work_folder:
+            server = create_server(work_folder)
+            add_job_with_state(server, "job1", "running")
+            add_job_with_state(server, "job2", "running")
+            add_job_with_state(server, "job3", "completed")
+            add_job_with_state(server, "job4", "failed")
+
+            # act
+            metrics = get_metrics(server)
+
+            # assert
+            self.assertIn("\nsctaskrunner_running_jobs 2\n", metrics)

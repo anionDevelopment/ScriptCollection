@@ -22,7 +22,8 @@ The recommended setup for self-hosted runners is the first one, because it uses 
 The build of a pipeline runs in a container (usually the SCBuilder-image).
 Mounting a folder of the runner-host as the configuration-folder of that container makes ScriptCollection resolve the values there exactly like it does on a host.
 
-> Note: The environment-variables of the **runner-process** are not inherited by a **job-container**, so configuring them in the runner-image or in the docker-compose-file of the runner does not make them available to the build. The mount (or the secret-store of the forge, see below) is what reaches the job-container.
+> Note: The environment-variables of the **runner-process** are not inherited by a **job-container**, so configuring them in the runner-image or in the docker-compose-file of the runner does not make them available to the build.
+> The mount (or the secret-store of the forge, see below) is what reaches the job-container.
 
 ### Folder on the runner-host
 
@@ -50,7 +51,10 @@ Dependency_CSharp_MyPrivateFeed_Password;file;Secrets/MyToken.txt
 Use a **relative** path for a secret-file (it is resolved against `<configuration-folder>/TFCPS`).
 An absolute path or a `~`-path of the developer-machine does not exist inside the container.
 
-> **Create `GlobalCache/OCIImages/ImageRegistries.csv` even if it is empty** (a file containing only the header-line `ImageName;RegistryAddress` is enough). The mount is read-only, but ScriptCollection creates that file when it does not exist yet. On a read-only mount that creation fails and the build aborts, so a missing file breaks every build on this runner. See [Custom OCI-registries](./CustomOCIRegistries.md) for what to put into that file.
+> **Create `GlobalCache/OCIImages/ImageRegistries.csv` even if it is empty** (a file containing only the header-line `ImageName;RegistryAddress` is enough).
+> The mount is read-only, but ScriptCollection creates that file when it does not exist yet.
+> On a read-only mount that creation fails and the build aborts, so a missing file breaks every build on this runner.
+> See [Custom OCI-registries](./CustomOCIRegistries.md) for what to put into that file.
 
 ### Mount only the two subfolders, never the whole folder
 
@@ -65,7 +69,9 @@ A repository whose builds do not use the tool-cache works with both kinds of mou
 
 Restrict the access-rights of the folder to the user which runs the runner (for example `chmod 600` for the files below `Secrets`).
 
-> **The path on the left side is always a path on the runner-host**, in every setup below - never a path inside the runner-container. A self-hosted runner which itself runs as a container creates the job-container through the docker-socket it has mounted, so that mount-source is resolved by the docker-daemon on the host. The configuration-folder therefore does **not** have to be mounted into the runner-container itself; the runner only passes the path on. (Mounting it there as well does no harm and can help to verify the setup, for example with `docker compose exec <runner> ls /srv/ScriptCollectionConfiguration`.)
+> **The path on the left side is always a path on the runner-host**, in every setup below - never a path inside the runner-container.
+> A self-hosted runner which itself runs as a container creates the job-container through the docker-socket it has mounted, so that mount-source is resolved by the docker-daemon on the host.
+> The configuration-folder therefore does **not** have to be mounted into the runner-container itself; the runner only passes the path on. (Mounting it there as well does no harm and can help to verify the setup, for example with `docker compose exec <runner> ls /srv/ScriptCollectionConfiguration`.)
 
 ### GitLab (official runner-image, docker-executor)
 

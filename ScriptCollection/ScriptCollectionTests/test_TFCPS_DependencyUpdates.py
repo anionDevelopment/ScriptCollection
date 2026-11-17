@@ -603,9 +603,8 @@ class GenericDependencyUpdateTests(unittest.TestCase):
         codeunit.available_versions = {"a": ["1.16.0", "1.17.0", "2.0.0"], "b": ["2.0.0", "2.1.0"]}
         codeunit.tfcps_Tools_General = MagicMock()
         codeunit.tfcps_Tools_General.get_dependencies_which_are_ignored_from_updates.return_value = []
-        codeunit._protected_sc = MagicMock()
-        # pylint:disable=protected-access
-        codeunit._TFCPS_CodeUnitSpecific_Base__codeunit_folder = "Demo"
+        codeunit._protected_sc = MagicMock()  # pylint: disable=protected-access
+        codeunit._TFCPS_CodeUnitSpecific_Base__codeunit_folder = "Demo"  # pylint: disable=protected-access,attribute-defined-outside-init
 
         # act
         codeunit.update_dependencies_with_specific_echolon(VersionEcholon.LatestPatchOrLatestMinor)
