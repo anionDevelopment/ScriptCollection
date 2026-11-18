@@ -3,5 +3,8 @@
   "scripts": {
     "prepare": "husky"
   },
-  "version": "4.4.74"
+  "devDependencies": {
+    "husky": "9.1.7"
+  },
+  "version": "5.0.0"
 }

@@ -1,4 +1,4 @@
-from ...GeneralUtilities import VersionEcholon
+from ...GeneralUtilities import VersionEchelon
 from ..AbstractTagPatternImageHandler import AbstractTagPatternImageHandler
 
 class ImageHandlerGeneric(AbstractTagPatternImageHandler):
@@ -7,5 +7,5 @@ class ImageHandlerGeneric(AbstractTagPatternImageHandler):
     def _protected_accepts_tag_parts(self,image_name:str,prefix:str,suffix:str)->bool:
         return prefix==""
 
-    def get_default_echolon_for_update(self,image_name:str)->VersionEcholon:
-        return VersionEcholon.LatestVersion
+    def get_default_echelon_for_update(self,image_name:str)->VersionEchelon:
+        return VersionEchelon.LatestVersion

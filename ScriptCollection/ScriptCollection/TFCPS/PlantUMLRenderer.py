@@ -94,7 +94,7 @@ class PlantUMLRenderer:
         self.__sc.docker_pull(image_address, image_tag)
         # Inside a build-container the forwarded docker-socket belongs to the daemon of the host, so the container
         # started here is a sibling-container and not a child. See get_container_call_configuration.
-        own_container_id: str = self.__sc.get_own_container_id() if self.__sc.is_runnning_in_container() else None
+        own_container_id: str = self.__sc.get_own_container_id() if self.__sc.is_running_in_container() else None
         for plantuml_file in plantuml_files:
             folder: str = os.path.dirname(plantuml_file)
             container_call: PlantUMLContainerCall = PlantUMLRenderer.get_container_call_configuration(folder, own_container_id)

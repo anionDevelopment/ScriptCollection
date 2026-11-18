@@ -1,5 +1,5 @@
 from packaging.version import Version
-from ...GeneralUtilities import VersionEcholon
+from ...GeneralUtilities import VersionEchelon
 from ..AbstractImageHandler import AbstractImageHandler
 
 class ImageHandlerGitlabCE(AbstractImageHandler):
@@ -15,5 +15,5 @@ class ImageHandlerGitlabCE(AbstractImageHandler):
     def tag_to_version(self,image_name:str,tag:str)->Version:
         raise NotImplementedError(f"Updating the tag of image \"{image_name}\" (GitLab ce) is not implemented yet.")
 
-    def get_default_echolon_for_update(self,image_name:str)->VersionEcholon:
-        return VersionEcholon.CustomAlgorithm
+    def get_default_echelon_for_update(self,image_name:str)->VersionEchelon:
+        return VersionEchelon.CustomAlgorithm

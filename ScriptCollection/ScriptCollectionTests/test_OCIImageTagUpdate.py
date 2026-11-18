@@ -1,7 +1,7 @@
 import os
 import tempfile
 import unittest
-from ..ScriptCollection.GeneralUtilities import GeneralUtilities, VersionEcholon
+from ..ScriptCollection.GeneralUtilities import GeneralUtilities, VersionEchelon
 from ..ScriptCollection.OCIImages.OCIImageManager import OCIImageManager
 from ..ScriptCollection.OCIImages.ConcreteImageHandlers.ImageHandlerDebian import ImageHandlerDebian
 from ..ScriptCollection.OCIImages.ConcreteImageHandlers.ImageHandlerDebianSlim import ImageHandlerDebianSlim
@@ -73,7 +73,7 @@ class OCIImageTagUpdateTests(unittest.TestCase):
             replace_registry(oci_image_manager, {"docker.io/library/debian": ["13.4-slim", "13.10-slim", "13.7-slim", "14", "14.0", "14-slim", "trixie-slim", "latest"]})
 
             # act
-            actual_result = oci_image_manager.get_latest_tag_of_image("Debian", ["docker.io/library/debian"], "13.4-slim", VersionEcholon.LatestVersion)
+            actual_result = oci_image_manager.get_latest_tag_of_image("Debian", ["docker.io/library/debian"], "13.4-slim", VersionEchelon.LatestVersion)
 
             # assert
             self.assertEqual("13.10-slim", actual_result)
@@ -85,7 +85,7 @@ class OCIImageTagUpdateTests(unittest.TestCase):
             replace_registry(oci_image_manager, {"docker.io/anchore/syft": ["v1.40.0", "v1.39.9"]})
 
             # act
-            actual_result = oci_image_manager.get_latest_tag_of_image("Syft", ["docker.io/anchore/syft"], "v1.41.2", VersionEcholon.LatestVersion)
+            actual_result = oci_image_manager.get_latest_tag_of_image("Syft", ["docker.io/anchore/syft"], "v1.41.2", VersionEchelon.LatestVersion)
 
             # assert
             self.assertEqual("v1.41.2", actual_result)
@@ -97,7 +97,7 @@ class OCIImageTagUpdateTests(unittest.TestCase):
             replace_registry(oci_image_manager, {"docker.io/library/mariadb": ["12.2.3", "12.2.5", "12.3.1", "13.0.0"]})
 
             # act
-            actual_result = oci_image_manager.get_latest_tag_of_image("MariaDB", ["docker.io/library/mariadb"], "12.2.2", VersionEcholon.LatestPatch)
+            actual_result = oci_image_manager.get_latest_tag_of_image("MariaDB", ["docker.io/library/mariadb"], "12.2.2", VersionEchelon.LatestPatch)
 
             # assert
             self.assertEqual("12.2.5", actual_result)

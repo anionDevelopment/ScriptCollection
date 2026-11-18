@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from packaging.version import Version
-from ..GeneralUtilities import VersionEcholon
+from ..GeneralUtilities import VersionEchelon
 
 class AbstractImageHandler(ABC):
     """An image-handler knows the format of the tags of certain images: which tags of a registry are candidates for an update of a
@@ -22,12 +22,12 @@ class AbstractImageHandler(ABC):
         raise NotImplementedError()#because it is abstract
 
     @abstractmethod
-    def get_default_echolon_for_update(self,image_name:str)->VersionEcholon:
+    def get_default_echelon_for_update(self,image_name:str)->VersionEchelon:
         raise NotImplementedError()#because it is abstract
 
     def get_latest_tag_custom(self,image_name:str,current_tag:str,candidate_tags:list[str])->str:
         """Determines the tag the image should be updated to using an image-specific custom algorithm.
         candidate_tags contains the current tag and all available tags which have the same format as the current tag.
-        This is used when the echolon VersionEcholon.CustomAlgorithm is selected.
+        This is used when the echelon VersionEchelon.CustomAlgorithm is selected.
         Image-handlers which want to support a custom algorithm must override this method."""
         raise ValueError(f"Image-handler \"{type(self).__name__}\" does not define a custom algorithm for determining the latest version of image \"{image_name}\".")

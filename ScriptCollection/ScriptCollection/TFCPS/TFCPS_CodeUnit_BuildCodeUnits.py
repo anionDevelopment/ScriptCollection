@@ -117,7 +117,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             GeneralUtilities.assert_file_exists(product_information_file, f"The file '{product_information_file}' does not exist.")
 
             #when the build runs inside a container, ensure the used SCBuilder-image is at least the version required by this repository (defined in .ScriptCollection/OCIImages/ImageDefinition.csv)
-            if self.sc.is_runnning_in_container():
+            if self.sc.is_running_in_container():
                 scbuilder_version_environment_value = os.environ.get("SCBuilderVersion")
                 GeneralUtilities.assert_condition(GeneralUtilities.string_has_content(scbuilder_version_environment_value), "The environment-variable 'SCBuilderVersion' is not set although the build runs inside a container (environment-variable 'ISRUNNINGINCONTAINER' is 'true').")
                 scbuilder_tag=self.tfcps_tools_general.oci_image_manager.get_tag_for_image(self.repository, "SCBuilder")
@@ -182,7 +182,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             #mark current version as supported
             now = GeneralUtilities.get_now()
             project_version:str=self.tfcps_tools_general.get_version_of_project(self.repository)
-            if not self.tfcps_tools_general.suport_information_exists(self.repository, project_version):
+            if not self.tfcps_tools_general.support_information_exists(self.repository, project_version):
                 amount_of_years_for_support:int=1
                 support_time = timedelta(days=365*amount_of_years_for_support+30*3+1) 
                 until = now + support_time
@@ -345,17 +345,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             self.sc.log.log(f"The signature of '{security_txt_file}' can not be verified because the file does not contain an 'Encryption'-field with an http(s)-URL of the public key.", LogLevel.Warning)
             return
         key_url: str = key_urls[0]
-        try:
-            response = requests.get(key_url, timeout=30, allow_redirects=True)
-        except requests.RequestException as exception:
-            self.sc.log.log(f"The signature of '{security_txt_file}' can not be verified because the public key can not be downloaded from '{key_url}': {exception}", LogLevel.Warning)
-            return
-        if not response.ok:
-            self.sc.log.log(f"The signature of '{security_txt_file}' can not be verified because the public key can not be downloaded from '{key_url}' (HTTP-status {response.status_code}).", LogLevel.Warning)
-            return
-        public_key: bytes = TFCPS_CodeUnit_BuildCodeUnits.__dearmor_pgp_public_key(response.text)
+        public_key: bytes = self.__download_pgp_public_key(security_txt_file, key_url)
         if public_key is None:
-            self.sc.log.log(f"The signature of '{security_txt_file}' can not be verified because '{key_url}' does not contain a PGP-public-key-block.", LogLevel.Warning)
             return
         with tempfile.TemporaryDirectory() as keyring_folder:
             keyring_file: str = os.path.join(keyring_folder, "PublicKey.gpg")
@@ -366,6 +357,24 @@ class TFCPS_CodeUnit_BuildCodeUnits:
             exit_code, _, stderr, _ = self.sc.run_program_argsasarray("gpgv", ["--keyring", f"./{os.path.basename(keyring_file)}", os.path.abspath(security_txt_file)], keyring_folder, throw_exception_if_exitcode_is_not_zero=False)
         if exit_code != 0:
             self.sc.log.log(f"The signature of '{security_txt_file}' is not valid for the public key from '{key_url}' (exitcode of gpgv: {exit_code}). StdErr: '{stderr}'", LogLevel.Warning)
+
+    @GeneralUtilities.check_arguments
+    def __download_pgp_public_key(self, security_txt_file: str, key_url: str) -> bytes:
+        """Returns the binary content of the PGP-public-key which is downloaded from the given URL to verify the signature of the given
+        security.txt-file, or None (after logging a warning which explains why) if it can not be downloaded or if the downloaded
+        content does not contain a PGP-public-key-block."""
+        try:
+            response = requests.get(key_url, timeout=30, allow_redirects=True)
+        except requests.RequestException as exception:
+            self.sc.log.log(f"The signature of '{security_txt_file}' can not be verified because the public key can not be downloaded from '{key_url}': {exception}", LogLevel.Warning)
+            return None
+        if not response.ok:
+            self.sc.log.log(f"The signature of '{security_txt_file}' can not be verified because the public key can not be downloaded from '{key_url}' (HTTP-status {response.status_code}).", LogLevel.Warning)
+            return None
+        public_key: bytes = TFCPS_CodeUnit_BuildCodeUnits.__dearmor_pgp_public_key(response.text)
+        if public_key is None:
+            self.sc.log.log(f"The signature of '{security_txt_file}' can not be verified because '{key_url}' does not contain a PGP-public-key-block.", LogLevel.Warning)
+        return public_key
 
     @staticmethod
     @GeneralUtilities.check_arguments
@@ -557,7 +566,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
           build-runner gets the TFCPS-folder of its configuration-folder mounted there instead (see the article 'Build-runner-configuration'). The
           script which the host itself runs before it starts the container is 'CustomPreCodeUnitBuildScriptForContainer.py' and is
           therefore run there and not here."""
-        if self.sc.is_runnning_in_container():
+        if self.sc.is_running_in_container():
             script_file: str = os.path.join(self.tfcps_tools_general.get_folder_of_custom_scripts_in_container(), "CustomPreCodeUnitBuildScriptInContainer.py")
             if not os.path.isfile(script_file):
                 script_file = os.path.join(self.tfcps_tools_general.get_custom_scripts_folder_for_container(), "CustomPreCodeUnitBuildScriptInContainer.py")
@@ -705,7 +714,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     @GeneralUtilities.check_arguments
     def __is_running_in_container(self) -> bool:
         #the filesystem-marker is checked in addition to the convention-based environment-variable, like in __search_for_secrets_in_repository.
-        return os.path.exists("/.dockerenv") or self.sc.is_runnning_in_container()
+        return os.path.exists("/.dockerenv") or self.sc.is_running_in_container()
 
     @GeneralUtilities.check_arguments
     def __get_base_mount_arguments(self, base_mount_folder: str, container_base_mount_folder: str) -> list[str]:
@@ -962,7 +971,7 @@ class TFCPS_CodeUnit_BuildCodeUnits:
         config_file = os.path.join(self.repository, ".betterleaks.toml")
         #the filesystem-marker is checked in addition to the convention-based environment-variable (which the rest of this class uses as well),
         #because a wrong result here does not only change a message but makes the scan analyze the wrong folder.
-        running_in_container = os.path.exists("/.dockerenv") or self.sc.is_runnning_in_container()
+        running_in_container = os.path.exists("/.dockerenv") or self.sc.is_running_in_container()
         if running_in_container:
             # We run inside the build-container with the docker-socket forwarded to the host-daemon.
             # A bind-mount of our in-container repository-path (e.g. "/__w/<repo>/<repo>" on a

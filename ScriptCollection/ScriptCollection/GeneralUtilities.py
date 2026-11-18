@@ -30,7 +30,7 @@ import psutil
 from defusedxml.minidom import parse
 from OpenSSL import crypto
 
-class VersionEcholon(Enum):
+class VersionEchelon(Enum):
     LatestPatch = 0
     LatestPatchOrLatestMinor = 1
     LatestPatchOrLatestMinorOrNextMajor = 2
@@ -230,20 +230,20 @@ class GeneralUtilities:
     
     @staticmethod
     @check_arguments
-    def choose_version(available_versions:list[str],current_version:str,echolon:VersionEcholon) -> str:
-        match echolon:
-            case VersionEcholon.LatestPatch:
+    def choose_version(available_versions:list[str],current_version:str,echelon:VersionEchelon) -> str:
+        match echelon:
+            case VersionEchelon.LatestPatch:
                 return GeneralUtilities.get_latest_version(GeneralUtilities.filter_versions_by_prefix(available_versions,f"{GeneralUtilities.get_major_part_of_version(current_version)}.{GeneralUtilities.get_minor_part_of_version(current_version)}."))
-            case VersionEcholon.LatestPatchOrLatestMinor:
+            case VersionEchelon.LatestPatchOrLatestMinor:
                 return GeneralUtilities.get_latest_version(GeneralUtilities.filter_versions_by_prefix(available_versions,f"{GeneralUtilities.get_major_part_of_version(current_version)}."))
-            case VersionEcholon.LatestPatchOrLatestMinorOrNextMajor:
+            case VersionEchelon.LatestPatchOrLatestMinorOrNextMajor:
                 raise  ValueError("not implemented")#TODO
-            case VersionEcholon.LatestVersion:
+            case VersionEchelon.LatestVersion:
                 return GeneralUtilities.get_latest_version(available_versions)
-            case VersionEcholon.NoUpdate:
+            case VersionEchelon.NoUpdate:
                 return current_version
             case _:
-                raise  ValueError("Unknown echolon-value: "+str(echolon))
+                raise  ValueError("Unknown echelon-value: "+str(echelon))
     
     @staticmethod
     @check_arguments
@@ -1711,14 +1711,14 @@ class GeneralUtilities:
     def escape_yaml_string_value(str_value: str) -> str:
         """For input 'a"b\\c' this function returns 'a\\"b\\\\c'. This function does not add surrounding quotes. It only escapes the characters inside the string."""
         result= GeneralUtilities.escape_json_string_value(str_value)
-        #do other adaptions here if desired/required
+        #do other adaptations here if desired/required
         return result
 
     @staticmethod
     @check_arguments
     def escape_yaml_property_value(str_value: str) -> str:
         result= GeneralUtilities.escape_json_property_value(str_value)
-        #do other adaptions here if desired/required
+        #do other adaptations here if desired/required
         return result
     
         

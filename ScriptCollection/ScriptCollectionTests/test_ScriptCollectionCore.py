@@ -35,8 +35,9 @@ class BytesOutputPopen:
         pass
 
 
-class SimulatedRemoteProgramRunner(ProgramRunnerBase):
-    """Simulates a program-runner which executes programs not locally, by returning a predefined result for every program-call."""
+class SimulatedRemoteProgramRunner(ProgramRunnerBase):  # pylint: disable=abstract-method
+    """Simulates a program-runner which executes programs not locally, by returning a predefined result for every program-call.
+    This test-double deliberately implements only the methods which are required by the testcases which use it."""
     popen_factory = None
     executed_calls: list[tuple[str, list[str]]] = None
 

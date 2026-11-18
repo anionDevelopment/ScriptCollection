@@ -41,7 +41,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.74"
+version = "5.0.0"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -959,7 +959,7 @@ class ScriptCollectionCore:
         return remote_is_ancestor_of_local and not local_is_ancestor_of_remote
 
     @GeneralUtilities.check_arguments
-    def git_push(self, folder: str, remotename: str, localbranchname: str, remotebranchname: str, forcepush: bool = False, pushalltags: bool = True, verbosity: LogLevel = LogLevel.Quiet,resurse_submodules:bool=False) -> None:
+    def git_push(self, folder: str, remotename: str, localbranchname: str, remotebranchname: str, forcepush: bool = False, pushalltags: bool = True, verbosity: LogLevel = LogLevel.Quiet,recurse_submodules:bool=False) -> None:
         """Pushes localbranchname to remotebranchname on the given remote (with pushalltags also all tags).
         Without forcepush (and if folder is not a bare repository) the push is skipped (only logged on debug-level) when the
         remote-branch is not strictly behind the local-branch, i.e. when it is equal, ahead or diverged (see git_branch_is_pushable),
@@ -974,7 +974,7 @@ class ScriptCollectionCore:
                 self.log.log(f"Skip pushing '{localbranchname}' to '{remotebranchname}' on '{remotename}' in '{folder}' because the remote-branch is not behind the local-branch.", LogLevel.Debug)
                 return
         argument = ["push"]
-        if resurse_submodules:
+        if recurse_submodules:
             argument = argument + ["--recurse-submodules=on-demand"]
         argument = argument + [remotename, f"{localbranchname}:{remotebranchname}"]
         if (forcepush):
@@ -1406,9 +1406,9 @@ class ScriptCollectionCore:
         for file_or_folder, item_type in items.items():
             truncated_file = file_or_folder[path_prefix:]
             if (filter_function is None or filter_function(folder, truncated_file)):
-                owner_and_permisssion = self.get_file_owner_and_file_permission(file_or_folder)
-                user = owner_and_permisssion[0]
-                permissions = owner_and_permisssion[1]
+                owner_and_permission = self.get_file_owner_and_file_permission(file_or_folder)
+                user = owner_and_permission[0]
+                permissions = owner_and_permission[1]
                 lines.append(f"{truncated_file};{item_type};{user};{permissions}")
         lines = sorted(lines, key=str.casefold)
         with open(target_file, "w", encoding=encoding) as file_object:
@@ -1793,7 +1793,7 @@ class ScriptCollectionCore:
                     raise ValueError(f"{filetype_full} '{full_path_of_file_or_folder}' does not exist")
 
     @GeneralUtilities.check_arguments
-    def __calculate_lengh_in_seconds(self, filename: str, folder: str) -> float:
+    def __calculate_length_in_seconds(self, filename: str, folder: str) -> float:
         argument = ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filename]
         result = self.run_program_argsasarray("ffprobe", argument, folder, throw_exception_if_exitcode_is_not_zero=True)
         return float(result[1].replace('\n', ''))
@@ -1850,15 +1850,15 @@ class ScriptCollectionCore:
         filename_without_extension = Path(file).stem
         preview_files: list[str] = []
         try:
-            length_in_seconds = self.__calculate_lengh_in_seconds(filename, folder)
+            length_in_seconds = self.__calculate_length_in_seconds(filename, folder)
             # frames per second, example: frames_per_second="20fps" => 20 frames per second
             frames_per_second = self.__roundup(float(frames_per_second[:-3]), 2)
             frames_per_second_as_string = str(frames_per_second)
             preview_files = self.__create_thumbnails(filename, frames_per_second_as_string, folder, tempname_for_thumbnails)
             if hook is not None:
                 hook(file, preview_files)
-            actual_amounf_of_previewframes = len(preview_files)
-            self.__create_thumbnail(filename_without_extension, folder, length_in_seconds, tempname_for_thumbnails, actual_amounf_of_previewframes)
+            actual_amount_of_previewframes = len(preview_files)
+            self.__create_thumbnail(filename_without_extension, folder, length_in_seconds, tempname_for_thumbnails, actual_amount_of_previewframes)
         finally:
             for thumbnail_to_delete in preview_files:
                 os.remove(thumbnail_to_delete)
@@ -1874,14 +1874,14 @@ class ScriptCollectionCore:
         filename_without_extension = Path(file).stem
         preview_files: list[str] = []
         try:
-            length_in_seconds = self.__calculate_lengh_in_seconds(filename, folder)
-            amounf_of_previewframes = int(amount_of_columns*amount_of_rows)
-            frames_per_second_as_string = f"{amounf_of_previewframes-2}/{length_in_seconds}"
+            length_in_seconds = self.__calculate_length_in_seconds(filename, folder)
+            amount_of_previewframes = int(amount_of_columns*amount_of_rows)
+            frames_per_second_as_string = f"{amount_of_previewframes-2}/{length_in_seconds}"
             preview_files = self.__create_thumbnails(filename, frames_per_second_as_string, folder, tempname_for_thumbnails)
             if hook is not None:
                 hook(file, preview_files)
-            actual_amounf_of_previewframes = len(preview_files)
-            self.__create_thumbnail2(filename_without_extension, folder, length_in_seconds, amount_of_rows, amount_of_columns, tempname_for_thumbnails, actual_amounf_of_previewframes)
+            actual_amount_of_previewframes = len(preview_files)
+            self.__create_thumbnail2(filename_without_extension, folder, length_in_seconds, amount_of_rows, amount_of_columns, tempname_for_thumbnails, actual_amount_of_previewframes)
         finally:
             for thumbnail_to_delete in preview_files:
                 os.remove(thumbnail_to_delete)
@@ -2300,7 +2300,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
                     namemappingfile, "Original filename;new filename;SHA2-hash of file")
             for file in GeneralUtilities.absolute_file_paths(inputfolder):
                 if os.path.isfile(os.path.join(inputfolder, file)):
-                    if obfuscate_all_files or self.__extension_matchs(file, obfuscate_file_extensions):
+                    if obfuscate_all_files or self.__extension_matches(file, obfuscate_file_extensions):
                         files.append(file)
             for file in files:
                 hash_value = GeneralUtilities.get_sha256_of_file(file)
@@ -2314,7 +2314,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
             raise ValueError(f"Directory not found: '{inputfolder}'")
 
     @GeneralUtilities.check_arguments
-    def __extension_matchs(self, file: str, obfuscate_file_extensions) -> bool:
+    def __extension_matches(self, file: str, obfuscate_file_extensions) -> bool:
         for extension in obfuscate_file_extensions:
             if file.lower().endswith("."+extension.lower()):
                 return True
@@ -2336,7 +2336,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         inputfolder = newd
         if (os.path.isdir(inputfolder)):
             for file in GeneralUtilities.absolute_file_paths(inputfolder):
-                if obfuscate_all_files or self.__extension_matchs(file, obfuscate_file_extensions):
+                if obfuscate_all_files or self.__extension_matches(file, obfuscate_file_extensions):
                     self.changeHashOfProgram(file)
                     os.remove(file)
                     os.rename(file + ".modified", file)
@@ -2371,7 +2371,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
             #  -1 → a < b
             #   0 → a = b
             #   1 → a > b
-            # dpkg --compare-versions <a> lt <b>  → exit 0 wenn a < b
+            # dpkg --compare-versions <a> lt <b>  → exit 0 if a < b
             def dpkg_compare(op: str) -> bool:
                 result = self.run_program_argsasarray("docker", [ "run", "--rm",image, "dpkg", "--compare-versions", a, op, b],throw_exception_if_exitcode_is_not_zero=False)
                 GeneralUtilities.assert_condition(result[1]==GeneralUtilities.empty_string)
@@ -3918,10 +3918,10 @@ OCR-content:
             service_url = service_url + f"&languages={language}"
         headers = {'Cache-Control': 'no-cache'}
         with open(file, "rb") as f:
-            files_to_analyse = {
+            files_to_analyze = {
                 "fileContent": (os.path.basename(file), f, mime_type)
             }
-            r = requests.put(service_url, timeout=3600, headers=headers, files=files_to_analyse,verify=True)
+            r = requests.put(service_url, timeout=3600, headers=headers, files=files_to_analyze,verify=True)
             if r.status_code != 200:
                 if r.status_code == 400:
                     return f"Could not calculate ocr-content for file \"{file}\". File may be broken."
@@ -4378,7 +4378,7 @@ OCR-content:
         health = state.get("Health")
 
         if health is None:
-            return False  # kein HEALTHCHECK definiert
+            return False  # no HEALTHCHECK defined
 
         return health["Status"] == "healthy"
 
@@ -4994,7 +4994,7 @@ OCR-content:
         GeneralUtilities.write_lines_to_file(target_file, commits)
 
     @GeneralUtilities.check_arguments
-    def is_runnning_in_container(self) ->bool:
+    def is_running_in_container(self) ->bool:
         """this function is based on a convention and does not do a real check."""
         return os.environ.get("ISRUNNINGINCONTAINER") == "true"
 

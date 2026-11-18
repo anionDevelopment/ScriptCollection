@@ -93,13 +93,13 @@ echo "Edit boot menu..."
 menu_cfg="$work_directory/debian/isolinux/menu.cfg"
 txt_cfg="$work_directory/debian/isolinux/txt.cfg"
 truncate -s 0 "$menu_cfg"
-inhalt="menu hshift 4
+menu_content="menu hshift 4
 width 70
 menu title $hostname-Installer
 include stdmenu.cfg
 include txt.cfg"
 
-echo "$inhalt" > "$menu_cfg"
+echo "$menu_content" > "$menu_cfg"
 
 #echo "menu-cfg:"
 #cat $menu_cfg
