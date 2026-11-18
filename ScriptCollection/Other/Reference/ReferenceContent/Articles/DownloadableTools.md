@@ -48,7 +48,7 @@ The reason this matters: PlantUML computes the whole SVG-geometry from the font-
 
 When the declared tag is bumped, the committed diagram-SVGs have to be regenerated and re-committed once.
 
-Because the rendering uses an image, nothing of it is part of the tools-cache which `scdownloadcachabletools` fills.
+Because the rendering uses an image, nothing of it is part of the tools-cache which `scdownloadcacheabletools` fills.
 The image is pulled through the regular image-manager instead: the machine-wide `~/.ScriptCollection/GlobalCache/OCIImages/ImageRegistries.csv` decides which registry is preferred for an image-name, and the `UpstreamRegistryAddress` of the repository's own `ImageDefinition.csv` is the fallback when no custom registry is defined for it.
 A machine which must not pull from Docker Hub therefore only needs an entry `PlantUML;<own-registry>/plantuml` there; see [ConfigurationFolder.md](./ConfigurationFolder.md).
 
@@ -60,15 +60,15 @@ Two details of the invocation:
 When the build itself runs in a container whose docker-socket is forwarded to the daemon of the host (for example a build in the SCBuilder-image), the rendering-container is a *sibling*-container: a bind-mount of a path of the build-container would be resolved by the daemon of the host, where that path does not exist, and docker would silently mount an empty directory instead.
 The volumes of the own container are therefore shared with the rendering-container (`--volumes-from`), which makes the repository visible there under exactly the same path.
 
-## Pre-downloading all tools (`scdownloadcachabletools`)
+## Pre-downloading all tools (`scdownloadcacheabletools`)
 
 There is one CLI-command that downloads all cacheable tools at once:
 
 ```bash
-scdownloadcachabletools
+scdownloadcacheabletools
 ```
 
-It calls `TFCPS_Tools_General.download_all_cachable_tools`, which in turn calls every `download_<tool>`-function.
+It calls `TFCPS_Tools_General.download_all_cacheable_tools`, which in turn calls every `download_<tool>`-function.
 
 Options:
 
@@ -77,7 +77,7 @@ Options:
 
 ### Why this is useful
 
-The main use-case is to call `scdownloadcachabletools` inside a build-image (for example in the `Dockerfile` of the CI build-environment).
+The main use-case is to call `scdownloadcacheabletools` inside a build-image (for example in the `Dockerfile` of the CI build-environment).
 Because the tools are then already present in the image:
 
 - repeated pipeline-runs do not hit the rate-limits of the download-sources (for example the GitHub-API), and
@@ -86,12 +86,12 @@ Because the tools are then already present in the image:
 Example (in a `Dockerfile` of the build-image, after ScriptCollection has been installed):
 
 ```dockerfile
-RUN scdownloadcachabletools
+RUN scdownloadcacheabletools
 ```
 
 ## Tools that are not part of this command
 
-Some tools are handled differently and are therefore not downloaded by `scdownloadcachabletools`:
+Some tools are handled differently and are therefore not downloaded by `scdownloadcacheabletools`:
 
 - **FFMPEG** (`ensure_ffmpeg_is_available`): This is not stored in the global cache but downloaded directly into a specific codeunit's `Other/Resources/FFMPEG`-folder. It is therefore codeunit-specific and cannot be pre-warmed independent of a codeunit. (In a build-image, ffmpeg is usually installed as a system-package instead.)
 - **PlantUML**: This is used as an OCI-image (see [Rendering of PlantUML-diagrams](#rendering-of-plantuml-diagrams) above), not as a cached jar. An image is not pre-warmed by this command at all: which registry it is pulled from is decided by the image-manager (see below).

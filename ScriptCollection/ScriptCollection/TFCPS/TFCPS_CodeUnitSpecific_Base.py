@@ -9,7 +9,7 @@ import yaml
 import xmlschema
 from packaging.version import Version
 from lxml import etree
-from ..GeneralUtilities import GeneralUtilities, VersionEcholon
+from ..GeneralUtilities import GeneralUtilities, VersionEchelon
 from ..ScriptCollectionCore import ScriptCollectionCore
 from ..SCLog import  LogLevel
 from .TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureVersion
@@ -32,10 +32,10 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
     __validate_developers_of_repository:bool=True#TODO must be settable to false
     codeunit_namespace:str= TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)
 
-    def __init__(self,current_file:str,verbosity:LogLevel,target_envionment_type:str,use_cache:bool,is_pre_merge:bool):
+    def __init__(self,current_file:str,verbosity:LogLevel,target_environment_type:str,use_cache:bool,is_pre_merge:bool):
         self.__verbosity=verbosity
         self.__use_cache=use_cache
-        self.__target_environment_type=target_envionment_type
+        self.__target_environment_type=target_environment_type
         self.__current_file = str(Path(current_file).absolute())
         self.__current_folder = os.path.dirname(self.__current_file)
         self.__codeunit_folder=self.__search_codeunit_folder()
@@ -77,9 +77,9 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         raise ValueError(f"Operation is abstract.")
 
     def update_dependencies(self):
-        self.update_dependencies_with_specific_echolon(VersionEcholon.LatestPatchOrLatestMinor)
+        self.update_dependencies_with_specific_echelon(VersionEchelon.LatestPatchOrLatestMinor)
 
-    def update_dependencies_with_specific_echolon(self, echolon: VersionEcholon):
+    def update_dependencies_with_specific_echelon(self, echelon: VersionEchelon):
         ignored_dependencies=self.tfcps_Tools_General.get_dependencies_which_are_ignored_from_updates(self.get_codeunit_folder())
         for ignored_dependency in ignored_dependencies:
             self._protected_sc.log.log(f"Codeunit {self.get_codeunit_name()} ignores the dependency {ignored_dependency} in update-checks.", LogLevel.Warning)
@@ -95,7 +95,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
                     available_versions:list[str]=self.get_available_versions(dependencyname)
                     for available_version in available_versions:
                         GeneralUtilities.assert_condition(re.match(r"^(\d+).(\d+).(\d+)$", available_version) is not None,f"Invalid-version-string: {available_version}")
-                    desired_version=GeneralUtilities.choose_version(available_versions,latest_currently_used_version,echolon)
+                    desired_version=GeneralUtilities.choose_version(available_versions,latest_currently_used_version,echelon)
                     GeneralUtilities.assert_condition(Version(dependency_version)<=Version(desired_version),f"Desired version {desired_version} for dependency {dependencyname} is less than the actual used version {latest_currently_used_version}.")
                     update_dependency:bool=desired_version!=latest_currently_used_version
                     if update_dependency:
@@ -256,7 +256,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
             raise ValueError(f"Hints-file '{hints_file}' does not exist.")
 
         # Copy license-file
-        self.tfcps_Tools_General.copy_licence_file(self.get_codeunit_folder())
+        self.tfcps_Tools_General.copy_license_file(self.get_codeunit_folder())
 
         # Propagate the repository-level dependency-version-pins (e.g. PlantUML, OpenAPIGenerator, JRE) into the codeunit
         # so each codeunit carries its own copy of the versions that are defined once at repository-level.

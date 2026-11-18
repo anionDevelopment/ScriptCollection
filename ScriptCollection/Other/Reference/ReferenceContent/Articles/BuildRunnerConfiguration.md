@@ -61,7 +61,7 @@ An absolute path or a `~`-path of the developer-machine does not exist inside th
 Only `TFCPS` and `GlobalCache/OCIImages` are mounted (read-only) into the job-container, each to its own target-path below `/root/.ScriptCollection` - not the whole folder to `/root/.ScriptCollection`.
 This follows the same approach as `scbuildcodeunits -c` on a developer-machine, which also mounts only these parts of the configuration-folder read-only and not the whole folder (there to own paths below `/Workspace/ScriptCollectionConfiguration`, and from `GlobalCache/OCIImages` only the file `ImageRegistries.csv`).
 
-The reason is the rest of `GlobalCache`: the SCBuilder-image already contains a prefilled tool-cache in `/root/.ScriptCollection/GlobalCache/Tools` (filled by `scdownloadcachabletools` when the image is built).
+The reason is the rest of `GlobalCache`: the SCBuilder-image already contains a prefilled tool-cache in `/root/.ScriptCollection/GlobalCache/Tools` (filled by `scdownloadcacheabletools` when the image is built).
 A mount of the whole folder to `/root/.ScriptCollection` hides that cache.
 A build which then needs one of the cached tools tries to download it into `GlobalCache/Tools` and fails with `Read-only file system`.
 This only happens for builds which use the tool-cache at all - for example the merge of the bill-of-materials of a codeunit with the ones of its dependent codeunits, the generation of code from an API-specification or the build of an Android-app-bundle.

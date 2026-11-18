@@ -10,7 +10,7 @@ from lxml import etree
 import yaml
 from packaging.version import Version
 from .CertificateGeneratorInformationBase import CertificateGeneratorInformationBase
-from ...GeneralUtilities import GeneralUtilities, VersionEcholon
+from ...GeneralUtilities import GeneralUtilities, VersionEchelon
 from ...SCLog import  LogLevel
 from .NuGetPackageSourceRegistration import NuGetPackageSourceRegistration
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_CodeUnitSpecific_Base_CLI
@@ -841,13 +841,13 @@ class TFCPS_CodeUnitSpecific_DotNet_Functions(TFCPS_CodeUnitSpecific_Base):
         return sorted(three_part_versions, key=Version, reverse=True)
 
     @GeneralUtilities.check_arguments
-    def update_dependencies_with_specific_echolon(self, echolon: VersionEcholon) -> None:
+    def update_dependencies_with_specific_echelon(self, echelon: VersionEchelon) -> None:
         """Updates the dependencies of this codeunit and confirms the result in its lock-files.
 
         The update changes the versions the project-files ask for, and the lock-files still state the versions which were
         resolved before. Writing them again is part of the update: without it the next build fails with NU1004, and the
         state of the dependencies of the codeunit would be spread over two places which do not agree."""
-        super().update_dependencies_with_specific_echolon(echolon)
+        super().update_dependencies_with_specific_echelon(echelon)
         self.synchronize_dependency_versions_across_project_files()
         self.tfcps_Tools_General.update_lock_files_of_dotnet_codeunit(self.get_codeunit_folder())
 

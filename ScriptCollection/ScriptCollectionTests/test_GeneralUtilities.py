@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from datetime import datetime, date, timezone, timedelta
 import unittest
-from ..ScriptCollection.GeneralUtilities import GeneralUtilities, VersionEcholon, Dependency
+from ..ScriptCollection.GeneralUtilities import GeneralUtilities, VersionEchelon, Dependency
 
 
 class GeneralUtilitiesTests(unittest.TestCase):
@@ -420,7 +420,7 @@ class GeneralUtilitiesTests(unittest.TestCase):
         available_versions = ["1.1.2", "1.1.9", "1.10.5", "1.2.0", "2.0.0"]
 
         # act
-        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEcholon.LatestPatch)
+        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEchelon.LatestPatch)
 
         # assert
         # "1.10.5" shares the textual prefix "1.1" but belongs to another minor version, so it must not be chosen.
@@ -431,7 +431,7 @@ class GeneralUtilitiesTests(unittest.TestCase):
         available_versions = ["1.1.2", "1.10.5", "2.0.0", "10.0.0"]
 
         # act
-        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEcholon.LatestPatchOrLatestMinor)
+        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEchelon.LatestPatchOrLatestMinor)
 
         # assert
         assert actual == "1.10.5"
@@ -441,7 +441,7 @@ class GeneralUtilitiesTests(unittest.TestCase):
         available_versions = ["1.1.2", "10.0.0", "2.0.0"]
 
         # act
-        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEcholon.LatestVersion)
+        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEchelon.LatestVersion)
 
         # assert
         assert actual == "10.0.0"
@@ -451,7 +451,7 @@ class GeneralUtilitiesTests(unittest.TestCase):
         available_versions = ["1.1.2", "10.0.0"]
 
         # act
-        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEcholon.NoUpdate)
+        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEchelon.NoUpdate)
 
         # assert
         assert actual == "1.1.0"

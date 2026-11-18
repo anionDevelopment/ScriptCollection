@@ -959,7 +959,7 @@ class ScriptCollectionCore:
         return remote_is_ancestor_of_local and not local_is_ancestor_of_remote
 
     @GeneralUtilities.check_arguments
-    def git_push(self, folder: str, remotename: str, localbranchname: str, remotebranchname: str, forcepush: bool = False, pushalltags: bool = True, verbosity: LogLevel = LogLevel.Quiet,resurse_submodules:bool=False) -> None:
+    def git_push(self, folder: str, remotename: str, localbranchname: str, remotebranchname: str, forcepush: bool = False, pushalltags: bool = True, verbosity: LogLevel = LogLevel.Quiet,recurse_submodules:bool=False) -> None:
         """Pushes localbranchname to remotebranchname on the given remote (with pushalltags also all tags).
         Without forcepush (and if folder is not a bare repository) the push is skipped (only logged on debug-level) when the
         remote-branch is not strictly behind the local-branch, i.e. when it is equal, ahead or diverged (see git_branch_is_pushable),
@@ -974,7 +974,7 @@ class ScriptCollectionCore:
                 self.log.log(f"Skip pushing '{localbranchname}' to '{remotebranchname}' on '{remotename}' in '{folder}' because the remote-branch is not behind the local-branch.", LogLevel.Debug)
                 return
         argument = ["push"]
-        if resurse_submodules:
+        if recurse_submodules:
             argument = argument + ["--recurse-submodules=on-demand"]
         argument = argument + [remotename, f"{localbranchname}:{remotebranchname}"]
         if (forcepush):
@@ -4994,7 +4994,7 @@ OCR-content:
         GeneralUtilities.write_lines_to_file(target_file, commits)
 
     @GeneralUtilities.check_arguments
-    def is_runnning_in_container(self) ->bool:
+    def is_running_in_container(self) ->bool:
         """this function is based on a convention and does not do a real check."""
         return os.environ.get("ISRUNNINGINCONTAINER") == "true"
 

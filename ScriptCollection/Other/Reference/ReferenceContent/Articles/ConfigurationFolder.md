@@ -49,7 +49,7 @@ It can be emptied with the command `sccleantoolscache`.
 ### `GlobalCache/Tools`
 
 Contains the downloaded tools (CycloneDX-CLI, JRE, MediaMTX, ...).
-This folder is managed automatically and can be pre-filled with the command `scdownloadcachabletools`.
+This folder is managed automatically and can be pre-filled with the command `scdownloadcacheabletools`.
 See [Downloadable tools](./DownloadableTools.md) for details.
 
 ### `GlobalCache/OCIImages/ImageRegistries.csv`

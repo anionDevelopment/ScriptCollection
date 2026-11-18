@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 from unittest.mock import MagicMock
-from ..ScriptCollection.GeneralUtilities import GeneralUtilities, VersionEcholon
+from ..ScriptCollection.GeneralUtilities import GeneralUtilities, VersionEchelon
 from ..ScriptCollection.SCLog import LogLevel
 from ..ScriptCollection.TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
 from ..ScriptCollection.TFCPS.TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base
@@ -574,6 +574,49 @@ class LogNewerMajorVersionsOfDependencyTests(unittest.TestCase):
         self.assertIn("3.0.0", log.log.call_args[0][0])
 
 
+class PackageJsonFileDependencyUpdateTests(unittest.TestCase):
+
+    available_versions: dict[str, list[str]] = {
+        "husky": ["9.0.11", "9.1.6", "9.1.7", "10.0.0"],
+        "eslint": ["9.21.0", "9.22.0"],
+    }
+
+    def __update(self, package_json_content: dict) -> dict:
+        """Runs the function under test on a package-file with the given content, with the registry replaced by
+        self.available_versions, and returns the content of the package-file afterwards."""
+        with tempfile.TemporaryDirectory() as folder:
+            package_json_file = os.path.join(folder, "package.json")
+            GeneralUtilities.write_text_to_file(package_json_file, json.dumps(package_json_content, indent=2))
+            original_get_available_versions = NpmDependencies.get_available_versions
+            NpmDependencies.get_available_versions = staticmethod(lambda dependencyname: self.available_versions[dependencyname])
+            try:
+                TFCPS_Tools_General(MagicMock()).update_dependencies_of_package_json_file(package_json_file, VersionEchelon.LatestPatchOrLatestMinor)
+            finally:
+                NpmDependencies.get_available_versions = staticmethod(original_get_available_versions)
+            return json.loads(GeneralUtilities.read_text_from_file(package_json_file))
+
+    def test_dependencies_and_dev_dependencies_are_updated_without_taking_over_a_new_major_version(self) -> None:
+        # arrange
+        content = {"name": "Example", "dependencies": {"eslint": "~9.21.0"}, "devDependencies": {"husky": "9.0.11"}}
+
+        # act
+        actual_result = self.__update(content)
+
+        # assert
+        self.assertEqual("~9.22.0", actual_result["dependencies"]["eslint"])
+        self.assertEqual("9.1.7", actual_result["devDependencies"]["husky"])
+
+    def test_content_which_is_not_a_dependency_is_kept(self) -> None:
+        # arrange
+        content = {"name": "Example", "scripts": {"prepare": "husky"}, "devDependencies": {"husky": "9.1.7"}, "version": "1.2.3"}
+
+        # act
+        actual_result = self.__update(content)
+
+        # assert
+        self.assertEqual(content, actual_result)
+
+
 class CodeUnitWithStaticDependencies(TFCPS_CodeUnitSpecific_Base):
     """A codeunit-type whose dependencies and available versions are fixed, so that the generic dependency-update of the
     base-class can be tested without a codeunit on disk."""
@@ -607,7 +650,7 @@ class GenericDependencyUpdateTests(unittest.TestCase):
         codeunit._TFCPS_CodeUnitSpecific_Base__codeunit_folder = "Demo"  # pylint: disable=protected-access,attribute-defined-outside-init
 
         # act
-        codeunit.update_dependencies_with_specific_echolon(VersionEcholon.LatestPatchOrLatestMinor)
+        codeunit.update_dependencies_with_specific_echelon(VersionEchelon.LatestPatchOrLatestMinor)
 
         # assert
         log_function = codeunit.tfcps_Tools_General.log_newer_major_versions_of_dependency

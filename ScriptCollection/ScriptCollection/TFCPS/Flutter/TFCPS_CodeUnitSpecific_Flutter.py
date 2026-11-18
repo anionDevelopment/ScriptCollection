@@ -11,7 +11,7 @@ import zipfile
 import yaml
 
 from ...ArbTranslationsOrganizer import ArbTranslationsOrganizer
-from ...GeneralUtilities import GeneralUtilities, VersionEcholon
+from ...GeneralUtilities import GeneralUtilities, VersionEchelon
 from ...SCLog import  LogLevel
 from ...ScriptCollectionCore import ScriptCollectionCore
 from ..PubDependencies import PubDependencies
@@ -725,7 +725,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
     def __is_running_in_container(self) -> bool:
         # The filesystem-marker is checked in addition to the convention-based environment-variable because a wrong
         # result here does not only change a message but makes the sibling-container access the wrong folder.
-        return os.path.exists("/.dockerenv") or self._protected_sc.is_runnning_in_container()
+        return os.path.exists("/.dockerenv") or self._protected_sc.is_running_in_container()
 
     @GeneralUtilities.check_arguments
     def __get_own_container_id(self) -> str:
@@ -786,7 +786,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
         GeneralUtilities.assert_condition(dependency_was_set, f"No package of the codeunit \"{self.get_codeunit_name()}\" contains a dependency which is named \"{name}\".")
 
     @GeneralUtilities.check_arguments
-    def update_dependencies_with_specific_echolon(self, echolon: VersionEcholon) -> None:
+    def update_dependencies_with_specific_echelon(self, echelon: VersionEchelon) -> None:
         """Updates the dependencies of this codeunit and confirms the result in the lock-files of its packages.
 
         The update changes the versions the package-files ask for, and the lock-files still state the versions which
@@ -797,7 +797,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
         The lock-files are only written when the update really changed a version, because writing them means
         resolving the dependencies again, which is the most expensive part of an update-run."""
         dependencies_before_the_update: dict[str, set[str]] = self.get_dependencies()
-        super().update_dependencies_with_specific_echolon(echolon)
+        super().update_dependencies_with_specific_echelon(echelon)
         if dependencies_before_the_update == self.get_dependencies():
             return
         for package_folder in self.__get_package_folders():

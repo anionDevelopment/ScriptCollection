@@ -64,12 +64,12 @@ Such a secret is given to the job as an **environment-variable**: `run_program_o
 
 `TFCPS_CodeUnitSpecific_Android` uses this to sign the release-build of a **productive build** (target-environment-type `Productive`) with the upload-key, so that the app-bundle in the artifact `BuildResult_AAB` can be uploaded to Google Play:
 
-| Environment-variable on the machine which builds (for example the build-pipeline) | Content | Environment-variable for gradle on the runner |
-| --------------------------------------------------------------------------------- | ------- | --------------------------------------------- |
-| `Android_Signing_Keystore` | base64-encoding of the keystore-file (line-breaks are ignored) | `SC_ANDROID_SIGNING_STORE_FILE` (path of a temporary file) |
-| `Android_Signing_StorePassword` | password of the keystore | `SC_ANDROID_SIGNING_STORE_PASSWORD` |
-| `Android_Signing_KeyAlias` | alias of the upload-key | `SC_ANDROID_SIGNING_KEY_ALIAS` |
-| `Android_Signing_KeyPassword` | password of the upload-key | `SC_ANDROID_SIGNING_KEY_PASSWORD` |
+| Environment-variable on the machine which builds (for example the build-pipeline) | Content                                                        | Environment-variable for gradle on the runner              |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------- |
+| `Android_Signing_Keystore`                                                        | base64-encoding of the keystore-file (line-breaks are ignored) | `SC_ANDROID_SIGNING_STORE_FILE` (path of a temporary file) |
+| `Android_Signing_StorePassword`                                                   | password of the keystore                                       | `SC_ANDROID_SIGNING_STORE_PASSWORD`                        |
+| `Android_Signing_KeyAlias`                                                        | alias of the upload-key                                        | `SC_ANDROID_SIGNING_KEY_ALIAS`                             |
+| `Android_Signing_KeyPassword`                                                     | password of the upload-key                                     | `SC_ANDROID_SIGNING_KEY_PASSWORD`                          |
 
 - For a productive build all four are required; the build fails if one is missing.
 - On the runner the keystore is written into a temporary file outside of the workspace of the job, which is removed when gradle ends.

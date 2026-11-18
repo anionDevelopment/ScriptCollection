@@ -455,7 +455,7 @@ class TFCPS_VisualRegressionTests:
     def __is_running_in_container(self) -> bool:
         # The filesystem-marker is checked in addition to the convention-based environment-variable because a wrong
         # result here does not only change a message but makes the container access the wrong folder.
-        return os.path.exists("/.dockerenv") or self.__sc.is_runnning_in_container()
+        return os.path.exists("/.dockerenv") or self.__sc.is_running_in_container()
 
     @GeneralUtilities.check_arguments
     def __get_own_container_id(self) -> str:

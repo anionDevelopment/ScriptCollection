@@ -18,12 +18,13 @@ from packaging import version
 import requests
 import yaml
 from lxml import etree
-from ..GeneralUtilities import GeneralUtilities,Platform
+from ..GeneralUtilities import GeneralUtilities,Platform,VersionEchelon
 from ..ScriptCollectionCore import ScriptCollectionCore,VSCodeWorkspaceShellTask
 from ..SCLog import  LogLevel
 from ..OCIImages.AbstractImageHandler import AbstractImageHandler
 from ..OCIImages.OCIImageManager import OCIImageManager
 from .PackageSource import PackageSource
+from .NpmDependencies import NpmDependencies
 from .PlantUMLRenderer import PlantUMLRenderer
 
 # Central definition of the common-project-structure-version. This is the single place which has to be updated to bump the
@@ -104,7 +105,7 @@ class TFCPS_Tools_General:
             raise ValueError("Unsupported operating system for cyclonedx-cli.")
 
     @GeneralUtilities.check_arguments
-    def download_all_cachable_tools(self, enforce_update: bool = False, verbose: bool = False) -> None:
+    def download_all_cacheable_tools(self, enforce_update: bool = False, verbose: bool = False) -> None:
         """Downloads all tools that are stored in the global ScriptCollection-cache.
         Running this (for example in a build-image) lets repeated pipeline-runs avoid
         rate-limits and run faster, because the tools are already present when a later
@@ -129,7 +130,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def download_jre(self, enforce_update: bool = False) -> None:
         self.__sc.log.log("Download cacheable tool \"JRE\" into global cache...", LogLevel.Debug)
-        # No repository-context is available when warming the global cache (e.g. scdownloadcachabletools in a
+        # No repository-context is available when warming the global cache (e.g. scdownloadcacheabletools in a
         # build-image), so download the default version pinned by the ScriptCollection-package. Actual builds
         # pass the version pinned in their own '<repo>/Other/Resources/Dependencies/JRE/Version.txt'. This is
         # independent of the PlantUML-diagram-rendering (see PlantUMLRenderer), which brings its own java in the
@@ -754,7 +755,7 @@ class TFCPS_Tools_General:
             raise ValueError("Too many results found.")
 
     @GeneralUtilities.check_arguments
-    def copy_licence_file(self, codeunit_folder: str) -> None:
+    def copy_license_file(self, codeunit_folder: str) -> None:
         folder_of_current_file = os.path.join(codeunit_folder,"Other")
         license_file = GeneralUtilities.resolve_relative_path("../../License.txt", folder_of_current_file)
         target_folder = GeneralUtilities.resolve_relative_path("Artifacts/License", folder_of_current_file)
@@ -940,7 +941,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def get_default_jre_version(self) -> str:
         """Returns the JRE-version used when no repository-specific version is pinned (for example when warming
-        the global cache via scdownloadcachabletools). The value is read from the version-file bundled with the
+        the global cache via scdownloadcacheabletools). The value is read from the version-file bundled with the
         ScriptCollection-package."""
         content = GeneralUtilities._internal_load_resource(TFCPS_Tools_General.__jre_version_resource_relative_path)
         return content.decode("utf-8").strip()
@@ -1709,7 +1710,7 @@ class TFCPS_Tools_General:
             self.__sc.log.log("Download OpenAPIGeneratorCLI...", LogLevel.Debug)
             if pinned_version is None:
                 # No repository-specific version is pinned. This happens when the global cache is warmed
-                # without a repository-context (e.g. scdownloadcachabletools in a build-image). Fall back
+                # without a repository-context (e.g. scdownloadcacheabletools in a build-image). Fall back
                 # to the default version that ships with the ScriptCollection-package instead of failing.
                 # Actual codeunit-builds always pass a repository_folder and therefore use the version
                 # pinned in their own '<repo>/Other/Resources/Dependencies/OpenAPIGenerator/Version.txt'.
@@ -1753,7 +1754,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def get_default_openapigenerator_version(self) -> str:
         """Returns the OpenAPIGenerator-version used when no repository-specific version is pinned
-        (for example when warming the global cache via scdownloadcachabletools). The value is read from
+        (for example when warming the global cache via scdownloadcacheabletools). The value is read from
         '<repo>/Other/Resources/Dependencies/OpenAPIGenerator/Version.txt', which the build copies into the
         ScriptCollection.Resources-package so it is available at runtime from the installed wheel."""
         content = GeneralUtilities._internal_load_resource(TFCPS_Tools_General.__openapigenerator_version_resource_relative_path)
@@ -1811,7 +1812,7 @@ class TFCPS_Tools_General:
         self.__sc.push_nuget_build_artifact(self.__sc.find_file_by_extension(build_artifact_folder, "nupkg"), registry_address, api_key)
 
     @GeneralUtilities.check_arguments
-    def suport_information_exists(self, repository_folder: str, version_of_product: str) -> bool:
+    def support_information_exists(self, repository_folder: str, version_of_product: str) -> bool:
         self.__sc.assert_is_git_repository(repository_folder)
         folder = os.path.join(repository_folder, "Other", "Resources", "Support")
         file = os.path.join(folder, "InformationAboutSupportedVersions.csv")
@@ -1826,7 +1827,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def mark_current_version_as_supported(self, repository_folder: str, version_of_product: str, supported_from: datetime, supported_until: datetime):
         self.__sc.assert_is_git_repository(repository_folder)
-        if self.suport_information_exists(repository_folder, version_of_product):
+        if self.support_information_exists(repository_folder, version_of_product):
             raise ValueError(f"Version-support for v{version_of_product} already defined.")
         folder = os.path.join(repository_folder, "Other", "Resources", "Support")
         GeneralUtilities.ensure_directory_exists(folder)
@@ -2133,7 +2134,7 @@ class TFCPS_Tools_General:
     @GeneralUtilities.check_arguments
     def log_newer_major_versions_of_dependency(self, dependency_name: str, available_versions: list[str], used_version: str) -> None:
         """Logs if a newer major-version of the given dependency is available than the used one.
-        An update with an echolon like LatestPatchOrLatestMinor does not take over a new major-version, so without this message it would not be visible that the dependency falls behind.
+        An update with an echelon like LatestPatchOrLatestMinor does not take over a new major-version, so without this message it would not be visible that the dependency falls behind.
         Being 1 major-version behind is logged as information, being 2 or more major-versions behind is logged as warning.
         used_version is the version which is used after the update (if an update was done)."""
         amount_of_major_versions_behind: int = GeneralUtilities.get_amount_of_major_versions_behind(available_versions, used_version)
@@ -2142,6 +2143,23 @@ class TFCPS_Tools_General:
         loglevel: LogLevel = LogLevel.Information if amount_of_major_versions_behind == 1 else LogLevel.Warning
         latest_version: str = GeneralUtilities.get_latest_version(available_versions)
         self.__sc.log.log(f"Dependency {dependency_name} is used in version {used_version}, which is {amount_of_major_versions_behind} major-version(s) behind the latest available version {latest_version}. A new major-version has to be taken over deliberately.", loglevel)
+
+    @GeneralUtilities.check_arguments
+    def update_dependencies_of_package_json_file(self, package_json_file: str, echelon: VersionEchelon) -> None:
+        """Updates the versions of the dependencies and dev-dependencies which the given package.json-file declares, according to the given echelon.
+        This is intended for a package-file which does not belong to a codeunit (for example "<repository>/package.json", which declares the git-hooks-tool of the repository),
+        so it is called by "<repository>/Other/Scripts/UpdateDependencies.py". The package-file of a nodejs- or typescript-codeunit is updated by the update of that codeunit instead.
+        Only dependencies which are declared with a plain version-number are updated (see NpmDependencies.get_dependency_entries).
+        No lock-file is written and nothing is installed, because such a package-file is not part of a build."""
+        GeneralUtilities.assert_file_exists(package_json_file)
+        for dependency in NpmDependencies.get_dependencies(package_json_file):
+            available_versions: list[str] = NpmDependencies.get_available_versions(dependency.dependencyname)
+            desired_version: str = GeneralUtilities.choose_version(available_versions, dependency.current_version, echelon)
+            GeneralUtilities.assert_condition(version.parse(dependency.current_version) <= version.parse(desired_version), f"Desired version {desired_version} for dependency {dependency.dependencyname} is less than the actual used version {dependency.current_version}.")
+            if desired_version != dependency.current_version:
+                self.__sc.log.log(f"Update dependency {dependency.dependencyname} (which is currently used in version {dependency.current_version}) to version {desired_version}.")
+                NpmDependencies.set_dependency_version(package_json_file, dependency.dependencyname, desired_version)
+            self.log_newer_major_versions_of_dependency(dependency.dependencyname, available_versions, desired_version)
 
     @GeneralUtilities.check_arguments
     def get_dependencies_which_are_ignored_from_updates(self, codeunit_folder: str) -> list[str]:
