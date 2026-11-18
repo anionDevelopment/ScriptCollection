@@ -223,7 +223,7 @@ The most relevant ones:
 | Command                             | Purpose                                                                     |
 | ----------------------------------- | --------------------------------------------------------------------------- |
 | `scupdateimagesindockercomposefile` | Updates the image-versions in a docker-compose-file.                        |
-| `scdownloadcachabletools`           | Downloads the external tools which the pipeline needs into the local cache. |
+| `scdownloadcacheabletools`          | Downloads the external tools which the pipeline needs into the local cache. |
 | `sccleantoolscache`                 | Clears this cache.                                                          |
 | `scnpmi`                            | Runs an `npm install` in a defined way.                                     |
 
