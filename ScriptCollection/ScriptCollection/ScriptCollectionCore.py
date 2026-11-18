@@ -41,7 +41,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.73"
+version = "4.4.74"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -1521,13 +1521,13 @@ class ScriptCollectionCore:
                 arguments = arguments+["--excludedirectories"]
             if printonlynamewithoutpath:
                 arguments = arguments+["--printonlynamewithoutpath"]
-            exit_code, stdout, stderr, _ = self.run_program_argsasarray("sclistfoldercontent", arguments)
+            exit_code, stdout, stderr, _ = self.run_program_argsasarray("sclistfoldercontent", arguments, throw_exception_if_exitcode_is_not_zero=False)
             if exit_code == 0:
                 for line in stdout.split("\n"):
                     normalized_line = line.replace("\r", "")
                     result.append(normalized_line)
             else:
-                raise ValueError(f"Fatal error occurred while checking whether file '{path}' exists. StdErr: '{stderr}'")
+                raise ValueError(f"Fatal error occurred while listing the content of folder '{path}'. Exitcode: {exit_code}, StdErr: '{stderr}'")
         result = [item for item in result if GeneralUtilities.string_has_nonwhitespace_content(item)]
         return result
 
@@ -2626,9 +2626,21 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
             ScriptCollectionCore.__process_stdout_lines(q_stdout, stdout_result, print_live_output, log)
             ScriptCollectionCore.__process_stderr_lines(q_stderr, stderr_result, print_live_output, print_errors_as_information, log)
 
-            if timed_out:
-                raise TimeoutError(f"The process with process-id {p_id} did not finish within the configured timeout of {timeoutInSeconds} second(s) and was killed.")
-            return (stdout_result, stderr_result)
+        # Leaving the with-block waits until both reader-threads are terminated, so their result is final here.
+        if timed_out:
+            raise TimeoutError(f"The process with process-id {p_id} did not finish within the configured timeout of {timeoutInSeconds} second(s) and was killed.")
+        ScriptCollectionCore.__raise_if_reading_failed(readers, p_id)
+        return (stdout_result, stderr_result)
+
+    @staticmethod
+    def __raise_if_reading_failed(readers: list, p_id: int) -> None:
+        """Raises the error of a reader-thread which failed.
+        Without this check such an error (for example a program-runner whose popen-object does not provide readable text-streams)
+        would be swallowed by the thread-pool, so that the program-run would look like a successful run without any output."""
+        for reader in readers:
+            reader_error: BaseException = reader.exception()
+            if reader_error is not None:
+                raise ValueError(f"Reading the output of the process with process-id {p_id} failed.") from reader_error
 
     @GeneralUtilities.check_arguments
     def run_program_argsasarray(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = None, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False, print_live_output: bool = False, env_vars: dict = None) -> tuple[int, str, str, int]:

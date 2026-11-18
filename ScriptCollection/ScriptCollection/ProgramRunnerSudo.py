@@ -1,3 +1,4 @@
+import io
 from subprocess import Popen
 from .GeneralUtilities import GeneralUtilities
 from .ProgramRunnerBase import ProgramRunnerBase
@@ -18,29 +19,34 @@ class SudoPopenReader:
 
 
 class SudoPopen:
+    """Represents an already terminated program-run with the interface of a subprocess.Popen which was created with text=True.
+    stdout and stderr are text-streams (and not bytes), because ScriptCollectionCore reads them line by line with readline until it gets an empty string."""
     returncode: int = None
     stdout_str: str = None
     stderr_str: str = None
     pid: int = None
-    stdout: bytes = None
-    stderr: bytes = None
+    stdout: io.StringIO = None
+    stderr: io.StringIO = None
 
     def __init__(self, exitcode: int, stdout: str, stderr: str, pid: int):
         self.returncode: int = exitcode
         self.stdout_str: str = stdout
-        self.stdout = str.encode(self.stdout_str)
+        self.stdout = io.StringIO(self.stdout_str)
         self.stderr_str: str = stderr
-        self.stderr = str.encode(self.stderr_str)
+        self.stderr = io.StringIO(self.stderr_str)
         self.pid = pid
 
     def communicate(self):
-        return (self.stdout, self.stderr)
+        return (self.stdout_str, self.stderr_str)
 
     def wait(self):
         return self.returncode
 
     def poll(self) -> object:
         return self.returncode
+
+    def kill(self) -> None:
+        pass  # the program-run is already terminated when this object is created, so there is nothing to kill.
 
     def __enter__(self):
         return self

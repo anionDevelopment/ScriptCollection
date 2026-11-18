@@ -11,6 +11,45 @@ import xml.etree.ElementTree as ET
 from PIL import Image
 from ..ScriptCollection.GeneralUtilities import GeneralUtilities
 from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
+from ..ScriptCollection.ProgramRunnerBase import ProgramRunnerBase
+from ..ScriptCollection.ProgramRunnerSudo import SudoPopen
+
+
+class BytesOutputPopen:
+    """Simulates a popen-object of a program-runner whose stdout and stderr are bytes instead of readable text-streams."""
+    returncode: int = 0
+    pid: int = 0
+    stdout: bytes = b"output"
+    stderr: bytes = b""
+
+    def poll(self) -> object:
+        return self.returncode
+
+    def kill(self) -> None:
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+
+class SimulatedRemoteProgramRunner(ProgramRunnerBase):
+    """Simulates a program-runner which executes programs not locally, by returning a predefined result for every program-call."""
+    popen_factory = None
+    executed_calls: list[tuple[str, list[str]]] = None
+
+    def __init__(self, popen_factory):
+        self.popen_factory = popen_factory
+        self.executed_calls = []
+
+    def run_program_argsasarray_async_helper(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None):
+        self.executed_calls.append((program, arguments_as_array))
+        return self.popen_factory()
+
+    def will_be_executed_locally(self) -> bool:
+        return False
 
 
 class ScriptCollectionCoreTests(unittest.TestCase):
@@ -873,6 +912,50 @@ class ScriptCollectionCoreTests(unittest.TestCase):
         # assert
         assert exit_code == 0
         assert stdout == "expected-output"
+
+    def test_program_call_returns_the_output_of_a_runner_which_returns_an_already_terminated_popen(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        sc.program_runner = SimulatedRemoteProgramRunner(lambda: SudoPopen(0, "line1\nline2\n", "warning\n", 0))
+
+        # act
+        (exit_code, stdout, stderr, _3) = sc.run_program_argsasarray("someprogram", ["--argument"])
+
+        # assert
+        assert exit_code == 0
+        assert stdout == "line1\nline2"
+        assert stderr == "warning"
+
+    def test_program_call_raises_an_error_if_the_output_of_the_runner_is_not_readable(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        sc.program_runner = SimulatedRemoteProgramRunner(BytesOutputPopen)
+
+        # act & assert
+        with self.assertRaises(ValueError):
+            sc.run_program_argsasarray("someprogram", ["--argument"])
+
+    def test_list_content_returns_the_folders_of_a_folder_which_is_listed_by_a_not_local_runner(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        runner = SimulatedRemoteProgramRunner(lambda: SudoPopen(0, "Basic\r\nData\n\nTemp\n", "", 0))
+        sc.program_runner = runner
+
+        # act
+        result = sc.list_content("/Workspace", False, True, True)
+
+        # assert
+        assert result == ["Basic", "Data", "Temp"]
+        assert runner.executed_calls == [("sclistfoldercontent", ["--path", "/Workspace", "--excludefiles", "--printonlynamewithoutpath"])]
+
+    def test_list_content_raises_an_error_which_names_the_folder_if_the_not_local_listing_fails(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        sc.program_runner = SimulatedRemoteProgramRunner(lambda: SudoPopen(1, "", "folder not found", 0))
+
+        # act & assert
+        with self.assertRaisesRegex(ValueError, "listing the content of folder '/NotExisting'.*folder not found"):
+            sc.list_content("/NotExisting", True, True, False)
 
     def test_simple_program_call_argsasarray(self) -> None:
         # arrange
