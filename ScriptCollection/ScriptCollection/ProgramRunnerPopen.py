@@ -26,10 +26,12 @@ class ProgramRunnerPopen(ProgramRunnerBase):
     def run_program_argsasarray_async_helper(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> Popen:
         arguments_for_process, env = self.__get_process_start_information(program, arguments_as_array, env_vars)
         try:
+            # errors="replace": a program can write bytes which are not valid in the used encoding (for example gpgv writes a name with
+            # an umlaut in latin-1). Without replacing them, reading the output would fail at the first such byte and the output would be lost.
             if interactive:
-                result = Popen(arguments_for_process, cwd=working_directory, stdout=PIPE, stderr=PIPE, shell=False, text=True, stdin=sys.stdin, env=env)  # pylint: disable=consider-using-with
+                result = Popen(arguments_for_process, cwd=working_directory, stdout=PIPE, stderr=PIPE, shell=False, text=True, errors="replace", stdin=sys.stdin, env=env)  # pylint: disable=consider-using-with
             else:
-                result = Popen(arguments_for_process, cwd=working_directory, stdout=PIPE, stderr=PIPE, shell=False, text=True, env=env)  # pylint: disable=consider-using-with
+                result = Popen(arguments_for_process, cwd=working_directory, stdout=PIPE, stderr=PIPE, shell=False, text=True, errors="replace", env=env)  # pylint: disable=consider-using-with
         except FileNotFoundError as fileNotFoundError:
             raise FileNotFoundError(f"Starting '{program}' in '{working_directory}' resulted in a FileNotFoundError: '{str(fileNotFoundError)}'")
         except NotADirectoryError as notADirectoryError:
