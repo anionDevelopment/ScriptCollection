@@ -41,7 +41,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.74"
+version = "5.0.0"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
