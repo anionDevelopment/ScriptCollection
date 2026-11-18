@@ -1711,14 +1711,14 @@ class GeneralUtilities:
     def escape_yaml_string_value(str_value: str) -> str:
         """For input 'a"b\\c' this function returns 'a\\"b\\\\c'. This function does not add surrounding quotes. It only escapes the characters inside the string."""
         result= GeneralUtilities.escape_json_string_value(str_value)
-        #do other adaptions here if desired/required
+        #do other adaptations here if desired/required
         return result
 
     @staticmethod
     @check_arguments
     def escape_yaml_property_value(str_value: str) -> str:
         result= GeneralUtilities.escape_json_property_value(str_value)
-        #do other adaptions here if desired/required
+        #do other adaptations here if desired/required
         return result
     
         

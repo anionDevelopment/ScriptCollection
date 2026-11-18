@@ -150,7 +150,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         namespaces = {'cps': TFCPS_CodeUnitSpecific_Base.codeunit_namespace,  'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
         root: etree._ElementTree = etree.parse(codeunit_file)
 
-        # check codeunit-spcecification-version
+        # check codeunit-specification-version
         try:
             codeunit_file_version = root.xpath('//cps:codeunit/@codeunitspecificationversion', namespaces=namespaces)[0]
             if codeunit_file_version != supported_codeunitspecificationversion:
@@ -510,11 +510,11 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
 
         # Generating badges
         if generate_badges:
-            testcoverageubfolger = "Other/Resources/TestCoverageBadges"
-            fulltestcoverageubfolger = os.path.join(repository_folder, codeunitname, testcoverageubfolger)
-            GeneralUtilities.ensure_directory_does_not_exist(fulltestcoverageubfolger)
-            GeneralUtilities.ensure_directory_exists(fulltestcoverageubfolger)
-            self._protected_sc.run_program("reportgenerator", f"-reports:Other/Artifacts/TestCoverage/TestCoverage.xml -targetdir:{testcoverageubfolger} -reporttypes:Badges --verbosity:{verbose_argument_for_reportgenerator}", os.path.join(repository_folder, codeunitname))
+            testcoverage_subfolder = "Other/Resources/TestCoverageBadges"
+            full_testcoverage_subfolder = os.path.join(repository_folder, codeunitname, testcoverage_subfolder)
+            GeneralUtilities.ensure_directory_does_not_exist(full_testcoverage_subfolder)
+            GeneralUtilities.ensure_directory_exists(full_testcoverage_subfolder)
+            self._protected_sc.run_program("reportgenerator", f"-reports:Other/Artifacts/TestCoverage/TestCoverage.xml -targetdir:{testcoverage_subfolder} -reporttypes:Badges --verbosity:{verbose_argument_for_reportgenerator}", os.path.join(repository_folder, codeunitname))
 
     @GeneralUtilities.check_arguments
     def __update_path_of_source_in_testcoverage_file(self, repository_folder: str, codeunitname: str) -> None:

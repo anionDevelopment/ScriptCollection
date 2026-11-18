@@ -709,11 +709,11 @@ class TFCPS_Tools_General:
         if constants_valuefile is None:
             constants_valuefile_folder = constants_folder
             constants_valuefile_name = f"{constantname}.value.txt"
-            constants_valuefiler_reference = f"./{constants_valuefile_name}"
+            constants_valuefile_reference = f"./{constants_valuefile_name}"
         else:
             constants_valuefile_folder = os.path.dirname(constants_valuefile)
             constants_valuefile_name = os.path.basename(constants_valuefile)
-            constants_valuefiler_reference = os.path.join(constants_valuefile_folder, constants_valuefile_name)
+            constants_valuefile_reference = os.path.join(constants_valuefile_folder, constants_valuefile_name)
 
         # TODO implement usage of self.reference_latest_version_of_xsd_when_generating_xml
         GeneralUtilities.write_text_to_file(constants_metafile, f"""<?xml version="1.0" encoding="UTF-8" ?>
@@ -721,7 +721,7 @@ class TFCPS_Tools_General:
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="{TFCPS_Tools_General.get_common_project_structure_namespace(CommonProjectStructureVersion)} {TFCPS_Tools_General.get_common_project_structure_xsd_base_url(CommonProjectStructureVersion)}/constant.xsd">
     <cps:name>{constantname}</cps:name>
     <cps:documentationsummary>{documentationsummary}</cps:documentationsummary>
-    <cps:path>{constants_valuefiler_reference}</cps:path>
+    <cps:path>{constants_valuefile_reference}</cps:path>
 </cps:constant>""")
         # TODO validate generated xml against xsd
         GeneralUtilities.write_text_to_file(os.path.join(constants_valuefile_folder, constants_valuefile_name), constant_value)
@@ -1636,14 +1636,14 @@ class TFCPS_Tools_General:
         line_elements = package.findall(".//line")
 
         amount_of_lines = 0
-        amount_of_hited_lines = 0
+        amount_of_hit_lines = 0
 
         for line in line_elements:
             amount_of_lines += 1
             hits = int(line.get("hits", "0"))
             if hits > 0:
-                amount_of_hited_lines += 1
-        line_rate = amount_of_hited_lines / amount_of_lines if amount_of_lines > 0 else 0.0
+                amount_of_hit_lines += 1
+        line_rate = amount_of_hit_lines / amount_of_lines if amount_of_lines > 0 else 0.0
         package.set("line-rate", str(line_rate))
         tree.write(coverage_file, pretty_print=True, xml_declaration=True, encoding="UTF-8")
 
