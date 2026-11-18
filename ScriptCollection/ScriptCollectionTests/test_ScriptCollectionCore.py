@@ -1741,4 +1741,28 @@ class ScriptCollectionCoreTests(unittest.TestCase):
                 # assert
                 self.assertNotIn("--api-key", run_program_argsasarray.call_args.args[1])
 
+    def test_normalize_invisible_characters_of_files_in_folder_lists_the_files_only_once_and_normalizes_only_matching_files(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            sc = ScriptCollectionCore()
+            sc.run_program_argsasarray("git", ["init"], folder)
+            GeneralUtilities.write_binary_to_file(os.path.join(folder, ".gitignore"), b"Ignored.md\n")
+            markdown_file = os.path.join(folder, "File.md")
+            json_file = os.path.join(folder, "File.json")
+            jsonl_file = os.path.join(folder, "File.jsonl")
+            other_file = os.path.join(folder, "File.cs")
+            ignored_file = os.path.join(folder, "Ignored.md")
+            for file in [markdown_file, json_file, jsonl_file, other_file, ignored_file]:
+                GeneralUtilities.write_binary_to_file(file, b"a\r\nb\r\n")
+            with patch.object(sc, "get_not_git_ignored_files_of_folder", wraps=sc.get_not_git_ignored_files_of_folder) as get_not_git_ignored_files_of_folder:
+                # act
+                sc.normalize_invisible_characters_of_files_in_folder(folder, ["md", "json"])
+                # assert
+                self.assertEqual(1, get_not_git_ignored_files_of_folder.call_count)
+            self.assertEqual(b"a\nb\n", GeneralUtilities.read_binary_from_file(markdown_file))
+            self.assertEqual(b"a\nb\n", GeneralUtilities.read_binary_from_file(json_file))
+            self.assertEqual(b"a\r\nb\r\n", GeneralUtilities.read_binary_from_file(jsonl_file))
+            self.assertEqual(b"a\r\nb\r\n", GeneralUtilities.read_binary_from_file(other_file))
+            self.assertEqual(b"a\r\nb\r\n", GeneralUtilities.read_binary_from_file(ignored_file))
+
 # TODO all testcases should be independent of epew

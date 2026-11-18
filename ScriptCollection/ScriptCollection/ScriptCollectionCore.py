@@ -3653,8 +3653,11 @@ TXDX
     def normalize_invisible_characters_of_files_in_folder(self, folder: str, file_extensions: list[str]) -> None:
         """Normalizes the line-endings of all not-git-ignored files inside 'folder' which have one of the given
         file-extensions. The file-extensions must be given without a leading dot (example: ["ts", "js"])."""
-        for file_extension in file_extensions:
-            for file in self.get_not_git_ignored_files_of_folder(folder, f".{file_extension}"):
+        # The not-git-ignored files are determined only once and filtered afterwards instead of determining them
+        # once per file-extension, because each determination runs "git ls-files" over the whole folder.
+        dotted_file_extensions = tuple(f".{file_extension}" for file_extension in file_extensions)
+        for file in self.get_not_git_ignored_files_of_folder(folder):
+            if file.endswith(dotted_file_extensions):
                 self.normalize_invisible_characters(file)
 
     @GeneralUtilities.check_arguments
