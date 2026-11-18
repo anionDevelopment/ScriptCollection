@@ -122,6 +122,13 @@ def write_openspec_configuration_file(repository: str) -> str:
     return configuration_file
 
 
+def write_openspec_skill(repository: str) -> None:
+    """Writes a skill which openspec deploys during its initialization, which declares that openspec is already initialized in the repository."""
+    skill_folder = os.path.join(repository, ".agents", "skills", "openspec-explore")
+    GeneralUtilities.ensure_directory_exists(skill_folder)
+    GeneralUtilities.write_text_to_file(os.path.join(skill_folder, "SKILL.md"), "content of an openspec-skill")
+
+
 @contextmanager
 def isolated_scriptcollection_configuration(configuration_folder: str):
     """Makes the given folder the machine-wide configuration of the code under test, instead of the real configuration of the machine
@@ -634,8 +641,9 @@ items:
         # arrange
         with tempfile.TemporaryDirectory() as repository:
             write_openspec_configuration_file(repository)
+            write_openspec_skill(repository)
             build_codeunits = create_build_codeunits_for_folder(repository)
-            with patch.object(build_codeunits.sc, "run_with_epew") as run_program:
+            with patch.object(build_codeunits.sc, "run_with_epew") as run_program, patch.object(build_codeunits.sc, "get_git_submodules", return_value=[]):
 
                 # act
                 update_openspec(build_codeunits)
@@ -644,6 +652,41 @@ items:
                 #"--force" is required because openspec skips the update when it considers the generated files up-to-date, and the update
                 #must run in the repository because that is the folder whose openspec-files are meant. The openspec-cli is started using epew
                 #because on windows it is a ".cmd"-file, which the direct process-start can not resolve.
+                run_program.assert_called_once_with("openspec", "update --force", repository)
+
+    def test_update_openspec_initializes_openspec_before_the_update_when_it_is_not_initialized_yet(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as repository:
+            write_openspec_configuration_file(repository)
+            build_codeunits = create_build_codeunits_for_folder(repository)
+            with patch.object(build_codeunits.sc, "run_with_epew") as run_program:
+
+                # act
+                update_openspec(build_codeunits)
+
+                # assert
+                #"openspec update" only updates the tools which are already set up in the repository, so without the initialization
+                #a repository which only contains "openspec/config.yaml" would never get any openspec-skill.
+                assert [call.args for call in run_program.call_args_list] == [
+                    ("openspec", "init --tools claude,cline,github-copilot,vibe,opencode,codex,gemini,cursor --force", repository),
+                    ("openspec", "update --force", repository),
+                ]
+
+    def test_update_openspec_does_not_initialize_openspec_when_a_legacy_openspec_skill_exists(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as repository:
+            write_openspec_configuration_file(repository)
+            legacy_skill_folder = os.path.join(repository, ".claude", "skills", "openspec-explore")
+            GeneralUtilities.ensure_directory_exists(legacy_skill_folder)
+            GeneralUtilities.write_text_to_file(os.path.join(legacy_skill_folder, "SKILL.md"), "content of an openspec-skill")
+            build_codeunits = create_build_codeunits_for_folder(repository)
+            with patch.object(build_codeunits.sc, "run_with_epew") as run_program:
+
+                # act
+                update_openspec(build_codeunits)
+
+                # assert
+                #a skill in the skill-folder of a tool (written by an older openspec-version) already sets openspec up, "openspec update" migrates it.
                 run_program.assert_called_once_with("openspec", "update --force", repository)
 
     def test_build_codeunits_in_container_passes_the_target_environment_type_into_the_container(self) -> None:

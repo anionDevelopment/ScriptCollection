@@ -76,6 +76,8 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     __assert_no_new_changes:bool = None
     __add_ready_to_merge_flag:bool = None
     __fast_lane:bool = None
+    # The tools for which openspec is initialized in a repository which uses openspec but in which openspec is not initialized yet.
+    __openspec_tools:list[str] = ["claude", "cline", "github-copilot", "vibe", "opencode", "codex", "gemini", "cursor"]
 
     def __init__(self,repository:str,loglevel:LogLevel,target_environment_type:str,additionalargumentsfile:str,use_cache:bool,is_pre_merge:bool,assertnonewchanges:bool,add_ready_to_merge_flag:bool=False,fast_lane:bool=False):
         self.sc=ScriptCollectionCore()
@@ -439,9 +441,28 @@ class TFCPS_CodeUnit_BuildCodeUnits:
     def __update_openspec(self) -> None:
         openspec_configuration_file: str = os.path.join(self.repository, "openspec", "config.yaml")
         if os.path.isfile(openspec_configuration_file):
+            if not self.__openspec_is_initialized():
+                #"openspec update" only updates the tools which are already set up in the repository, so a repository which only contains
+                #"openspec/config.yaml" would never get any openspec-skill without this initialization. "openspec init" keeps an existing config.yaml.
+                self.sc.log.log("Initialize openspec...")
+                self.sc.run_with_epew("openspec", f"init --tools {','.join(TFCPS_CodeUnit_BuildCodeUnits.__openspec_tools)} --force", self.repository)
             self.sc.log.log("Update openspec-instruction-files...")
             self.sc.run_with_epew("openspec", "update --force", self.repository)
             self.__replace_openspec_skill_links_by_copies()
+
+    @GeneralUtilities.check_arguments
+    def __openspec_is_initialized(self) -> bool:
+        """Returns whether openspec has already deployed a skill in the repository. openspec (since v2.0.0) deploys its skills to
+        '.agents/skills', older versions deployed them to the skill-folders of the tools (for example '.claude/skills'). These folders are
+        located in folders in the root of the repository whose names start with a dot. The names of the skills which openspec deploys
+        start with 'openspec-'."""
+        for name in os.listdir(self.repository):
+            skills_folder: str = os.path.join(self.repository, name, "skills")
+            if name.startswith(".") and name != ".git" and os.path.isdir(skills_folder):
+                for skill_name in os.listdir(skills_folder):
+                    if skill_name.startswith("openspec-") and os.path.isfile(os.path.join(skills_folder, skill_name, "SKILL.md")):
+                        return True
+        return False
 
     @GeneralUtilities.check_arguments
     def __replace_openspec_skill_links_by_copies(self) -> None:
