@@ -41,7 +41,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "5.0.2"
+version = "5.0.3"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -208,6 +208,8 @@ class ScriptCollectionCore:
     log: SCLog = None
     # Magic string which can be used inside the arguments of run_command_in_folder. Every occurrence of it will be replaced by the (resolved) actual_folder.
     run_command_in_folder_actual_folder_placeholder: str = "{actual_folder}"
+    # Minimal SCBuilder-version which is required by the build-pipeline and by the build of codeunits.
+    minimal_required_scbuilder_version: Version = Version("1.2.21")
     # The bytes with which a file starts when it was written with a utf8-byte-order-mark. See normalize_invisible_characters.
     __utf8_byte_order_mark: bytes = b"\xef\xbb\xbf"
     # Base-url of the GitHub-REST-API. This is an internal constant on purpose and deliberately not exposed as a parameter of the GitHub-functions.
@@ -5059,9 +5061,8 @@ OCR-content:
         expected_image = self.__get_scbuilder_image_from_image_definition_file(repository_folder)
         GeneralUtilities.assert_condition("scbuilder:" in expected_image, f"The SCBuilder-image '{expected_image}' defined in the image-definition-file of the repository is not a valid SCBuilder-image. It must contain 'scbuilder:'.")
         if not expected_image.endswith(":latest"):
-            minimal_required_scbuilder_version = Version("1.2.11")#the preparation-steps below require at least this SCBuilder-version
-            defined_scbuilder_version = self.__get_version_of_scbuilder_image(expected_image)#TODO remove this check after 2026-12-31
-            GeneralUtilities.assert_condition(defined_scbuilder_version >= minimal_required_scbuilder_version, f"The SCBuilder-version {defined_scbuilder_version} defined in the image-definition-file of the repository is older than the minimal required version {minimal_required_scbuilder_version}. Please update the SCBuilder-image.")
+            defined_scbuilder_version = self.__get_version_of_scbuilder_image(expected_image)
+            GeneralUtilities.assert_condition(defined_scbuilder_version >= ScriptCollectionCore.minimal_required_scbuilder_version, f"The SCBuilder-version {defined_scbuilder_version} defined in the image-definition-file of the repository is older than the minimal required version {ScriptCollectionCore.minimal_required_scbuilder_version}. Please update the SCBuilder-image.")
 
         self.run_program("update-ca-certificates")
         self.run_program_argsasarray("sh",["-c","docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder"])

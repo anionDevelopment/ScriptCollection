@@ -6,6 +6,7 @@ The following articles are available in the documentation
 - [Build-runner-configuration](./Articles/BuildRunnerConfiguration.md)
 - [Custom OCI-registries](./Articles/CustomOCIRegistries.md)
 - [Downloadable tools](./Articles/DownloadableTools.md)
+- [Encrypted containers in a repository](./Articles/EncryptedContainersInRepository.md)
 - [Platform-independent CLI-commands](./Articles/PlatformIndependentCLICommands.md)
 - [Required tools for CommonProjectStructure](./Articles/RequirementsForCommonProjectStructure.md)
 - [Restricting AI command-execution with scruncommandinfolder](./Articles/RestrictingAICommandExecution.md)

@@ -13,6 +13,7 @@ from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
 from ..ScriptCollection.SCLog import LogLevel
 from ..ScriptCollection.TFCPS.TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base
 from ..ScriptCollection.TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
+from ..ScriptCollection.TFCPS.TFCPS_ProjectLinting import TFCPS_ProjectLinting
 from ..ScriptCollection.TFCPS.TFCPS_Tools_General import TFCPS_Tools_General, CommonProjectStructureVersion, SupportedCommonProjectStructureVersions
 from ..ScriptCollection.TFCPS.Docker.TFCPS_CodeUnitSpecific_Docker import TFCPS_CodeUnitSpecific_Docker_Functions
 from ..ScriptCollection.TFCPS.Flutter.TFCPS_CodeUnitSpecific_Flutter import TFCPS_CodeUnitSpecific_Flutter_Functions
@@ -1399,11 +1400,11 @@ items:
     def test_check_security_txt_file_warns_if_the_file_does_not_exist(self) -> None:
         with tempfile.TemporaryDirectory() as repository:
             # arrange
-            build_codeunits = create_build_codeunits_for_folder(repository)
-            with patch.object(build_codeunits.sc.log, "log") as log:
+            project_linting = TFCPS_ProjectLinting(ScriptCollectionCore())
+            with patch.object(project_linting.sc.log, "log") as log:
 
                 # act
-                build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__check_security_txt_file(repository)  # pylint:disable=protected-access
+                project_linting._TFCPS_ProjectLinting__check_security_txt_file(repository)  # pylint:disable=protected-access
 
                 # assert
                 warnings = TasksForCommonProjectStructureTests.__get_logged_warnings(log)
@@ -1417,18 +1418,17 @@ items:
             GeneralUtilities.write_text_to_file(security_txt_file, "# comment: ignored\nContact: mailto:a@example.com\ncontact: https://example.com/contact\nExpires: 2034-12-31T23:59:59Z\n")
 
             # act
-            fields = TFCPS_CodeUnit_BuildCodeUnits._TFCPS_CodeUnit_BuildCodeUnits__get_security_txt_fields(security_txt_file)  # pylint:disable=protected-access
+            fields = TFCPS_ProjectLinting._TFCPS_ProjectLinting__get_security_txt_fields(security_txt_file)  # pylint:disable=protected-access
 
             # assert
             self.assertEqual({"contact": ["mailto:a@example.com", "https://example.com/contact"], "expires": ["2034-12-31T23:59:59Z"]}, fields)
 
     def __get_expiration_warnings(self, expires_values: list[str]) -> list[str]:
-        with tempfile.TemporaryDirectory() as repository:
-            build_codeunits = create_build_codeunits_for_folder(repository)
-            now = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-            with patch.object(build_codeunits.sc.log, "log") as log:
-                build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__check_security_txt_expiration("security.txt", {"expires": expires_values}, now)  # pylint:disable=protected-access
-                return TasksForCommonProjectStructureTests.__get_logged_warnings(log)
+        project_linting = TFCPS_ProjectLinting(ScriptCollectionCore())
+        now = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        with patch.object(project_linting.sc.log, "log") as log:
+            project_linting._TFCPS_ProjectLinting__check_security_txt_expiration("security.txt", {"expires": expires_values}, now)  # pylint:disable=protected-access
+            return TasksForCommonProjectStructureTests.__get_logged_warnings(log)
 
     def test_check_security_txt_expiration_does_not_warn_if_the_file_is_valid_for_more_than_3_months(self) -> None:
         self.assertEqual([], self.__get_expiration_warnings(["2034-12-31T23:59:59.999"]))
@@ -1451,13 +1451,13 @@ items:
     def test_check_security_txt_signature_warns_if_the_file_is_not_signed(self) -> None:
         with tempfile.TemporaryDirectory() as repository:
             # arrange
-            build_codeunits = create_build_codeunits_for_folder(repository)
+            project_linting = TFCPS_ProjectLinting(ScriptCollectionCore())
             security_txt_file = os.path.join(repository, "security.txt")
             GeneralUtilities.write_text_to_file(security_txt_file, "Contact: mailto:a@example.com\n")
-            with patch.object(build_codeunits.sc.log, "log") as log:
+            with patch.object(project_linting.sc.log, "log") as log:
 
                 # act
-                build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__check_security_txt_signature(security_txt_file, {}, True)  # pylint:disable=protected-access
+                project_linting._TFCPS_ProjectLinting__check_security_txt_signature(security_txt_file, {}, True)  # pylint:disable=protected-access
 
                 # assert
                 warnings = TasksForCommonProjectStructureTests.__get_logged_warnings(log)
@@ -1469,30 +1469,60 @@ items:
         armored = "text before\n-----BEGIN PGP PUBLIC KEY BLOCK-----\nComment: some comment\n\nAAEC\nAwQF\n=abcd\n-----END PGP PUBLIC KEY BLOCK-----\n"
 
         # act
-        result = TFCPS_CodeUnit_BuildCodeUnits._TFCPS_CodeUnit_BuildCodeUnits__dearmor_pgp_public_key(armored)  # pylint:disable=protected-access
+        result = TFCPS_ProjectLinting._TFCPS_ProjectLinting__dearmor_pgp_public_key(armored)  # pylint:disable=protected-access
 
         # assert
         self.assertEqual(bytes([0, 1, 2, 3, 4, 5]), result)
 
     def test_dearmor_pgp_public_key_returns_none_if_there_is_no_public_key_block(self) -> None:
-        self.assertIsNone(TFCPS_CodeUnit_BuildCodeUnits._TFCPS_CodeUnit_BuildCodeUnits__dearmor_pgp_public_key("<html>not found</html>"))  # pylint:disable=protected-access
+        self.assertIsNone(TFCPS_ProjectLinting._TFCPS_ProjectLinting__dearmor_pgp_public_key("<html>not found</html>"))  # pylint:disable=protected-access
 
     def test_check_security_txt_urls_are_reachable_warns_for_an_unreachable_url_and_ignores_a_non_http_value(self) -> None:
+        # arrange
+        project_linting = TFCPS_ProjectLinting(ScriptCollectionCore())
+        response = SimpleNamespace(ok=False, status_code=404)
+        response_context = MagicMock()
+        response_context.__enter__.return_value = response
+        fields = {"encryption": ["https://example.com/key.txt", "openpgp4fpr:BD519004BC880C732CA647B872A38C3476BE272F"]}
+        with patch.object(project_linting.sc.log, "log") as log, patch("requests.get", return_value=response_context) as get:
+
+            # act
+            project_linting._TFCPS_ProjectLinting__check_security_txt_urls_are_reachable("security.txt", fields, "Encryption")  # pylint:disable=protected-access
+
+            # assert
+            warnings = TasksForCommonProjectStructureTests.__get_logged_warnings(log)
+            self.assertEqual(1, len(warnings))
+            self.assertIn("'https://example.com/key.txt'", warnings[0])
+            self.assertIn("HTTP-status 404", warnings[0])
+            get.assert_called_once()
+
+    def test_run_linting_of_all_codeunits_raises_an_error_if_the_folder_is_no_repository_with_codeunits(self) -> None:
         with tempfile.TemporaryDirectory() as repository:
             # arrange
-            build_codeunits = create_build_codeunits_for_folder(repository)
-            response = SimpleNamespace(ok=False, status_code=404)
-            response_context = MagicMock()
-            response_context.__enter__.return_value = response
-            fields = {"encryption": ["https://example.com/key.txt", "openpgp4fpr:BD519004BC880C732CA647B872A38C3476BE272F"]}
-            with patch.object(build_codeunits.sc.log, "log") as log, patch("requests.get", return_value=response_context) as get:
+            tools = TFCPS_Tools_General(ScriptCollectionCore())
+
+            # act & assert
+            with self.assertRaises(ValueError):
+                tools.run_linting_of_all_codeunits(repository)
+
+    def test_run_linting_of_all_codeunits_runs_existing_linting_scripts_and_returns_codeunits_with_issues(self) -> None:
+        with tempfile.TemporaryDirectory() as repository:
+            # arrange
+            GeneralUtilities.ensure_directory_exists(os.path.join(repository, ".ScriptCollection"))
+            GeneralUtilities.ensure_file_exists(os.path.join(repository, ".ScriptCollection", "ProductInformation.xml"))
+            for codeunit_name in ["CodeunitA", "CodeunitB"]:
+                GeneralUtilities.ensure_directory_exists(os.path.join(repository, codeunit_name, "Other", "QualityCheck"))
+                GeneralUtilities.ensure_file_exists(os.path.join(repository, codeunit_name, "Other", "QualityCheck", "Linting.py"))
+            GeneralUtilities.ensure_directory_exists(os.path.join(repository, "CodeunitWithoutLinting"))
+            sc = ScriptCollectionCore()
+            tools = TFCPS_Tools_General(sc)
+            exit_codes = {"CodeunitA": 0, "CodeunitB": 1}
+            with patch.object(tools, "get_codeunits", return_value=["CodeunitA", "CodeunitB", "CodeunitWithoutLinting"]), patch.object(sc, "run_program", side_effect=lambda program, arguments, working_directory, **kwargs: (exit_codes[Path(working_directory).parent.parent.name], "", "", 0)) as run_program, patch.object(TFCPS_ProjectLinting, "do_project_linting") as do_project_linting:
 
                 # act
-                build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__check_security_txt_urls_are_reachable("security.txt", fields, "Encryption")  # pylint:disable=protected-access
+                result = tools.run_linting_of_all_codeunits(repository)
 
                 # assert
-                warnings = TasksForCommonProjectStructureTests.__get_logged_warnings(log)
-                self.assertEqual(1, len(warnings))
-                self.assertIn("'https://example.com/key.txt'", warnings[0])
-                self.assertIn("HTTP-status 404", warnings[0])
-                get.assert_called_once()
+                self.assertEqual(["CodeunitB"], result)
+                self.assertEqual(2, run_program.call_count)
+                do_project_linting.assert_called_once_with(repository)

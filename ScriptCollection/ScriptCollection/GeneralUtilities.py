@@ -1058,12 +1058,34 @@ class GeneralUtilities:
     @staticmethod
     @check_arguments
     def arguments_to_array(arguments_as_string: str) -> list[str]:
+        """Splits a commandline-argument-string into the single arguments.
+        Arguments are separated by whitespaces. A part which is enclosed in double-quotes belongs to one argument, even if it contains whitespaces;
+        the double-quotes themselves are not part of the argument (so '"a b"' results in the argument 'a b' and '--x="a b"' results in '--x=a b').
+        An explicitly quoted empty string ('""') results in an empty argument. Single-quotes and backslashes have no special meaning, so for example
+        "Don't" and "C:\\Folder" are kept as they are. A double-quote which is not closed raises a ValueError."""
         if arguments_as_string is None:
             return []
-        if GeneralUtilities.string_has_content(arguments_as_string):
-            return arguments_as_string.split(" ")  # TODO this function should get improved to allow whitespaces in quote-substrings
-        else:
-            return []
+        result: list[str] = []
+        current_argument: list[str] = []
+        current_argument_exists = False
+        is_inside_quotes = False
+        for character in arguments_as_string:
+            if character == "\"":
+                is_inside_quotes = not is_inside_quotes
+                current_argument_exists = True
+            elif character.isspace() and not is_inside_quotes:
+                if current_argument_exists:
+                    result.append("".join(current_argument))
+                    current_argument = []
+                    current_argument_exists = False
+            else:
+                current_argument.append(character)
+                current_argument_exists = True
+        if is_inside_quotes:
+            raise ValueError(f"The argument-string contains a double-quote which is not closed: {arguments_as_string}")
+        if current_argument_exists:
+            result.append("".join(current_argument))
+        return result
 
     @staticmethod
     @check_arguments

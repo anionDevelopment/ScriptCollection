@@ -19,6 +19,7 @@ from .OCIImages.OCIImageManager import OCIImageManager
 from .AgentRunner import AgentRunner, AgentRunnerConfiguration, CodingAgent
 from .LinuxServerSecurityCheck.LinuxServerSecurityChecker import LinuxServerSecurityChecker
 from .LinuxServerSecurityCheck.LinuxSystemAccess import LinuxSystemAccess
+from .EncryptedContainerInRepository import EncryptedContainerInRepository
 
 
 def RunAgentInSandbox() -> int:
@@ -408,6 +409,21 @@ def UpdateLockFilesOfDotNetCodeUnits() -> int:
     if amount_of_updated_codeunits == 0:
         sc.log.log(f"The repository \"{repository_folder}\" contains no dotnet-codeunit, so there is no lock-file to update.", LogLevel.Warning)
     return 0
+
+def Linting() -> int:
+    parser = argparse.ArgumentParser(description="Runs the linting-script (\"Other/QualityCheck/Linting.py\") of every codeunit of a repository which has such a script. Exit-code 0 if and only if no linting-script reported issues.")
+    parser.add_argument('-r', '--repository', required=False, default=".", help="Folder of the repository. Can be relative to the current working directory. Defaults to the current working directory.")
+    verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
+    parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
+    args = parser.parse_args()
+    repository_folder: str = GeneralUtilities.resolve_relative_path(args.repository, os.getcwd())
+    sc: ScriptCollectionCore = ScriptCollectionCore()
+    sc.log.loglevel = LogLevel(int(args.verbosity))
+    codeunits_with_linting_issues: list[str] = TFCPS_Tools_General(sc).run_linting_of_all_codeunits(repository_folder)
+    if len(codeunits_with_linting_issues) == 0:
+        return 0
+    sc.log.log(f"Linting-issues were found in the following codeunits: {', '.join(codeunits_with_linting_issues)}", LogLevel.Error)
+    return 1
 
 def UpdateDependenciesC() -> int:
     parser = argparse.ArgumentParser()
@@ -1437,6 +1453,33 @@ def ShowTrustedRootCAs() -> int:
         return 0
     for entry in entries:
         GeneralUtilities.write_message_to_stdout(entry)
+    return 0
+
+
+def __parse_arguments_for_encrypted_container(description: str) -> tuple[str, str, str]:
+    parser = argparse.ArgumentParser(description=f"{description} The containers are defined in \"<folder>/.ScriptCollection/EncryptedFolders.csv\" (columns \"Name;File;Target\", separated by semicolon, first line is the header).")
+    parser.add_argument('-f', '--folder', required=False, default=".", help="Folder (usually the root-folder of a git-repository) which contains the definition-file. Can be relative to the current working directory. Defaults to the current working directory.")
+    parser.add_argument('-n', '--name', required=True, help="Name of the container as defined in the column \"Name\" of the definition-file.")
+    parser.add_argument('-p', '--password', required=True, help="Password of the container.")
+    args = parser.parse_args()
+    return GeneralUtilities.resolve_relative_path(args.folder, os.getcwd()), args.name, args.password
+
+
+def InitEncryptedContainerInRepository() -> int:
+    folder, name, password = __parse_arguments_for_encrypted_container("Creates the container-file of an encrypted container as encrypted empty container. Fails if the container-file already exists.")
+    EncryptedContainerInRepository(ScriptCollectionCore()).initialize(folder, name, password)
+    return 0
+
+
+def DecryptInRepository() -> int:
+    folder, name, password = __parse_arguments_for_encrypted_container("Decrypts the container-file of an encrypted container into its target-folder. Fails if the target-folder is not empty. If the folder is a git-repository then the target-folder is added to the .gitignore-file if it is not git-ignored yet. Reverse-function of scencryptinrepo.")
+    EncryptedContainerInRepository(ScriptCollectionCore()).decrypt(folder, name, password)
+    return 0
+
+
+def EncryptInRepository() -> int:
+    folder, name, password = __parse_arguments_for_encrypted_container("Encrypts the content of the target-folder of an encrypted container into its container-file and deletes the content of the target-folder afterwards. An existing container-file must be decryptable with the given password; it remains unchanged if its content is equal to the content of the target-folder. Reverse-function of scdecryptinrepo.")
+    EncryptedContainerInRepository(ScriptCollectionCore()).encrypt(folder, name, password)
     return 0
 
 
