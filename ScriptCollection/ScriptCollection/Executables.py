@@ -19,6 +19,7 @@ from .OCIImages.OCIImageManager import OCIImageManager
 from .AgentRunner import AgentRunner, AgentRunnerConfiguration, CodingAgent
 from .LinuxServerSecurityCheck.LinuxServerSecurityChecker import LinuxServerSecurityChecker
 from .LinuxServerSecurityCheck.LinuxSystemAccess import LinuxSystemAccess
+from .EncryptedContainerInRepository import EncryptedContainerInRepository
 
 
 def RunAgentInSandbox() -> int:
@@ -1452,6 +1453,33 @@ def ShowTrustedRootCAs() -> int:
         return 0
     for entry in entries:
         GeneralUtilities.write_message_to_stdout(entry)
+    return 0
+
+
+def __parse_arguments_for_encrypted_container(description: str) -> tuple[str, str, str]:
+    parser = argparse.ArgumentParser(description=f"{description} The containers are defined in \"<folder>/.ScriptCollection/EncryptedFolders.csv\" (columns \"Name;File;Target\", separated by semicolon, first line is the header).")
+    parser.add_argument('-f', '--folder', required=False, default=".", help="Folder (usually the root-folder of a git-repository) which contains the definition-file. Can be relative to the current working directory. Defaults to the current working directory.")
+    parser.add_argument('-n', '--name', required=True, help="Name of the container as defined in the column \"Name\" of the definition-file.")
+    parser.add_argument('-p', '--password', required=True, help="Password of the container.")
+    args = parser.parse_args()
+    return GeneralUtilities.resolve_relative_path(args.folder, os.getcwd()), args.name, args.password
+
+
+def InitEncryptedContainerInRepository() -> int:
+    folder, name, password = __parse_arguments_for_encrypted_container("Creates the container-file of an encrypted container as encrypted empty container. Fails if the container-file already exists.")
+    EncryptedContainerInRepository(ScriptCollectionCore()).initialize(folder, name, password)
+    return 0
+
+
+def DecryptInRepository() -> int:
+    folder, name, password = __parse_arguments_for_encrypted_container("Decrypts the container-file of an encrypted container into its target-folder. Fails if the target-folder is not empty. If the folder is a git-repository then the target-folder is added to the .gitignore-file if it is not git-ignored yet. Reverse-function of scencryptinrepo.")
+    EncryptedContainerInRepository(ScriptCollectionCore()).decrypt(folder, name, password)
+    return 0
+
+
+def EncryptInRepository() -> int:
+    folder, name, password = __parse_arguments_for_encrypted_container("Encrypts the content of the target-folder of an encrypted container into its container-file and deletes the content of the target-folder afterwards. An existing container-file must be decryptable with the given password; it remains unchanged if its content is equal to the content of the target-folder. Reverse-function of scdecryptinrepo.")
+    EncryptedContainerInRepository(ScriptCollectionCore()).encrypt(folder, name, password)
     return 0
 
 

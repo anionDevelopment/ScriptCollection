@@ -31,6 +31,7 @@ dependencies = [
     "codespell>=2.4.3",
     "CountryInformation>=1.0.12",
     "coverage>=7.16.2",
+    "cryptography>=50.0.0",
     "cyclonedx-bom>=7.1.0",
     "defusedxml>=0.7.1",
     "keyboard>=0.13.5",
@@ -150,6 +151,9 @@ sctrustedrootcatobase64 = "ScriptCollection.Executables:TrustedRootCAToBase64"
 sctrustedrootcas = "ScriptCollection.Executables:ShowTrustedRootCAs"
 scwebp2png = "ScriptCollection.Executables:WebpToPng"
 sclinuxserversecuritycheck = "ScriptCollection.Executables:LinuxServerSecurityCheck"
+scinitencryptedcontainerinrepo = "ScriptCollection.Executables:InitEncryptedContainerInRepository"
+scdecryptinrepo = "ScriptCollection.Executables:DecryptInRepository"
+scencryptinrepo = "ScriptCollection.Executables:EncryptInRepository"
 
 [tool.setuptools]
 zip-safe = false
