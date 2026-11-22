@@ -409,6 +409,21 @@ def UpdateLockFilesOfDotNetCodeUnits() -> int:
         sc.log.log(f"The repository \"{repository_folder}\" contains no dotnet-codeunit, so there is no lock-file to update.", LogLevel.Warning)
     return 0
 
+def Linting() -> int:
+    parser = argparse.ArgumentParser(description="Runs the linting-script (\"Other/QualityCheck/Linting.py\") of every codeunit of a repository which has such a script. Exit-code 0 if and only if no linting-script reported issues.")
+    parser.add_argument('-r', '--repository', required=False, default=".", help="Folder of the repository. Can be relative to the current working directory. Defaults to the current working directory.")
+    verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
+    parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
+    args = parser.parse_args()
+    repository_folder: str = GeneralUtilities.resolve_relative_path(args.repository, os.getcwd())
+    sc: ScriptCollectionCore = ScriptCollectionCore()
+    sc.log.loglevel = LogLevel(int(args.verbosity))
+    codeunits_with_linting_issues: list[str] = TFCPS_Tools_General(sc).run_linting_of_all_codeunits(repository_folder)
+    if len(codeunits_with_linting_issues) == 0:
+        return 0
+    sc.log.log(f"Linting-issues were found in the following codeunits: {', '.join(codeunits_with_linting_issues)}", LogLevel.Error)
+    return 1
+
 def UpdateDependenciesC() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('-r','--repositoryfolder', required=False, default=".")

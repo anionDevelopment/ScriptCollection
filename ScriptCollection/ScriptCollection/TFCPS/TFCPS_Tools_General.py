@@ -26,6 +26,7 @@ from ..OCIImages.OCIImageManager import OCIImageManager
 from .PackageSource import PackageSource
 from .NpmDependencies import NpmDependencies
 from .PlantUMLRenderer import PlantUMLRenderer
+from .TFCPS_ProjectLinting import TFCPS_ProjectLinting
 
 # Central definition of the common-project-structure-version. This is the single place which has to be updated to bump the
 # whole repository (and all common-project-structure-files which are generated or validated by ScriptCollection) to a new
@@ -309,6 +310,38 @@ class TFCPS_Tools_General:
                 self.__sc.run_program(GeneralUtilities.get_python_executable(), "UpdateVisualRegressionBaselines.py", script_folder, print_live_output=True)
             else:
                 self.__sc.log.log(f"Codeunit {codeunit_name} has no visual-regression-baselines to update.", LogLevel.Debug)
+
+    @GeneralUtilities.check_arguments
+    def assert_is_repository_with_codeunits(self, repository_folder: str) -> None:
+        """Raises an error if the given folder is not a repository which implements the common project structure.
+        Such a repository is recognized by the file "<repository>/.ScriptCollection/ProductInformation.xml"."""
+        product_information_file: str = os.path.join(repository_folder, ".ScriptCollection", "ProductInformation.xml")
+        if not os.path.isfile(product_information_file):
+            raise ValueError(f"'{repository_folder}' is no repository with codeunits because '{product_information_file}' does not exist.")
+
+    @GeneralUtilities.check_arguments
+    def run_linting_of_all_codeunits(self, repository_folder: str) -> list[str]:
+        """Runs the linting of every codeunit of the repository.
+
+        For each codeunit the script "Other/QualityCheck/Linting.py" is run (in that folder) if it exists; a codeunit
+        which does not have that script is skipped. The linting of all codeunits is run even if the linting of a
+        codeunit fails. Afterwards the project-linting (see TFCPS_ProjectLinting) is done.
+        Returns the names of the codeunits whose linting reported issues."""
+        self.assert_is_repository_with_codeunits(repository_folder)
+        codeunits_with_linting_issues: list[str] = []
+        for codeunit_name in self.get_codeunits(repository_folder):
+            script_folder: str = os.path.join(repository_folder, codeunit_name, "Other", "QualityCheck")
+            script_file: str = os.path.join(script_folder, "Linting.py")
+            if os.path.isfile(script_file):
+                self.__sc.log.log(f"Run linting of codeunit {codeunit_name}...")
+                exit_code: int = self.__sc.run_program(GeneralUtilities.get_python_executable(), f"Linting.py --verbosity {int(self.__sc.log.loglevel)}", script_folder, print_live_output=True, throw_exception_if_exitcode_is_not_zero=False)[0]
+                if exit_code != 0:
+                    self.__sc.log.log(f"Linting of codeunit {codeunit_name} reported issues (exit-code {exit_code}).", LogLevel.Warning)
+                    codeunits_with_linting_issues.append(codeunit_name)
+            else:
+                self.__sc.log.log(f"Codeunit {codeunit_name} has no linting-script.", LogLevel.Debug)
+        TFCPS_ProjectLinting(self.__sc).do_project_linting(repository_folder)
+        return codeunits_with_linting_issues
 
     @GeneralUtilities.check_arguments
     def repository_has_codeunits(self, repository: str, ignore_disabled_codeunits: bool = True) -> bool:
