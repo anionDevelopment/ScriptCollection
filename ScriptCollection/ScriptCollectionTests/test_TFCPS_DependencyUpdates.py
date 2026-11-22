@@ -2,12 +2,17 @@ import json
 import os
 import tempfile
 import unittest
-from ..ScriptCollection.GeneralUtilities import GeneralUtilities
+from unittest.mock import MagicMock
+from ..ScriptCollection.GeneralUtilities import GeneralUtilities, VersionEchelon
+from ..ScriptCollection.SCLog import LogLevel
+from ..ScriptCollection.TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
+from ..ScriptCollection.TFCPS.TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base
 from ..ScriptCollection.TFCPS.NpmDependencies import NpmDependencies
 from ..ScriptCollection.TFCPS.PubDependencies import PubDependencies
 from ..ScriptCollection.TFCPS.Flutter.TFCPS_CodeUnitSpecific_Flutter import TFCPS_CodeUnitSpecific_Flutter_Functions
 from ..ScriptCollection.TFCPS.NodeJS.TFCPS_CodeUnitSpecific_NodeJS import TFCPS_CodeUnitSpecific_NodeJS_Functions
 from ..ScriptCollection.TFCPS.DotNet.TFCPS_CodeUnitSpecific_DotNet import TFCPS_CodeUnitSpecific_DotNet_Functions
+from ..ScriptCollection.TFCPS.Docker.TFCPS_CodeUnitSpecific_Docker import TFCPS_CodeUnitSpecific_Docker_Functions
 
 
 def create_codeunit_functions(codeunit_type: type, codeunit_folder: str):
@@ -523,3 +528,197 @@ class NodeJSCodeUnitDependenciesTests(unittest.TestCase):
 
             # assert
             self.assertEqual({"@angular/core": {"22.1.1"}, "rxjs": {"7.8.1"}, "eslint": {"9.21.0"}}, actual_result)
+
+
+class LogNewerMajorVersionsOfDependencyTests(unittest.TestCase):
+
+    def __log_newer_major_versions(self, available_versions: list[str], used_version: str) -> MagicMock:
+        """Runs the function under test with a stand-in for the ScriptCollectionCore and returns the stand-in of its log."""
+        sc = MagicMock()
+        tools = TFCPS_Tools_General(sc)
+        tools.log_newer_major_versions_of_dependency("OpenSpec", available_versions, used_version)
+        return sc.log
+
+    def test_nothing_is_logged_if_the_latest_major_version_is_used(self) -> None:
+        # arrange
+        available_versions = ["1.16.0", "1.17.0"]
+
+        # act
+        log = self.__log_newer_major_versions(available_versions, "1.17.0")
+
+        # assert
+        log.log.assert_not_called()
+
+    def test_an_information_is_logged_if_one_newer_major_version_exists(self) -> None:
+        # arrange
+        available_versions = ["1.16.0", "1.17.0", "2.0.0"]
+
+        # act
+        log = self.__log_newer_major_versions(available_versions, "1.17.0")
+
+        # assert
+        log.log.assert_called_once()
+        self.assertEqual(LogLevel.Information, log.log.call_args[0][1])
+        self.assertIn("2.0.0", log.log.call_args[0][0])
+
+    def test_a_warning_is_logged_if_two_newer_major_versions_exist(self) -> None:
+        # arrange
+        available_versions = ["1.17.0", "1.18.0", "2.0.0", "3.0.0"]
+
+        # act
+        log = self.__log_newer_major_versions(available_versions, "1.18.0")
+
+        # assert
+        log.log.assert_called_once()
+        self.assertEqual(LogLevel.Warning, log.log.call_args[0][1])
+        self.assertIn("3.0.0", log.log.call_args[0][0])
+
+
+class PackageJsonFileDependencyUpdateTests(unittest.TestCase):
+
+    available_versions: dict[str, list[str]] = {
+        "husky": ["9.0.11", "9.1.6", "9.1.7", "10.0.0"],
+        "eslint": ["9.21.0", "9.22.0"],
+    }
+
+    def __update(self, package_json_content: dict) -> dict:
+        """Runs the function under test on a package-file with the given content, with the registry replaced by
+        self.available_versions, and returns the content of the package-file afterwards."""
+        with tempfile.TemporaryDirectory() as folder:
+            package_json_file = os.path.join(folder, "package.json")
+            GeneralUtilities.write_text_to_file(package_json_file, json.dumps(package_json_content, indent=2))
+            original_get_available_versions = NpmDependencies.get_available_versions
+            NpmDependencies.get_available_versions = staticmethod(lambda dependencyname: self.available_versions[dependencyname])
+            try:
+                TFCPS_Tools_General(MagicMock()).update_dependencies_of_package_json_file(package_json_file, VersionEchelon.LatestPatchOrLatestMinor)
+            finally:
+                NpmDependencies.get_available_versions = staticmethod(original_get_available_versions)
+            return json.loads(GeneralUtilities.read_text_from_file(package_json_file))
+
+    def test_dependencies_and_dev_dependencies_are_updated_without_taking_over_a_new_major_version(self) -> None:
+        # arrange
+        content = {"name": "Example", "dependencies": {"eslint": "~9.21.0"}, "devDependencies": {"husky": "9.0.11"}}
+
+        # act
+        actual_result = self.__update(content)
+
+        # assert
+        self.assertEqual("~9.22.0", actual_result["dependencies"]["eslint"])
+        self.assertEqual("9.1.7", actual_result["devDependencies"]["husky"])
+
+    def test_content_which_is_not_a_dependency_is_kept(self) -> None:
+        # arrange
+        content = {"name": "Example", "scripts": {"prepare": "husky"}, "devDependencies": {"husky": "9.1.7"}, "version": "1.2.3"}
+
+        # act
+        actual_result = self.__update(content)
+
+        # assert
+        self.assertEqual(content, actual_result)
+
+
+class CodeUnitWithStaticDependencies(TFCPS_CodeUnitSpecific_Base):
+    """A codeunit-type whose dependencies and available versions are fixed, so that the generic dependency-update of the
+    base-class can be tested without a codeunit on disk."""
+
+    available_versions: dict[str, list[str]] = None
+    dependencies: dict[str, set[str]] = None
+
+    def get_dependencies(self) -> dict[str, set[str]]:
+        return self.dependencies
+
+    def get_available_versions(self, dependencyname: str) -> list[str]:
+        return self.available_versions[dependencyname]
+
+    def set_dependency_version(self, name: str, new_version: str) -> None:
+        self.dependencies[name] = {new_version}
+
+    def get_codeunit_name(self) -> str:
+        return "Demo"
+
+
+class GenericDependencyUpdateTests(unittest.TestCase):
+
+    def test_update_logs_the_newer_major_versions_of_every_dependency(self) -> None:
+        # arrange
+        codeunit = CodeUnitWithStaticDependencies.__new__(CodeUnitWithStaticDependencies)
+        codeunit.dependencies = {"a": {"1.16.0"}, "b": {"2.0.0"}}
+        codeunit.available_versions = {"a": ["1.16.0", "1.17.0", "2.0.0"], "b": ["2.0.0", "2.1.0"]}
+        codeunit.tfcps_Tools_General = MagicMock()
+        codeunit.tfcps_Tools_General.get_dependencies_which_are_ignored_from_updates.return_value = []
+        codeunit._protected_sc = MagicMock()  # pylint: disable=protected-access
+        codeunit._TFCPS_CodeUnitSpecific_Base__codeunit_folder = "Demo"  # pylint: disable=protected-access,attribute-defined-outside-init
+
+        # act
+        codeunit.update_dependencies_with_specific_echelon(VersionEchelon.LatestPatchOrLatestMinor)
+
+        # assert
+        log_function = codeunit.tfcps_Tools_General.log_newer_major_versions_of_dependency
+        self.assertEqual(2, log_function.call_count)
+        log_function.assert_any_call("a", ["1.16.0", "1.17.0", "2.0.0"], "1.17.0")
+        log_function.assert_any_call("b", ["2.0.0", "2.1.0"], "2.1.0")
+
+
+class DockerDependencyUpdateTests(unittest.TestCase):
+
+    def __create_docker_codeunit(self, codeunit_folder: str, versions: dict[str, str], ignored_dependencies: list[str]) -> TFCPS_CodeUnitSpecific_Docker_Functions:
+        """Returns a docker-codeunit whose dependencies are pinned in "Other/Resources/Dependencies" of the given folder."""
+        for dependency_name, version in versions.items():
+            write_package(os.path.join(codeunit_folder, "Other", "Resources", "Dependencies", dependency_name), "Version.txt", version)
+        result = create_codeunit_functions(TFCPS_CodeUnitSpecific_Docker_Functions, codeunit_folder)
+        # pylint:disable=protected-access
+        result._TFCPS_CodeUnitSpecific_Docker_Functions__available_versions_functions = {}
+        result._protected_sc = MagicMock()
+        result.tfcps_Tools_General = TFCPS_Tools_General(result._protected_sc)
+        result.tfcps_Tools_General.get_dependencies_which_are_ignored_from_updates = MagicMock(return_value=ignored_dependencies)
+        return result
+
+    def __read_version(self, codeunit_folder: str, dependency_name: str) -> str:
+        return GeneralUtilities.read_text_from_file(os.path.join(codeunit_folder, "Other", "Resources", "Dependencies", dependency_name, "Version.txt"))
+
+    def test_get_dependencies_returns_the_versions_of_the_resources_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as codeunit_folder:
+            # arrange
+            codeunit = self.__create_docker_codeunit(codeunit_folder, {"OpenSpec": "1.16.0", "Node": "22"}, [])
+
+            # act
+            actual = codeunit.get_dependencies()
+
+            # assert
+            self.assertEqual({"Node": {"22"}, "OpenSpec": {"1.16.0"}}, actual)
+
+    def test_get_available_versions_passes_the_current_version_to_the_registered_function(self) -> None:
+        with tempfile.TemporaryDirectory() as codeunit_folder:
+            # arrange
+            codeunit = self.__create_docker_codeunit(codeunit_folder, {"OpenSpec": "1.16.0"}, [])
+            codeunit.register_available_versions_function("OpenSpec", lambda current_version: [current_version, "1.17.0"])
+
+            # act
+            actual = codeunit.get_available_versions("OpenSpec")
+
+            # assert
+            self.assertEqual(["1.16.0", "1.17.0"], actual)
+
+    def test_get_available_versions_rejects_a_dependency_without_registered_function(self) -> None:
+        with tempfile.TemporaryDirectory() as codeunit_folder:
+            # arrange
+            codeunit = self.__create_docker_codeunit(codeunit_folder, {"OpenSpec": "1.16.0"}, [])
+
+            # act & assert
+            with self.assertRaises(ValueError):
+                codeunit.get_available_versions("OpenSpec")
+
+    def test_update_updates_the_registered_dependencies_and_skips_the_ignored_ones(self) -> None:
+        with tempfile.TemporaryDirectory() as codeunit_folder:
+            # arrange
+            codeunit = self.__create_docker_codeunit(codeunit_folder, {"OpenSpec": "1.16.0", "Node": "22"}, ["Node"])
+            codeunit.register_available_versions_function("OpenSpec", lambda current_version: ["1.16.0", "1.17.0", "2.0.0"])
+
+            # act
+            codeunit.update_dependencies()
+
+            # assert
+            self.assertEqual("1.17.0", self.__read_version(codeunit_folder, "OpenSpec"))
+            self.assertEqual("22", self.__read_version(codeunit_folder, "Node"))
+            # pylint:disable=protected-access
+            codeunit._protected_sc.log.log.assert_any_call("Dependency OpenSpec is used in version 1.17.0, which is 1 major-version(s) behind the latest available version 2.0.0. A new major-version has to be taken over deliberately.", LogLevel.Information)

@@ -169,7 +169,7 @@ class TFCPS_CodeUnitSpecific_CPP_Functions(TFCPS_CodeUnitSpecific_Base):
             #run in - which is also the folder __collect_output_files searches afterwards.
             #Nothing of a C/C++-codeunit is left out of the archive the runner gets: where a build-command puts its
             #output is defined by that command, so there is no folder which is known to contain state of this machine.
-            self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "/bin/sh", ["-c", " && ".join(self.macos_build_commands)], source_folder, source_folder, [])
+            self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "/bin/sh", ["-c", " && ".join(self.macos_build_commands)], source_folder, source_folder, [], {})
         self.__collect_output_files(source_folder, self.macos_output_file_patterns, "BuildResult_MacOS")
 
     @GeneralUtilities.check_arguments
@@ -207,11 +207,12 @@ class TFCPS_CodeUnitSpecific_CPP_Functions(TFCPS_CodeUnitSpecific_Base):
 
     @GeneralUtilities.check_arguments
     def linting(self) -> None:
-        # There is no single, universal C/C++-linter (unlike e.g. clippy for Rust), and a codeunit of this kind can
-        # even vendor a foreign upstream whose sourcecode must not be changed here at all. What every codeunit of
-        # this kind owns regardless of that is its own scripts, so only those are normalized by default.
+        # There is no single, universal C/C++-linter (unlike e.g. clippy for Rust). The invisible characters of the
+        # C/C++-sourcecode are normalized in the whole codeunit, which also affects a vendored foreign upstream.
         # TODO add real C/C++-linting (for example clang-format/clang-tidy) once a codeunit needs it for its own sourcecode.
-        self._protected_sc.normalize_invisible_characters_of_files_in_folder(os.path.join(self.get_codeunit_folder(), "Other"), ["py", "md", "xml"])
+        codeunit_folder = self.get_codeunit_folder()
+        self._protected_sc.normalize_invisible_characters_of_files_in_folder(codeunit_folder, ["c", "cpp"])
+        self._protected_sc.normalize_invisible_characters_of_files_in_folder(os.path.join(codeunit_folder, "Other"), ["py", "md", "xml"])
 
     @GeneralUtilities.check_arguments
     def do_common_tasks(self, current_codeunit_version: str) -> None:

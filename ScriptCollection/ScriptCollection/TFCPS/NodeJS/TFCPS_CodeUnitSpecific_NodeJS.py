@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from lxml import etree
-from ...GeneralUtilities import GeneralUtilities, VersionEcholon
+from ...GeneralUtilities import GeneralUtilities, VersionEchelon
 from ...SCLog import  LogLevel
 from ..TFCPS_CodeUnitSpecific_Base import TFCPS_CodeUnitSpecific_Base,TFCPS_CodeUnitSpecific_Base_CLI
 from ..NpmDependencies import NpmDependencies
@@ -147,7 +147,7 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
         self._protected_sc.format_json_file(package_json_file)
 
     @GeneralUtilities.check_arguments
-    def update_dependencies_with_specific_echolon(self,echolon:VersionEcholon)->None:
+    def update_dependencies_with_specific_echelon(self,echelon:VersionEchelon)->None:
         """Updates the dependencies of this codeunit and confirms the result in its lock-file.
 
         The update changes the versions the package-file asks for, and the lock-file still states the versions which
@@ -158,7 +158,7 @@ class TFCPS_CodeUnitSpecific_NodeJS_Functions(TFCPS_CodeUnitSpecific_Base):
         The lock-file is only written when the update really changed a version, because writing it means installing
         the dependencies again, which is the most expensive part of an update-run."""
         dependencies_before_the_update:dict[str,set[str]]=self.get_dependencies()
-        super().update_dependencies_with_specific_echolon(echolon)
+        super().update_dependencies_with_specific_echelon(echelon)
         if dependencies_before_the_update!=self.get_dependencies():
             #The cache must not be used here: the whole point of this install is to resolve the dependencies again.
             self.tfcps_Tools_General.do_npm_install(self.get_codeunit_folder(),True,False)

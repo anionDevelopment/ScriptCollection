@@ -9,7 +9,7 @@ import traceback
 import shutil
 import keyboard
 from .ScriptCollectionCore import ScriptCollectionCore
-from .GeneralUtilities import GeneralUtilities, VersionEcholon
+from .GeneralUtilities import GeneralUtilities, VersionEchelon
 from .SCLog import LogLevel, SCLog
 from .TFCPS.TFCPS_CodeUnit_BuildCodeUnits import TFCPS_CodeUnit_BuildCodeUnits
 from .TFCPS.TFCPS_OCIImageSecretScan import TFCPS_OCIImageSecretScan
@@ -17,6 +17,8 @@ from .TFCPS.TFCPS_Tools_General import TFCPS_Tools_General
 from .TFCPS.DotNet.NuGetPackageSourceRegistration import NuGetPackageSourceRegistration
 from .OCIImages.OCIImageManager import OCIImageManager
 from .AgentRunner import AgentRunner, AgentRunnerConfiguration, CodingAgent
+from .LinuxServerSecurityCheck.LinuxServerSecurityChecker import LinuxServerSecurityChecker
+from .LinuxServerSecurityCheck.LinuxSystemAccess import LinuxSystemAccess
 
 
 def RunAgentInSandbox() -> int:
@@ -820,7 +822,7 @@ def PrintOSName() -> int:
     return 0
 
 
-def PrintCurrecntWorkingDirectory() -> int:
+def PrintCurrentWorkingDirectory() -> int:
     GeneralUtilities.write_message_to_stdout(os.getcwd())
     return 0
 
@@ -1062,7 +1064,7 @@ def OCRAnalysisOfRepository() -> int:
 
 
 def UpdateImagesInDockerComposeFile() -> int:
-    echolon_values = ", ".join(f"{e.value}={e.name}" for e in VersionEcholon)
+    echelon_values = ", ".join(f"{e.value}={e.name}" for e in VersionEchelon)
     parser = argparse.ArgumentParser(
         description=(
             "This function updates images in a Docker Compose file.\n"
@@ -1076,20 +1078,20 @@ def UpdateImagesInDockerComposeFile() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument('-f', '--file', required=False, default="./docker-compose.yml")
-    parser.add_argument('-e', '--echolon', type=int, required=False, default=None, help=f"Default version-echolon applied to all images that have no specific override. Possible values: {echolon_values}. If not set, the image-handler default is used.")
-    parser.add_argument('-i', '--image-echolon', action='append', default=[], help="Per-image echolon override in the format 'imagename=echolon' (e.g. 'Debian=3'). Can be specified multiple times.")
+    parser.add_argument('-e', '--echelon', type=int, required=False, default=None, help=f"Default version-echelon applied to all images that have no specific override. Possible values: {echelon_values}. If not set, the image-handler default is used.")
+    parser.add_argument('-i', '--image-echelon', action='append', default=[], help="Per-image echelon override in the format 'imagename=echelon' (e.g. 'Debian=3'). Can be specified multiple times.")
     args = parser.parse_args()
     sc = ScriptCollectionCore()
     file = GeneralUtilities.resolve_relative_path(args.file, os.getcwd())
-    default_echolon: VersionEcholon = VersionEcholon(args.echolon) if args.echolon is not None else None
-    per_image_echolons: dict[str, VersionEcholon] = {}
-    for item in args.image_echolon:
+    default_echelon: VersionEchelon = VersionEchelon(args.echelon) if args.echelon is not None else None
+    per_image_echelons: dict[str, VersionEchelon] = {}
+    for item in args.image_echelon:
         if "=" not in item:
-            raise ValueError(f"Invalid value for --image-echolon: '{item}'. Expected format: 'imagename=echolon'.")
-        name_part, echolon_part = item.split("=", 1)
-        per_image_echolons[name_part.strip()] = VersionEcholon(int(echolon_part.strip()))
+            raise ValueError(f"Invalid value for --image-echelon: '{item}'. Expected format: 'imagename=echelon'.")
+        name_part, echelon_part = item.split("=", 1)
+        per_image_echelons[name_part.strip()] = VersionEchelon(int(echelon_part.strip()))
     oci = OCIImageManager(sc)
-    oci.update_image_in_docker_compose_file(file, default_echolon, per_image_echolons)
+    oci.update_image_in_docker_compose_file(file, default_echelon, per_image_echelons)
     return 0
 
 
@@ -1203,14 +1205,14 @@ def CleanToolsCache()->int:
     return 0
 
 
-def DownloadCachableTools()->int:
+def DownloadCacheableTools()->int:
     parser = argparse.ArgumentParser(description="Downloads all tools that are stored in the global ScriptCollection-cache (for example CycloneDX-CLI, MediaMTX, TruffleHog, OpenAPIGenerator and AndroidAppBundleTool). Running this - for example in a build-image - lets repeated pipeline-runs avoid rate-limits and run faster because the tools are already present.")
     parser.add_argument('-v', '--verbose', action='store_true', required=False, default=False, help="Enables verbose (debug) output.")
     parser.add_argument('-e', '--enforceupdate', action='store_true', required=False, default=False, help="Re-download the tools even if they are already present in the cache.")
     #TODO for each tool which will be installed allow to specify a specific version number
     args = parser.parse_args()
     sc: ScriptCollectionCore = ScriptCollectionCore()
-    TFCPS_Tools_General(sc).download_all_cachable_tools(args.enforceupdate, args.verbose)
+    TFCPS_Tools_General(sc).download_all_cacheable_tools(args.enforceupdate, args.verbose)
     return 0
 
 
@@ -1258,15 +1260,15 @@ def ReclaimSpaceFromDocker()->int:
     sc = ScriptCollectionCore()
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--removecontainers', action='store_true', default=False)
-    parser.add_argument('-v', '--removevolumes', action='store_true', default=False)
-    parser.add_argument('-i', '--removeimages', action='store_true', default=False)
+    parser.add_argument('-n', '--removenamedvolumes', action='store_true', default=False, help="Also removes unused named volumes. Without this option only unused anonymous volumes are removed.")
+    parser.add_argument('-i', '--removeimages', action='store_true', default=False, help="Removes all unused images. Without this option only dangling images are removed.")
     verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
     parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
     args = parser.parse_args()
     sc:ScriptCollectionCore=ScriptCollectionCore()
     verbosity=int(args.verbosity)
     sc.log.loglevel=LogLevel(verbosity)
-    sc.reclaim_space_from_docker(args.removecontainers,args.removevolumes,args.removeimages)
+    sc.reclaim_space_from_docker(args.removecontainers,args.removenamedvolumes,args.removeimages)
     return 0
 
 
@@ -1451,3 +1453,20 @@ def WebpToPng() -> int:
         output_file = GeneralUtilities.resolve_relative_path(args.outputfile, os.getcwd())
     ScriptCollectionCore().convert_webp_to_png(input_file, output_file, args.replace)
     return 0
+
+
+def LinuxServerSecurityCheck() -> int:
+    parser = argparse.ArgumentParser(description=f"Runs read-only checks on a linux-server to detect signs of a compromise or of suspicious activities (for example backdoor-accounts, processes running from temporary folders, reverse-shells, crypto-miners, persistence in cron or systemd, unexpected setuid-files, modified package-files, rootkit-indicators). Nothing is changed on the system. Must be executed as root. Every finding is printed to stdout as one line with the prefix \"[High]\", \"[Mid]\" or \"[Low]\". Exit-code: the amount of high-findings (capped at {LinuxServerSecurityChecker.maximal_exit_code_for_findings}), or {LinuxServerSecurityChecker.exit_code_for_application_error} if an error occurred in the check itself.")
+    parser.add_argument('-o', '--outputfile', required=False, default=None, help="Optional file to which the findings are additionally appended (with timestamp).")
+    verbosity_values = ", ".join(f"{lvl.value}={lvl.name}" for lvl in LogLevel)
+    parser.add_argument('-v', '--verbosity', required=False, default=3, help=f"Sets the loglevel. Possible values: {verbosity_values}")
+    args = parser.parse_args()
+    try:
+        output_file = GeneralUtilities.resolve_relative_path(args.outputfile, os.getcwd()) if args.outputfile is not None else None
+        log: SCLog = SCLog(output_file, LogLevel(int(args.verbosity)))
+        log.add_overhead_to_logfile = True
+        return LinuxServerSecurityChecker(log, LinuxSystemAccess(), LinuxServerSecurityChecker.get_default_checks()).run()
+    except Exception as exception:  # pylint:disable=broad-exception-caught
+        # an error must be distinguishable from findings, because "nothing found" and "the check could not be done" have opposite meanings for the caller.
+        GeneralUtilities.write_message_to_stderr(f"The security-check could not be executed: {exception}\n{traceback.format_exc()}")
+        return LinuxServerSecurityChecker.exit_code_for_application_error

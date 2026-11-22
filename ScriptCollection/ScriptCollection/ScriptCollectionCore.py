@@ -41,7 +41,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "4.4.71"
+version = "5.0.2"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -959,7 +959,7 @@ class ScriptCollectionCore:
         return remote_is_ancestor_of_local and not local_is_ancestor_of_remote
 
     @GeneralUtilities.check_arguments
-    def git_push(self, folder: str, remotename: str, localbranchname: str, remotebranchname: str, forcepush: bool = False, pushalltags: bool = True, verbosity: LogLevel = LogLevel.Quiet,resurse_submodules:bool=False) -> None:
+    def git_push(self, folder: str, remotename: str, localbranchname: str, remotebranchname: str, forcepush: bool = False, pushalltags: bool = True, verbosity: LogLevel = LogLevel.Quiet,recurse_submodules:bool=False) -> None:
         """Pushes localbranchname to remotebranchname on the given remote (with pushalltags also all tags).
         Without forcepush (and if folder is not a bare repository) the push is skipped (only logged on debug-level) when the
         remote-branch is not strictly behind the local-branch, i.e. when it is equal, ahead or diverged (see git_branch_is_pushable),
@@ -974,7 +974,7 @@ class ScriptCollectionCore:
                 self.log.log(f"Skip pushing '{localbranchname}' to '{remotebranchname}' on '{remotename}' in '{folder}' because the remote-branch is not behind the local-branch.", LogLevel.Debug)
                 return
         argument = ["push"]
-        if resurse_submodules:
+        if recurse_submodules:
             argument = argument + ["--recurse-submodules=on-demand"]
         argument = argument + [remotename, f"{localbranchname}:{remotebranchname}"]
         if (forcepush):
@@ -1521,13 +1521,13 @@ class ScriptCollectionCore:
                 arguments = arguments+["--excludedirectories"]
             if printonlynamewithoutpath:
                 arguments = arguments+["--printonlynamewithoutpath"]
-            exit_code, stdout, stderr, _ = self.run_program_argsasarray("sclistfoldercontent", arguments)
+            exit_code, stdout, stderr, _ = self.run_program_argsasarray("sclistfoldercontent", arguments, throw_exception_if_exitcode_is_not_zero=False)
             if exit_code == 0:
                 for line in stdout.split("\n"):
                     normalized_line = line.replace("\r", "")
                     result.append(normalized_line)
             else:
-                raise ValueError(f"Fatal error occurred while checking whether file '{path}' exists. StdErr: '{stderr}'")
+                raise ValueError(f"Fatal error occurred while listing the content of folder '{path}'. Exitcode: {exit_code}, StdErr: '{stderr}'")
         result = [item for item in result if GeneralUtilities.string_has_nonwhitespace_content(item)]
         return result
 
@@ -1793,7 +1793,7 @@ class ScriptCollectionCore:
                     raise ValueError(f"{filetype_full} '{full_path_of_file_or_folder}' does not exist")
 
     @GeneralUtilities.check_arguments
-    def __calculate_lengh_in_seconds(self, filename: str, folder: str) -> float:
+    def __calculate_length_in_seconds(self, filename: str, folder: str) -> float:
         argument = ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filename]
         result = self.run_program_argsasarray("ffprobe", argument, folder, throw_exception_if_exitcode_is_not_zero=True)
         return float(result[1].replace('\n', ''))
@@ -1850,15 +1850,15 @@ class ScriptCollectionCore:
         filename_without_extension = Path(file).stem
         preview_files: list[str] = []
         try:
-            length_in_seconds = self.__calculate_lengh_in_seconds(filename, folder)
+            length_in_seconds = self.__calculate_length_in_seconds(filename, folder)
             # frames per second, example: frames_per_second="20fps" => 20 frames per second
             frames_per_second = self.__roundup(float(frames_per_second[:-3]), 2)
             frames_per_second_as_string = str(frames_per_second)
             preview_files = self.__create_thumbnails(filename, frames_per_second_as_string, folder, tempname_for_thumbnails)
             if hook is not None:
                 hook(file, preview_files)
-            actual_amounf_of_previewframes = len(preview_files)
-            self.__create_thumbnail(filename_without_extension, folder, length_in_seconds, tempname_for_thumbnails, actual_amounf_of_previewframes)
+            actual_amount_of_previewframes = len(preview_files)
+            self.__create_thumbnail(filename_without_extension, folder, length_in_seconds, tempname_for_thumbnails, actual_amount_of_previewframes)
         finally:
             for thumbnail_to_delete in preview_files:
                 os.remove(thumbnail_to_delete)
@@ -1874,14 +1874,14 @@ class ScriptCollectionCore:
         filename_without_extension = Path(file).stem
         preview_files: list[str] = []
         try:
-            length_in_seconds = self.__calculate_lengh_in_seconds(filename, folder)
-            amounf_of_previewframes = int(amount_of_columns*amount_of_rows)
-            frames_per_second_as_string = f"{amounf_of_previewframes-2}/{length_in_seconds}"
+            length_in_seconds = self.__calculate_length_in_seconds(filename, folder)
+            amount_of_previewframes = int(amount_of_columns*amount_of_rows)
+            frames_per_second_as_string = f"{amount_of_previewframes-2}/{length_in_seconds}"
             preview_files = self.__create_thumbnails(filename, frames_per_second_as_string, folder, tempname_for_thumbnails)
             if hook is not None:
                 hook(file, preview_files)
-            actual_amounf_of_previewframes = len(preview_files)
-            self.__create_thumbnail2(filename_without_extension, folder, length_in_seconds, amount_of_rows, amount_of_columns, tempname_for_thumbnails, actual_amounf_of_previewframes)
+            actual_amount_of_previewframes = len(preview_files)
+            self.__create_thumbnail2(filename_without_extension, folder, length_in_seconds, amount_of_rows, amount_of_columns, tempname_for_thumbnails, actual_amount_of_previewframes)
         finally:
             for thumbnail_to_delete in preview_files:
                 os.remove(thumbnail_to_delete)
@@ -2300,7 +2300,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
                     namemappingfile, "Original filename;new filename;SHA2-hash of file")
             for file in GeneralUtilities.absolute_file_paths(inputfolder):
                 if os.path.isfile(os.path.join(inputfolder, file)):
-                    if obfuscate_all_files or self.__extension_matchs(file, obfuscate_file_extensions):
+                    if obfuscate_all_files or self.__extension_matches(file, obfuscate_file_extensions):
                         files.append(file)
             for file in files:
                 hash_value = GeneralUtilities.get_sha256_of_file(file)
@@ -2314,7 +2314,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
             raise ValueError(f"Directory not found: '{inputfolder}'")
 
     @GeneralUtilities.check_arguments
-    def __extension_matchs(self, file: str, obfuscate_file_extensions) -> bool:
+    def __extension_matches(self, file: str, obfuscate_file_extensions) -> bool:
         for extension in obfuscate_file_extensions:
             if file.lower().endswith("."+extension.lower()):
                 return True
@@ -2336,7 +2336,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
         inputfolder = newd
         if (os.path.isdir(inputfolder)):
             for file in GeneralUtilities.absolute_file_paths(inputfolder):
-                if obfuscate_all_files or self.__extension_matchs(file, obfuscate_file_extensions):
+                if obfuscate_all_files or self.__extension_matches(file, obfuscate_file_extensions):
                     self.changeHashOfProgram(file)
                     os.remove(file)
                     os.rename(file + ".modified", file)
@@ -2371,7 +2371,7 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
             #  -1 → a < b
             #   0 → a = b
             #   1 → a > b
-            # dpkg --compare-versions <a> lt <b>  → exit 0 wenn a < b
+            # dpkg --compare-versions <a> lt <b>  → exit 0 if a < b
             def dpkg_compare(op: str) -> bool:
                 result = self.run_program_argsasarray("docker", [ "run", "--rm",image, "dpkg", "--compare-versions", a, op, b],throw_exception_if_exitcode_is_not_zero=False)
                 GeneralUtilities.assert_condition(result[1]==GeneralUtilities.empty_string)
@@ -2626,9 +2626,21 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
             ScriptCollectionCore.__process_stdout_lines(q_stdout, stdout_result, print_live_output, log)
             ScriptCollectionCore.__process_stderr_lines(q_stderr, stderr_result, print_live_output, print_errors_as_information, log)
 
-            if timed_out:
-                raise TimeoutError(f"The process with process-id {p_id} did not finish within the configured timeout of {timeoutInSeconds} second(s) and was killed.")
-            return (stdout_result, stderr_result)
+        # Leaving the with-block waits until both reader-threads are terminated, so their result is final here.
+        if timed_out:
+            raise TimeoutError(f"The process with process-id {p_id} did not finish within the configured timeout of {timeoutInSeconds} second(s) and was killed.")
+        ScriptCollectionCore.__raise_if_reading_failed(readers, p_id)
+        return (stdout_result, stderr_result)
+
+    @staticmethod
+    def __raise_if_reading_failed(readers: list, p_id: int) -> None:
+        """Raises the error of a reader-thread which failed.
+        Without this check such an error (for example a program-runner whose popen-object does not provide readable text-streams)
+        would be swallowed by the thread-pool, so that the program-run would look like a successful run without any output."""
+        for reader in readers:
+            reader_error: BaseException = reader.exception()
+            if reader_error is not None:
+                raise ValueError(f"Reading the output of the process with process-id {p_id} failed.") from reader_error
 
     @GeneralUtilities.check_arguments
     def run_program_argsasarray(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, print_errors_as_information: bool = False, log_file: str = None, timeoutInSeconds: int = None, addLogOverhead: bool = False, title: str = None, log_namespace: str = "", arguments_for_log:  list[str] = None, throw_exception_if_exitcode_is_not_zero: bool = True, custom_argument: object = None, interactive: bool = False, print_live_output: bool = False, env_vars: dict = None) -> tuple[int, str, str, int]:
@@ -3641,8 +3653,11 @@ TXDX
     def normalize_invisible_characters_of_files_in_folder(self, folder: str, file_extensions: list[str]) -> None:
         """Normalizes the line-endings of all not-git-ignored files inside 'folder' which have one of the given
         file-extensions. The file-extensions must be given without a leading dot (example: ["ts", "js"])."""
-        for file_extension in file_extensions:
-            for file in self.get_not_git_ignored_files_of_folder(folder, f".{file_extension}"):
+        # The not-git-ignored files are determined only once and filtered afterwards instead of determining them
+        # once per file-extension, because each determination runs "git ls-files" over the whole folder.
+        dotted_file_extensions = tuple(f".{file_extension}" for file_extension in file_extensions)
+        for file in self.get_not_git_ignored_files_of_folder(folder):
+            if file.endswith(dotted_file_extensions):
                 self.normalize_invisible_characters(file)
 
     @GeneralUtilities.check_arguments
@@ -4366,7 +4381,7 @@ OCR-content:
         health = state.get("Health")
 
         if health is None:
-            return False  # kein HEALTHCHECK definiert
+            return False  # no HEALTHCHECK defined
 
         return health["Status"] == "healthy"
 
@@ -4396,14 +4411,19 @@ OCR-content:
             return False
         return True
 
-    def reclaim_space_from_docker(self,remove_containers:bool,remove_volumes:bool,remove_images:bool, amount_of_attempts: int = 5):
+    def reclaim_space_from_docker(self,remove_containers:bool,remove_named_volumes:bool,remove_images:bool, amount_of_attempts: int = 5):
         self.log.log("Reclaim disk space from docker...",LogLevel.Debug)
         if remove_containers:
             self.run_program_with_retry("docker","container prune -f",amount_of_attempts=amount_of_attempts)
-        if remove_volumes:
-            self.run_program_with_retry("docker","volume prune -f",amount_of_attempts=amount_of_attempts)
+            self.run_program_with_retry("docker","network prune -f",amount_of_attempts=amount_of_attempts)# networks are only unused when the containers which used them are removed.
+        if remove_named_volumes:
+            self.run_program_with_retry("docker","volume prune -a -f",amount_of_attempts=amount_of_attempts)# since docker 23 "volume prune" without "-a" only removes anonymous volumes.
+        else:
+            self.run_program_with_retry("docker","volume prune -f",amount_of_attempts=amount_of_attempts)# removes only anonymous volumes.
         if remove_images:
             self.run_program_with_retry("docker","image prune -a -f",amount_of_attempts=amount_of_attempts)
+        else:
+            self.run_program_with_retry("docker","image prune -f",amount_of_attempts=amount_of_attempts)# removes only dangling images (untagged leftovers of builds).
         self.run_program_with_retry("docker","builder prune -a -f",amount_of_attempts=amount_of_attempts)
         self.run_program_with_retry("docker","buildx prune -a -f",amount_of_attempts=amount_of_attempts,throw_exception_if_exitcode_is_not_zero=False) # buildx prune is not available on every machine.
         self.run_program_with_retry("docker","system df",print_live_output=self.log.loglevel==LogLevel.Debug,amount_of_attempts=amount_of_attempts)
@@ -4977,7 +4997,7 @@ OCR-content:
         GeneralUtilities.write_lines_to_file(target_file, commits)
 
     @GeneralUtilities.check_arguments
-    def is_runnning_in_container(self) ->bool:
+    def is_running_in_container(self) ->bool:
         """this function is based on a convention and does not do a real check."""
         return os.environ.get("ISRUNNINGINCONTAINER") == "true"
 

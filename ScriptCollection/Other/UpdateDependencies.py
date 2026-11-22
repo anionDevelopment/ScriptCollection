@@ -11,7 +11,7 @@ test_kind_source_url = "https://raw.githubusercontent.com/anionDevelopment/GRYLi
 def sync_bundled_dependency_versions():
     # The default tool-versions are maintained in '<repo>/Other/Resources/Dependencies/<tool>/Version.txt' as single
     # source of truth. Copy them into the package-resources so they are shipped with the wheel and can be read at runtime
-    # (e.g. by scdownloadcachabletools in a build-image) via GeneralUtilities._internal_load_resource.
+    # (e.g. by scdownloadcacheabletools in a build-image) via GeneralUtilities._internal_load_resource.
     folder_of_this_file = os.path.dirname(os.path.abspath(__file__))
     relative_paths = [
         "Dependencies/OpenAPIGenerator/Version.txt",

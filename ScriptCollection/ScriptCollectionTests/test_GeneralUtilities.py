@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from datetime import datetime, date, timezone, timedelta
 import unittest
-from ..ScriptCollection.GeneralUtilities import GeneralUtilities, VersionEcholon, Dependency
+from ..ScriptCollection.GeneralUtilities import GeneralUtilities, VersionEchelon, Dependency
 
 
 class GeneralUtilitiesTests(unittest.TestCase):
@@ -420,7 +420,7 @@ class GeneralUtilitiesTests(unittest.TestCase):
         available_versions = ["1.1.2", "1.1.9", "1.10.5", "1.2.0", "2.0.0"]
 
         # act
-        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEcholon.LatestPatch)
+        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEchelon.LatestPatch)
 
         # assert
         # "1.10.5" shares the textual prefix "1.1" but belongs to another minor version, so it must not be chosen.
@@ -431,7 +431,7 @@ class GeneralUtilitiesTests(unittest.TestCase):
         available_versions = ["1.1.2", "1.10.5", "2.0.0", "10.0.0"]
 
         # act
-        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEcholon.LatestPatchOrLatestMinor)
+        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEchelon.LatestPatchOrLatestMinor)
 
         # assert
         assert actual == "1.10.5"
@@ -441,7 +441,7 @@ class GeneralUtilitiesTests(unittest.TestCase):
         available_versions = ["1.1.2", "10.0.0", "2.0.0"]
 
         # act
-        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEcholon.LatestVersion)
+        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEchelon.LatestVersion)
 
         # assert
         assert actual == "10.0.0"
@@ -451,10 +451,70 @@ class GeneralUtilitiesTests(unittest.TestCase):
         available_versions = ["1.1.2", "10.0.0"]
 
         # act
-        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEcholon.NoUpdate)
+        actual = GeneralUtilities.choose_version(available_versions, "1.1.0", VersionEchelon.NoUpdate)
 
         # assert
         assert actual == "1.1.0"
+
+    def test_get_amount_of_major_versions_behind_is_0_for_the_latest_major_version(self) -> None:
+        # arrange
+        available_versions = ["1.16.0", "1.17.0", "1.18.0"]
+
+        # act
+        actual = GeneralUtilities.get_amount_of_major_versions_behind(available_versions, "1.17.0")
+
+        # assert
+        assert actual == 0
+
+    def test_get_amount_of_major_versions_behind_is_1_if_one_newer_major_version_exists(self) -> None:
+        # arrange
+        available_versions = ["1.16.0", "1.17.0", "2.0.0"]
+
+        # act
+        actual = GeneralUtilities.get_amount_of_major_versions_behind(available_versions, "1.17.0")
+
+        # assert
+        assert actual == 1
+
+    def test_get_amount_of_major_versions_behind_is_2_if_two_newer_major_versions_exist(self) -> None:
+        # arrange
+        available_versions = ["1.17.0", "2.0.0", "3.0.0"]
+
+        # act
+        actual = GeneralUtilities.get_amount_of_major_versions_behind(available_versions, "1.17.0")
+
+        # assert
+        assert actual == 2
+
+    def test_get_amount_of_major_versions_behind_counts_a_skipped_major_version(self) -> None:
+        # arrange
+        available_versions = ["1.17.0", "3.0.0"]
+
+        # act
+        actual = GeneralUtilities.get_amount_of_major_versions_behind(available_versions, "1.17.0")
+
+        # assert
+        assert actual == 2
+
+    def test_get_amount_of_major_versions_behind_compares_numerically(self) -> None:
+        # arrange
+        available_versions = ["9.0.0", "10.0.0"]
+
+        # act
+        actual = GeneralUtilities.get_amount_of_major_versions_behind(available_versions, "9.0.0")
+
+        # assert
+        assert actual == 1
+
+    def test_get_amount_of_major_versions_behind_is_0_for_an_empty_list(self) -> None:
+        # arrange
+        available_versions = []
+
+        # act
+        actual = GeneralUtilities.get_amount_of_major_versions_behind(available_versions, "1.0.0")
+
+        # assert
+        assert actual == 0
 
     def test_string_to_boolean_accepts_true_values_case_insensitive_and_with_surrounding_whitespace(self) -> None:
         # arrange
@@ -1164,3 +1224,98 @@ class GeneralUtilitiesTests(unittest.TestCase):
 
             # assert
             assert findings == ["The file is empty."]
+
+    def __skip_if_symlinks_are_not_supported(self, folder: str) -> None:
+        probe_target = os.path.join(folder, "probe_target")
+        os.makedirs(probe_target)
+        try:
+            os.symlink(probe_target, os.path.join(folder, "probe_link"), target_is_directory=True)
+        except OSError:
+            self.skipTest("Creating symbolic links is not allowed on this machine.")
+
+    def test_replace_symlinks_by_copies_replaces_links_into_target_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            self.__skip_if_symlinks_are_not_supported(folder)
+            shared_folder = os.path.join(folder, "shared")
+            os.makedirs(os.path.join(shared_folder, "skill"))
+            GeneralUtilities.write_text_to_file(os.path.join(shared_folder, "skill", "SKILL.md"), "content")
+            GeneralUtilities.write_text_to_file(os.path.join(shared_folder, "file.txt"), "file-content")
+            tool_folder = os.path.join(folder, "tool")
+            os.makedirs(tool_folder)
+            folder_link = os.path.join(tool_folder, "skill")
+            file_link = os.path.join(tool_folder, "file.txt")
+            os.symlink(os.path.join(shared_folder, "skill"), folder_link, target_is_directory=True)
+            os.symlink(os.path.join(shared_folder, "file.txt"), file_link)
+
+            # act
+            replaced = GeneralUtilities.replace_symlinks_by_copies(tool_folder, shared_folder, [])
+
+            # assert
+            assert sorted(replaced) == sorted([folder_link, file_link])
+            assert not os.path.islink(folder_link)
+            assert not os.path.islink(file_link)
+            assert GeneralUtilities.read_text_from_file(os.path.join(folder_link, "SKILL.md")) == "content"
+            assert GeneralUtilities.read_text_from_file(file_link) == "file-content"
+            assert os.path.isfile(os.path.join(shared_folder, "skill", "SKILL.md"))
+
+    def test_replace_symlinks_by_copies_keeps_links_to_other_folders(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            self.__skip_if_symlinks_are_not_supported(folder)
+            shared_folder = os.path.join(folder, "shared")
+            other_folder = os.path.join(folder, "other")
+            os.makedirs(shared_folder)
+            os.makedirs(other_folder)
+            tool_folder = os.path.join(folder, "tool")
+            os.makedirs(tool_folder)
+            link = os.path.join(tool_folder, "other")
+            os.symlink(other_folder, link, target_is_directory=True)
+
+            # act
+            replaced = GeneralUtilities.replace_symlinks_by_copies(tool_folder, shared_folder, [])
+
+            # assert
+            assert not replaced
+            assert os.path.islink(link)
+
+    def test_replace_symlinks_by_copies_keeps_links_in_excluded_folders(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            self.__skip_if_symlinks_are_not_supported(folder)
+            shared_folder = os.path.join(folder, "shared")
+            os.makedirs(os.path.join(shared_folder, "skill"))
+            GeneralUtilities.write_text_to_file(os.path.join(shared_folder, "skill", "SKILL.md"), "content")
+            tool_folder = os.path.join(folder, "tool")
+            excluded_folder = os.path.join(tool_folder, "submodule")
+            os.makedirs(excluded_folder)
+            excluded_link = os.path.join(excluded_folder, "skill")
+            included_link = os.path.join(tool_folder, "skill")
+            os.symlink(os.path.join(shared_folder, "skill"), excluded_link, target_is_directory=True)
+            os.symlink(os.path.join(shared_folder, "skill"), included_link, target_is_directory=True)
+
+            # act
+            replaced = GeneralUtilities.replace_symlinks_by_copies(tool_folder, shared_folder, [excluded_folder])
+
+            # assert
+            assert replaced == [included_link]
+            assert os.path.islink(excluded_link)
+            assert not os.path.islink(included_link)
+
+    def test_replace_symlinks_by_copies_changes_nothing_if_folder_is_excluded(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            self.__skip_if_symlinks_are_not_supported(folder)
+            shared_folder = os.path.join(folder, "shared")
+            os.makedirs(os.path.join(shared_folder, "skill"))
+            tool_folder = os.path.join(folder, "tool")
+            os.makedirs(tool_folder)
+            link = os.path.join(tool_folder, "skill")
+            os.symlink(os.path.join(shared_folder, "skill"), link, target_is_directory=True)
+
+            # act
+            replaced = GeneralUtilities.replace_symlinks_by_copies(tool_folder, shared_folder, [tool_folder])
+
+            # assert
+            assert not replaced
+            assert os.path.islink(link)

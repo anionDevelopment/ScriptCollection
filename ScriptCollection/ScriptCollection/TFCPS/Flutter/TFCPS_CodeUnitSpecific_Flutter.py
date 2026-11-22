@@ -11,7 +11,7 @@ import zipfile
 import yaml
 
 from ...ArbTranslationsOrganizer import ArbTranslationsOrganizer
-from ...GeneralUtilities import GeneralUtilities, VersionEcholon
+from ...GeneralUtilities import GeneralUtilities, VersionEchelon
 from ...SCLog import  LogLevel
 from ...ScriptCollectionCore import ScriptCollectionCore
 from ..PubDependencies import PubDependencies
@@ -112,7 +112,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                                                 "environment as a runner-built one.", LogLevel.Warning)
                     self._protected_sc.run_with_epew("flutter", "build windows", src_folder)
                 else:
-                    self.run_program_on_remote_runner(RunnerOperatingSystem.Windows, "flutter", ["build", "windows"], src_folder, windows_release_folder, folders_which_are_not_transferred)
+                    self.run_program_on_remote_runner(RunnerOperatingSystem.Windows, "flutter", ["build", "windows"], src_folder, windows_release_folder, folders_which_are_not_transferred, {})
                 windows_folder = os.path.join(artifacts_folder, "BuildResult_Windows")
                 GeneralUtilities.ensure_directory_does_not_exist(windows_folder)
                 GeneralUtilities.ensure_directory_exists(windows_folder)
@@ -134,7 +134,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                 # builds), analogous to how ios-builds always run on the iOS-task-runner. See SCTaskRunnerMacOS and
                 # the remote-build-article in the reference.
                 macos_release_folder = os.path.join(src_folder, "build/macos/Build/Products/Release")
-                self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "flutter", ["build", "macos"], src_folder, macos_release_folder, folders_which_are_not_transferred)
+                self.run_program_on_remote_runner(RunnerOperatingSystem.MacOS, "flutter", ["build", "macos"], src_folder, macos_release_folder, folders_which_are_not_transferred, {})
                 macos_folder = os.path.join(artifacts_folder, "BuildResult_MacOS")
                 GeneralUtilities.ensure_directory_does_not_exist(macos_folder)
                 GeneralUtilities.ensure_directory_exists(macos_folder)
@@ -143,7 +143,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                 # iOS-builds must run on macOS and therefore always run on the dedicated iOS-task-runner (uniform
                 # builds). See SCTaskRunnerIOS and the remote-build-article in the reference.
                 ios_release_folder = os.path.join(src_folder, "build/ios/iphoneos")
-                self.run_program_on_remote_runner(RunnerOperatingSystem.IOS, "flutter", ["build", "ios"], src_folder, ios_release_folder, folders_which_are_not_transferred)
+                self.run_program_on_remote_runner(RunnerOperatingSystem.IOS, "flutter", ["build", "ios"], src_folder, ios_release_folder, folders_which_are_not_transferred, {})
                 ios_folder = os.path.join(artifacts_folder, "BuildResult_IOS")
                 GeneralUtilities.ensure_directory_does_not_exist(ios_folder)
                 GeneralUtilities.ensure_directory_exists(ios_folder)
@@ -153,7 +153,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
                 # remote-build-article in the reference), analogous to how ios-builds always run on a macOS-task-runner:
                 # the Android-SDK/NDK-toolchain no longer lives in SCBuilder itself, it moved into SCTaskRunnerAndroid.
                 aab_release_folder = os.path.join(src_folder, "build/app/outputs/bundle/release")
-                self.run_program_on_remote_runner(RunnerOperatingSystem.Android, "flutter", ["build", "appbundle"], src_folder, aab_release_folder, folders_which_are_not_transferred)
+                self.run_program_on_remote_runner(RunnerOperatingSystem.Android, "flutter", ["build", "appbundle"], src_folder, aab_release_folder, folders_which_are_not_transferred, {})
                 # The app-bundle which came back from the runner is published as the build-result of this codeunit,
                 # analogous to the targets above: it is the artifact of an android-build, and every codeunit has to have
                 # an artifact whose name matches "BuildResult_.+" (see TFCPS_CodeUnit_BuildCodeUnit.build_codeunit).
@@ -725,7 +725,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
     def __is_running_in_container(self) -> bool:
         # The filesystem-marker is checked in addition to the convention-based environment-variable because a wrong
         # result here does not only change a message but makes the sibling-container access the wrong folder.
-        return os.path.exists("/.dockerenv") or self._protected_sc.is_runnning_in_container()
+        return os.path.exists("/.dockerenv") or self._protected_sc.is_running_in_container()
 
     @GeneralUtilities.check_arguments
     def __get_own_container_id(self) -> str:
@@ -786,7 +786,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
         GeneralUtilities.assert_condition(dependency_was_set, f"No package of the codeunit \"{self.get_codeunit_name()}\" contains a dependency which is named \"{name}\".")
 
     @GeneralUtilities.check_arguments
-    def update_dependencies_with_specific_echolon(self, echolon: VersionEcholon) -> None:
+    def update_dependencies_with_specific_echelon(self, echelon: VersionEchelon) -> None:
         """Updates the dependencies of this codeunit and confirms the result in the lock-files of its packages.
 
         The update changes the versions the package-files ask for, and the lock-files still state the versions which
@@ -797,7 +797,7 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
         The lock-files are only written when the update really changed a version, because writing them means
         resolving the dependencies again, which is the most expensive part of an update-run."""
         dependencies_before_the_update: dict[str, set[str]] = self.get_dependencies()
-        super().update_dependencies_with_specific_echolon(echolon)
+        super().update_dependencies_with_specific_echelon(echelon)
         if dependencies_before_the_update == self.get_dependencies():
             return
         for package_folder in self.__get_package_folders():

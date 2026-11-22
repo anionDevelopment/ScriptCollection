@@ -108,7 +108,7 @@ Afterwards `task dl` installs the built wheel locally.
 In this repository [pylint](https://pylint.org/) will be used to report linting-issues.
 If you change code in this repository please ensure pylint does not find any issues before creating a pull-request.
 
-If linting-issues exist in the current code-base can be checked by running `python ./ScriptCollection/Other/QualityCheck/Linting.py`.
+Whether linting-issues exist in the current code-base can be checked by running `python ./ScriptCollection/Other/QualityCheck/Linting.py`.
 
 ## Runtime dependencies
 

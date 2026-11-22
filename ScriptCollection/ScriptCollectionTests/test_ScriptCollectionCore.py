@@ -11,6 +11,46 @@ import xml.etree.ElementTree as ET
 from PIL import Image
 from ..ScriptCollection.GeneralUtilities import GeneralUtilities
 from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
+from ..ScriptCollection.ProgramRunnerBase import ProgramRunnerBase
+from ..ScriptCollection.ProgramRunnerSudo import SudoPopen
+
+
+class BytesOutputPopen:
+    """Simulates a popen-object of a program-runner whose stdout and stderr are bytes instead of readable text-streams."""
+    returncode: int = 0
+    pid: int = 0
+    stdout: bytes = b"output"
+    stderr: bytes = b""
+
+    def poll(self) -> object:
+        return self.returncode
+
+    def kill(self) -> None:
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+
+class SimulatedRemoteProgramRunner(ProgramRunnerBase):  # pylint: disable=abstract-method
+    """Simulates a program-runner which executes programs not locally, by returning a predefined result for every program-call.
+    This test-double deliberately implements only the methods which are required by the testcases which use it."""
+    popen_factory = None
+    executed_calls: list[tuple[str, list[str]]] = None
+
+    def __init__(self, popen_factory):
+        self.popen_factory = popen_factory
+        self.executed_calls = []
+
+    def run_program_argsasarray_async_helper(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None):
+        self.executed_calls.append((program, arguments_as_array))
+        return self.popen_factory()
+
+    def will_be_executed_locally(self) -> bool:
+        return False
 
 
 class ScriptCollectionCoreTests(unittest.TestCase):
@@ -874,6 +914,50 @@ class ScriptCollectionCoreTests(unittest.TestCase):
         assert exit_code == 0
         assert stdout == "expected-output"
 
+    def test_program_call_returns_the_output_of_a_runner_which_returns_an_already_terminated_popen(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        sc.program_runner = SimulatedRemoteProgramRunner(lambda: SudoPopen(0, "line1\nline2\n", "warning\n", 0))
+
+        # act
+        (exit_code, stdout, stderr, _3) = sc.run_program_argsasarray("someprogram", ["--argument"])
+
+        # assert
+        assert exit_code == 0
+        assert stdout == "line1\nline2"
+        assert stderr == "warning"
+
+    def test_program_call_raises_an_error_if_the_output_of_the_runner_is_not_readable(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        sc.program_runner = SimulatedRemoteProgramRunner(BytesOutputPopen)
+
+        # act & assert
+        with self.assertRaises(ValueError):
+            sc.run_program_argsasarray("someprogram", ["--argument"])
+
+    def test_list_content_returns_the_folders_of_a_folder_which_is_listed_by_a_not_local_runner(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        runner = SimulatedRemoteProgramRunner(lambda: SudoPopen(0, "Basic\r\nData\n\nTemp\n", "", 0))
+        sc.program_runner = runner
+
+        # act
+        result = sc.list_content("/Workspace", False, True, True)
+
+        # assert
+        assert result == ["Basic", "Data", "Temp"]
+        assert runner.executed_calls == [("sclistfoldercontent", ["--path", "/Workspace", "--excludefiles", "--printonlynamewithoutpath"])]
+
+    def test_list_content_raises_an_error_which_names_the_folder_if_the_not_local_listing_fails(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        sc.program_runner = SimulatedRemoteProgramRunner(lambda: SudoPopen(1, "", "folder not found", 0))
+
+        # act & assert
+        with self.assertRaisesRegex(ValueError, "listing the content of folder '/NotExisting'.*folder not found"):
+            sc.list_content("/NotExisting", True, True, False)
+
     def test_simple_program_call_argsasarray(self) -> None:
         # arrange
         sc = ScriptCollectionCore()
@@ -1656,5 +1740,29 @@ class ScriptCollectionCoreTests(unittest.TestCase):
                 sc.push_nuget_build_artifact(nupkg_file, "MySource")
                 # assert
                 self.assertNotIn("--api-key", run_program_argsasarray.call_args.args[1])
+
+    def test_normalize_invisible_characters_of_files_in_folder_lists_the_files_only_once_and_normalizes_only_matching_files(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            sc = ScriptCollectionCore()
+            sc.run_program_argsasarray("git", ["init"], folder)
+            GeneralUtilities.write_binary_to_file(os.path.join(folder, ".gitignore"), b"Ignored.md\n")
+            markdown_file = os.path.join(folder, "File.md")
+            json_file = os.path.join(folder, "File.json")
+            jsonl_file = os.path.join(folder, "File.jsonl")
+            other_file = os.path.join(folder, "File.cs")
+            ignored_file = os.path.join(folder, "Ignored.md")
+            for file in [markdown_file, json_file, jsonl_file, other_file, ignored_file]:
+                GeneralUtilities.write_binary_to_file(file, b"a\r\nb\r\n")
+            with patch.object(sc, "get_not_git_ignored_files_of_folder", wraps=sc.get_not_git_ignored_files_of_folder) as get_not_git_ignored_files_of_folder:
+                # act
+                sc.normalize_invisible_characters_of_files_in_folder(folder, ["md", "json"])
+                # assert
+                self.assertEqual(1, get_not_git_ignored_files_of_folder.call_count)
+            self.assertEqual(b"a\nb\n", GeneralUtilities.read_binary_from_file(markdown_file))
+            self.assertEqual(b"a\nb\n", GeneralUtilities.read_binary_from_file(json_file))
+            self.assertEqual(b"a\r\nb\r\n", GeneralUtilities.read_binary_from_file(jsonl_file))
+            self.assertEqual(b"a\r\nb\r\n", GeneralUtilities.read_binary_from_file(other_file))
+            self.assertEqual(b"a\r\nb\r\n", GeneralUtilities.read_binary_from_file(ignored_file))
 
 # TODO all testcases should be independent of epew

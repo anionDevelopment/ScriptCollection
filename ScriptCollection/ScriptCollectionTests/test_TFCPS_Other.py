@@ -2,10 +2,11 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from ..ScriptCollection.GeneralUtilities import GeneralUtilities
 from ..ScriptCollection.OCIImages.OCIImageManager import OCIImageManager
 from ..ScriptCollection.ScriptCollectionCore import ScriptCollectionCore
@@ -120,6 +121,13 @@ def write_openspec_configuration_file(repository: str) -> str:
     configuration_file = os.path.join(openspec_folder, "config.yaml")
     GeneralUtilities.write_text_to_file(configuration_file, "schema: spec-driven\n")
     return configuration_file
+
+
+def write_openspec_skill(repository: str) -> None:
+    """Writes a skill which openspec deploys during its initialization, which declares that openspec is already initialized in the repository."""
+    skill_folder = os.path.join(repository, ".agents", "skills", "openspec-explore")
+    GeneralUtilities.ensure_directory_exists(skill_folder)
+    GeneralUtilities.write_text_to_file(os.path.join(skill_folder, "SKILL.md"), "content of an openspec-skill")
 
 
 @contextmanager
@@ -634,8 +642,9 @@ items:
         # arrange
         with tempfile.TemporaryDirectory() as repository:
             write_openspec_configuration_file(repository)
+            write_openspec_skill(repository)
             build_codeunits = create_build_codeunits_for_folder(repository)
-            with patch.object(build_codeunits.sc, "run_with_epew") as run_program:
+            with patch.object(build_codeunits.sc, "run_with_epew") as run_program, patch.object(build_codeunits.sc, "get_git_submodules", return_value=[]):
 
                 # act
                 update_openspec(build_codeunits)
@@ -644,6 +653,41 @@ items:
                 #"--force" is required because openspec skips the update when it considers the generated files up-to-date, and the update
                 #must run in the repository because that is the folder whose openspec-files are meant. The openspec-cli is started using epew
                 #because on windows it is a ".cmd"-file, which the direct process-start can not resolve.
+                run_program.assert_called_once_with("openspec", "update --force", repository)
+
+    def test_update_openspec_initializes_openspec_before_the_update_when_it_is_not_initialized_yet(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as repository:
+            write_openspec_configuration_file(repository)
+            build_codeunits = create_build_codeunits_for_folder(repository)
+            with patch.object(build_codeunits.sc, "run_with_epew") as run_program:
+
+                # act
+                update_openspec(build_codeunits)
+
+                # assert
+                #"openspec update" only updates the tools which are already set up in the repository, so without the initialization
+                #a repository which only contains "openspec/config.yaml" would never get any openspec-skill.
+                assert [call.args for call in run_program.call_args_list] == [
+                    ("openspec", "init --tools claude,cline,github-copilot,vibe,opencode,codex,gemini,cursor --force", repository),
+                    ("openspec", "update --force", repository),
+                ]
+
+    def test_update_openspec_does_not_initialize_openspec_when_a_legacy_openspec_skill_exists(self) -> None:
+        # arrange
+        with tempfile.TemporaryDirectory() as repository:
+            write_openspec_configuration_file(repository)
+            legacy_skill_folder = os.path.join(repository, ".claude", "skills", "openspec-explore")
+            GeneralUtilities.ensure_directory_exists(legacy_skill_folder)
+            GeneralUtilities.write_text_to_file(os.path.join(legacy_skill_folder, "SKILL.md"), "content of an openspec-skill")
+            build_codeunits = create_build_codeunits_for_folder(repository)
+            with patch.object(build_codeunits.sc, "run_with_epew") as run_program:
+
+                # act
+                update_openspec(build_codeunits)
+
+                # assert
+                #a skill in the skill-folder of a tool (written by an older openspec-version) already sets openspec up, "openspec update" migrates it.
                 run_program.assert_called_once_with("openspec", "update --force", repository)
 
     def test_build_codeunits_in_container_passes_the_target_environment_type_into_the_container(self) -> None:
@@ -1347,3 +1391,108 @@ items:
 
             # assert
             self.assertEqual(["npm install", "npm install --package-lock-only", "npm clean-install"], recorded_calls)
+
+    @staticmethod
+    def __get_logged_warnings(log) -> list[str]:
+        return [call.args[0] for call in log.call_args_list if 1 < len(call.args) and call.args[1] == LogLevel.Warning]
+
+    def test_check_security_txt_file_warns_if_the_file_does_not_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as repository:
+            # arrange
+            build_codeunits = create_build_codeunits_for_folder(repository)
+            with patch.object(build_codeunits.sc.log, "log") as log:
+
+                # act
+                build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__check_security_txt_file(repository)  # pylint:disable=protected-access
+
+                # assert
+                warnings = TasksForCommonProjectStructureTests.__get_logged_warnings(log)
+                self.assertEqual(1, len(warnings))
+                self.assertIn("security.txt' does not exist", warnings[0])
+
+    def test_get_security_txt_fields_returns_the_values_grouped_by_lowercase_field_name(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            # arrange
+            security_txt_file = os.path.join(folder, "security.txt")
+            GeneralUtilities.write_text_to_file(security_txt_file, "# comment: ignored\nContact: mailto:a@example.com\ncontact: https://example.com/contact\nExpires: 2034-12-31T23:59:59Z\n")
+
+            # act
+            fields = TFCPS_CodeUnit_BuildCodeUnits._TFCPS_CodeUnit_BuildCodeUnits__get_security_txt_fields(security_txt_file)  # pylint:disable=protected-access
+
+            # assert
+            self.assertEqual({"contact": ["mailto:a@example.com", "https://example.com/contact"], "expires": ["2034-12-31T23:59:59Z"]}, fields)
+
+    def __get_expiration_warnings(self, expires_values: list[str]) -> list[str]:
+        with tempfile.TemporaryDirectory() as repository:
+            build_codeunits = create_build_codeunits_for_folder(repository)
+            now = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            with patch.object(build_codeunits.sc.log, "log") as log:
+                build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__check_security_txt_expiration("security.txt", {"expires": expires_values}, now)  # pylint:disable=protected-access
+                return TasksForCommonProjectStructureTests.__get_logged_warnings(log)
+
+    def test_check_security_txt_expiration_does_not_warn_if_the_file_is_valid_for_more_than_3_months(self) -> None:
+        self.assertEqual([], self.__get_expiration_warnings(["2034-12-31T23:59:59.999"]))
+
+    def test_check_security_txt_expiration_warns_if_the_file_is_expired(self) -> None:
+        warnings = self.__get_expiration_warnings(["2025-12-31T23:59:59Z"])
+        self.assertEqual(1, len(warnings))
+        self.assertIn("is expired", warnings[0])
+
+    def test_check_security_txt_expiration_warns_if_the_file_expires_within_3_months(self) -> None:
+        warnings = self.__get_expiration_warnings(["2026-03-01T00:00:00+00:00"])
+        self.assertEqual(1, len(warnings))
+        self.assertIn("expires within the next 3 months", warnings[0])
+
+    def test_check_security_txt_expiration_warns_if_the_field_is_missing_or_invalid(self) -> None:
+        self.assertIn("does not contain an 'Expires'-field", self.__get_expiration_warnings([])[0])
+        self.assertIn("is not a valid timestamp", self.__get_expiration_warnings(["tomorrow"])[0])
+        self.assertIn("more than one", self.__get_expiration_warnings(["2034-12-31T23:59:59Z", "2035-12-31T23:59:59Z"])[0])
+
+    def test_check_security_txt_signature_warns_if_the_file_is_not_signed(self) -> None:
+        with tempfile.TemporaryDirectory() as repository:
+            # arrange
+            build_codeunits = create_build_codeunits_for_folder(repository)
+            security_txt_file = os.path.join(repository, "security.txt")
+            GeneralUtilities.write_text_to_file(security_txt_file, "Contact: mailto:a@example.com\n")
+            with patch.object(build_codeunits.sc.log, "log") as log:
+
+                # act
+                build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__check_security_txt_signature(security_txt_file, {}, True)  # pylint:disable=protected-access
+
+                # assert
+                warnings = TasksForCommonProjectStructureTests.__get_logged_warnings(log)
+                self.assertEqual(1, len(warnings))
+                self.assertIn("is not signed", warnings[0])
+
+    def test_dearmor_pgp_public_key_returns_the_binary_content_without_armor_headers_and_checksum(self) -> None:
+        # arrange
+        armored = "text before\n-----BEGIN PGP PUBLIC KEY BLOCK-----\nComment: some comment\n\nAAEC\nAwQF\n=abcd\n-----END PGP PUBLIC KEY BLOCK-----\n"
+
+        # act
+        result = TFCPS_CodeUnit_BuildCodeUnits._TFCPS_CodeUnit_BuildCodeUnits__dearmor_pgp_public_key(armored)  # pylint:disable=protected-access
+
+        # assert
+        self.assertEqual(bytes([0, 1, 2, 3, 4, 5]), result)
+
+    def test_dearmor_pgp_public_key_returns_none_if_there_is_no_public_key_block(self) -> None:
+        self.assertIsNone(TFCPS_CodeUnit_BuildCodeUnits._TFCPS_CodeUnit_BuildCodeUnits__dearmor_pgp_public_key("<html>not found</html>"))  # pylint:disable=protected-access
+
+    def test_check_security_txt_urls_are_reachable_warns_for_an_unreachable_url_and_ignores_a_non_http_value(self) -> None:
+        with tempfile.TemporaryDirectory() as repository:
+            # arrange
+            build_codeunits = create_build_codeunits_for_folder(repository)
+            response = SimpleNamespace(ok=False, status_code=404)
+            response_context = MagicMock()
+            response_context.__enter__.return_value = response
+            fields = {"encryption": ["https://example.com/key.txt", "openpgp4fpr:BD519004BC880C732CA647B872A38C3476BE272F"]}
+            with patch.object(build_codeunits.sc.log, "log") as log, patch("requests.get", return_value=response_context) as get:
+
+                # act
+                build_codeunits._TFCPS_CodeUnit_BuildCodeUnits__check_security_txt_urls_are_reachable("security.txt", fields, "Encryption")  # pylint:disable=protected-access
+
+                # assert
+                warnings = TasksForCommonProjectStructureTests.__get_logged_warnings(log)
+                self.assertEqual(1, len(warnings))
+                self.assertIn("'https://example.com/key.txt'", warnings[0])
+                self.assertIn("HTTP-status 404", warnings[0])
+                get.assert_called_once()
