@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import stat
 import uuid
 import zipfile
@@ -23,7 +24,8 @@ class EncryptedContainerDefinition:
 class EncryptedContainerInRepository:
     """Manages encrypted containers in a folder (usually a git-repository).
     A container is a file which contains the content (files and folders) of a target-folder in encrypted form.
-    The containers are defined in "<folder>/.ScriptCollection/EncryptedFolders.csv" with the columns "Name;File;Target".
+    The containers are defined in "<folder>/.ScriptCollection/EncryptedFolders.csv" with the columns "Name;Target".
+    The container-file of a container is always "<folder>/.ScriptCollection/SensitiveDataContainer/<Name>.bin".
     The target-folder is intended to be git-ignored, so that sensitive data are always either encrypted (in the container-file) or git-ignored (in the target-folder).
 
     Container-format: magic-bytes, format-version, scrypt-salt, AES-GCM-nonce and the AES-256-GCM-encrypted zip-archive of the target-folder.
@@ -39,18 +41,28 @@ class EncryptedContainerInRepository:
     __scrypt_p: int = 1
     __fixed_zip_timestamp: tuple = (1980, 1, 1, 0, 0, 0)
     __definition_file_relative: str = ".ScriptCollection/EncryptedFolders.csv"
+    __definition_file_header: str = "Name;Target"
+    __container_folder_relative: str = ".ScriptCollection/SensitiveDataContainer"
+    __container_file_extension: str = ".bin"
+    __valid_name_pattern = re.compile(r"^[A-Za-z0-9_.-]+$")
 
     def __init__(self, sc: ScriptCollectionCore):
         self.__sc = sc
 
     @GeneralUtilities.check_arguments
-    def initialize(self, repository_folder: str, name: str, password: str) -> None:
-        """Creates the container-file as encrypted empty container. Throws an exception if the container-file already exists."""
-        definition = self.__get_definition(repository_folder, name)
+    def initialize(self, repository_folder: str, name: str, target: str, password: str) -> None:
+        """Creates the container-file as encrypted empty container and adds the line "<name>;<target>" to the definition-file.
+        The definition-file is created if it does not exist. Throws an exception if the name is already defined in the definition-file or if the container-file already exists."""
+        repository_folder = self.__get_absolute_repository_folder(repository_folder)
+        definition_file = os.path.join(repository_folder, self.__definition_file_relative)
+        if os.path.isfile(definition_file) and any(line[0] == name for line in self.__read_definition_file(definition_file)):
+            raise ValueError(f"Definition-file \"{definition_file}\" already contains a container with name \"{name}\".")
+        definition = self.__create_definition(repository_folder, name, target)
         if os.path.exists(definition.container_file):
             raise ValueError(f"Container-file \"{definition.container_file}\" already exists.")
         self.__write_container_file(definition.container_file, self.__create_zip_archive({}), password)
-        self.__sc.log.log(f"Initialized encrypted empty container \"{name}\" in \"{definition.container_file}\".")
+        self.__add_line_to_definition_file(definition_file, f"{definition.name};{definition.target_folder_relative}")
+        self.__sc.log.log(f"Initialized encrypted empty container \"{name}\" with target \"{definition.target_folder_relative}\" in \"{definition.container_file}\".")
 
     @GeneralUtilities.check_arguments
     def decrypt(self, repository_folder: str, name: str, password: str) -> None:
@@ -92,29 +104,49 @@ class EncryptedContainerInRepository:
         else:
             self.__sc.log.log(f"Content of \"{definition.target_folder}\" is unchanged, so container \"{name}\" remains unchanged.")
 
-    def __get_definition(self, repository_folder: str, name: str) -> EncryptedContainerDefinition:
+    def __get_absolute_repository_folder(self, repository_folder: str) -> str:
         if not os.path.isdir(repository_folder):
             raise ValueError(f"Folder \"{repository_folder}\" does not exist.")
-        repository_folder = os.path.abspath(repository_folder)
+        return os.path.abspath(repository_folder)
+
+    def __read_definition_file(self, definition_file: str) -> list[list[str]]:
+        lines = GeneralUtilities.read_csv_file(definition_file, True)
+        for line in lines:
+            if len(line) != 2:
+                raise ValueError(f"Definition-file \"{definition_file}\" contains a line which does not have exactly 2 columns (Name;Target): \"{';'.join(line)}\".")
+        return lines
+
+    def __add_line_to_definition_file(self, definition_file: str, line: str) -> None:
+        if os.path.isfile(definition_file):
+            existing_lines = GeneralUtilities.read_lines_from_file(definition_file)
+        else:
+            GeneralUtilities.ensure_directory_exists(os.path.dirname(definition_file))
+            existing_lines = [self.__definition_file_header]
+        GeneralUtilities.write_lines_to_file(definition_file, [existing_line for existing_line in existing_lines if GeneralUtilities.string_has_content(existing_line)]+[line])
+
+    def __get_definition(self, repository_folder: str, name: str) -> EncryptedContainerDefinition:
+        repository_folder = self.__get_absolute_repository_folder(repository_folder)
         definition_file = os.path.join(repository_folder, self.__definition_file_relative)
         if not os.path.isfile(definition_file):
-            raise ValueError(f"Definition-file \"{definition_file}\" does not exist.")
-        matching_lines: list[list[str]] = []
-        for line in GeneralUtilities.read_csv_file(definition_file, True):
-            if len(line) != 3:
-                raise ValueError(f"Definition-file \"{definition_file}\" contains a line which does not have exactly 3 columns (Name;File;Target): \"{';'.join(line)}\".")
-            if line[0] == name:
-                matching_lines.append(line)
+            raise ValueError(f"Definition-file \"{definition_file}\" does not exist. It can be created using \"scinitencryptedcontainerinrepo\".")
+        matching_lines = [line for line in self.__read_definition_file(definition_file) if line[0] == name]
         if len(matching_lines) == 0:
-            raise ValueError(f"Definition-file \"{definition_file}\" does not contain a container with name \"{name}\".")
+            raise ValueError(f"Definition-file \"{definition_file}\" does not contain a container with name \"{name}\". It can be created using \"scinitencryptedcontainerinrepo\".")
         if len(matching_lines) > 1:
             raise ValueError(f"Definition-file \"{definition_file}\" contains the name \"{name}\" more than once.")
-        file_relative = matching_lines[0][1]
-        target_relative = matching_lines[0][2]
-        container_file = self.__resolve_path_inside_repository(repository_folder, file_relative, "File")
+        return self.__create_definition(repository_folder, name, matching_lines[0][1])
+
+    def __create_definition(self, repository_folder: str, name: str, target_relative: str) -> EncryptedContainerDefinition:
+        if self.__valid_name_pattern.match(name) is None or name in (".", ".."):
+            raise ValueError(f"Name \"{name}\" is invalid. A name must only contain letters, digits, \"-\", \"_\" and \".\".")
+        if ";" in target_relative:
+            raise ValueError(f"Target \"{target_relative}\" must not contain \";\".")
+        definition_file = os.path.join(repository_folder, self.__definition_file_relative)
+        container_folder = os.path.join(repository_folder, self.__container_folder_relative)
+        container_file = os.path.abspath(os.path.join(container_folder, name+self.__container_file_extension))
         target_folder = self.__resolve_path_inside_repository(repository_folder, target_relative, "Target")
-        if self.__is_inside(container_file, target_folder):
-            raise ValueError(f"File \"{file_relative}\" must not be located inside of target \"{target_relative}\".")
+        if self.__is_inside(container_folder, target_folder) or self.__is_inside(target_folder, container_folder):
+            raise ValueError(f"Target \"{target_relative}\" must not contain and must not be located inside of the container-folder \"{self.__container_folder_relative}\".")
         if self.__is_inside(definition_file, target_folder):
             raise ValueError(f"Target \"{target_relative}\" must not contain the definition-file \"{self.__definition_file_relative}\".")
         if self.__is_inside(os.path.join(repository_folder, ".git"), target_folder):

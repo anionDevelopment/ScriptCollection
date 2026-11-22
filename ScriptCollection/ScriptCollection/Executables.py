@@ -1456,18 +1456,25 @@ def ShowTrustedRootCAs() -> int:
     return 0
 
 
-def __parse_arguments_for_encrypted_container(description: str) -> tuple[str, str, str]:
-    parser = argparse.ArgumentParser(description=f"{description} The containers are defined in \"<folder>/.ScriptCollection/EncryptedFolders.csv\" (columns \"Name;File;Target\", separated by semicolon, first line is the header).")
+def __create_argument_parser_for_encrypted_container(description: str) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=f"{description} The containers are defined in \"<folder>/.ScriptCollection/EncryptedFolders.csv\" (columns \"Name;Target\", separated by semicolon, first line is the header). The container-file of a container is always \"<folder>/.ScriptCollection/SensitiveDataContainer/<Name>.bin\".")
     parser.add_argument('-f', '--folder', required=False, default=".", help="Folder (usually the root-folder of a git-repository) which contains the definition-file. Can be relative to the current working directory. Defaults to the current working directory.")
     parser.add_argument('-n', '--name', required=True, help="Name of the container as defined in the column \"Name\" of the definition-file.")
     parser.add_argument('-p', '--password', required=True, help="Password of the container.")
-    args = parser.parse_args()
+    return parser
+
+
+def __parse_arguments_for_encrypted_container(description: str) -> tuple[str, str, str]:
+    args = __create_argument_parser_for_encrypted_container(description).parse_args()
     return GeneralUtilities.resolve_relative_path(args.folder, os.getcwd()), args.name, args.password
 
 
 def InitEncryptedContainerInRepository() -> int:
-    folder, name, password = __parse_arguments_for_encrypted_container("Creates the container-file of an encrypted container as encrypted empty container. Fails if the container-file already exists.")
-    EncryptedContainerInRepository(ScriptCollectionCore()).initialize(folder, name, password)
+    parser = __create_argument_parser_for_encrypted_container("Creates the container-file of a new encrypted container as encrypted empty container and adds the container to the definition-file (which is created if it does not exist). Fails if the name is already defined or if the container-file already exists.")
+    parser.add_argument('-t', '--target', required=True, help="Target-folder of the container, relative to the folder. Must be a subfolder of the folder. Is written to the column \"Target\" of the definition-file.")
+    args = parser.parse_args()
+    folder = GeneralUtilities.resolve_relative_path(args.folder, os.getcwd())
+    EncryptedContainerInRepository(ScriptCollectionCore()).initialize(folder, args.name, args.target, args.password)
     return 0
 
 
