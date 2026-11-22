@@ -27,7 +27,8 @@ Arguments:
 | ------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `-f`, `--folder`   | no       | Folder which contains the definition-file (usually the root-folder of the repository). Relative paths are resolved against the current working-directory. Default: `.` |
 | `-n`, `--name`     | yes      | Name of the container as defined in the definition-file.                                                                                            |
-| `-p`, `--password` | yes      | Password of the container.                                                                                                                          |
+| `-p`, `--password` | one of `-p` and `-i` | Password of the container.                                                                                                              |
+| `-i`, `--interactive` | one of `-p` and `-i` | Requests the password interactively (without echo). `scinitencryptedcontainerinrepo` requests it twice and fails if the inputs are not equal. |
 | `-t`, `--target`   | yes, only for `scinitencryptedcontainerinrepo` | Target-folder of the new container, relative to `--folder`. Is written to the column `Target` of the definition-file.          |
 
 ## Definition-file
@@ -61,7 +62,7 @@ For the example above this is `.ScriptCollection/SensitiveDataContainer/ServerCr
 1. Create the container:
 
    ```cmd
-   scinitencryptedcontainerinrepo -n ServerCredentials -t Other/Resources/SensitiveData/ServerCredentials -p MyPassword
+   scinitencryptedcontainerinrepo -n ServerCredentials -t Other/Resources/SensitiveData/ServerCredentials -i
    ```
 
    This adds the line `ServerCredentials;Other/Resources/SensitiveData/ServerCredentials` to `.ScriptCollection/EncryptedFolders.csv` (the file is created if it does not exist) and creates the encrypted empty container-file `.ScriptCollection/SensitiveDataContainer/ServerCredentials.bin`.
@@ -72,7 +73,7 @@ For the example above this is `.ScriptCollection/SensitiveDataContainer/ServerCr
 1. Decrypt the container:
 
    ```cmd
-   scdecryptinrepo -n ServerCredentials -p MyPassword
+   scdecryptinrepo -n ServerCredentials -i
    ```
 
    The target-folder now contains the decrypted files and folders. In a git-repository it is git-ignored.
@@ -80,7 +81,7 @@ For the example above this is `.ScriptCollection/SensitiveDataContainer/ServerCr
 3. Encrypt the container again:
 
    ```cmd
-   scencryptinrepo -n ServerCredentials -p MyPassword
+   scencryptinrepo -n ServerCredentials -i
    ```
 
    The container-file is updated and the content of the target-folder is deleted. The target-folder itself remains as empty folder.
@@ -112,6 +113,6 @@ Decrypt the container, read the files and run `scencryptinrepo` afterwards. Sinc
 
 - Encryption: AES-256-GCM. The key is derived from the password using scrypt with a random salt. Every write of a container-file uses a new salt and a new nonce.
 - The container-file is authenticated, so manipulations of the container-file are detected while decrypting.
-- The password is passed as command line argument, so it can be visible in the history of the shell and in the process-list of the operating-system. Consider this when using the commands on shared systems.
+- A password passed with `--password` can be visible in the history of the shell and in the process-list of the operating-system. Use `--interactive` to avoid this.
 - The target-folder contains the sensitive data unencrypted while it is decrypted. Run `scencryptinrepo` as soon as you do not need the decrypted data anymore.
 - Use a strong password. The security of the container-file in the repository depends completely on the password.
