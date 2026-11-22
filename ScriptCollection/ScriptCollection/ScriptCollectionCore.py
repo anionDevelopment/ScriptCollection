@@ -1406,9 +1406,9 @@ class ScriptCollectionCore:
         for file_or_folder, item_type in items.items():
             truncated_file = file_or_folder[path_prefix:]
             if (filter_function is None or filter_function(folder, truncated_file)):
-                owner_and_permisssion = self.get_file_owner_and_file_permission(file_or_folder)
-                user = owner_and_permisssion[0]
-                permissions = owner_and_permisssion[1]
+                owner_and_permission = self.get_file_owner_and_file_permission(file_or_folder)
+                user = owner_and_permission[0]
+                permissions = owner_and_permission[1]
                 lines.append(f"{truncated_file};{item_type};{user};{permissions}")
         lines = sorted(lines, key=str.casefold)
         with open(target_file, "w", encoding=encoding) as file_object:
@@ -3906,10 +3906,10 @@ OCR-content:
             service_url = service_url + f"&languages={language}"
         headers = {'Cache-Control': 'no-cache'}
         with open(file, "rb") as f:
-            files_to_analyse = {
+            files_to_analyze = {
                 "fileContent": (os.path.basename(file), f, mime_type)
             }
-            r = requests.put(service_url, timeout=3600, headers=headers, files=files_to_analyse,verify=True)
+            r = requests.put(service_url, timeout=3600, headers=headers, files=files_to_analyze,verify=True)
             if r.status_code != 200:
                 if r.status_code == 400:
                     return f"Could not calculate ocr-content for file \"{file}\". File may be broken."

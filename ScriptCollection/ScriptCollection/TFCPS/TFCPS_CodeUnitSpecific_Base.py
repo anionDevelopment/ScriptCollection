@@ -149,7 +149,7 @@ class TFCPS_CodeUnitSpecific_Base(ABC):
         namespaces = {'cps': TFCPS_CodeUnitSpecific_Base.codeunit_namespace,  'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
         root: etree._ElementTree = etree.parse(codeunit_file)
 
-        # check codeunit-spcecification-version
+        # check codeunit-specification-version
         try:
             codeunit_file_version = root.xpath('//cps:codeunit/@codeunitspecificationversion', namespaces=namespaces)[0]
             if codeunit_file_version != supported_codeunitspecificationversion:

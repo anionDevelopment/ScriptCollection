@@ -768,6 +768,39 @@ class GeneralUtilitiesTests(unittest.TestCase):
         # assert
         assert actual == ["build", "--configuration", "Release"]
 
+    def test_arguments_to_array_keeps_quoted_whitespace_in_one_argument(self) -> None:
+        # act
+        actual = GeneralUtilities.arguments_to_array('commit -m "my commit message" --author="A B <a@example.com>"')
+
+        # assert
+        assert actual == ["commit", "-m", "my commit message", "--author=A B <a@example.com>"]
+
+    def test_arguments_to_array_ignores_multiple_whitespaces_between_arguments(self) -> None:
+        # act
+        actual = GeneralUtilities.arguments_to_array("  a   b\tc  ")
+
+        # assert
+        assert actual == ["a", "b", "c"]
+
+    def test_arguments_to_array_keeps_explicitly_quoted_empty_argument(self) -> None:
+        # act
+        actual = GeneralUtilities.arguments_to_array('a "" b')
+
+        # assert
+        assert actual == ["a", "", "b"]
+
+    def test_arguments_to_array_treats_single_quotes_and_backslashes_literally(self) -> None:
+        # act
+        actual = GeneralUtilities.arguments_to_array("Don't C:\\Folder\\File.txt")
+
+        # assert
+        assert actual == ["Don't", "C:\\Folder\\File.txt"]
+
+    def test_arguments_to_array_raises_error_for_unclosed_double_quote(self) -> None:
+        # act & assert
+        with self.assertRaises(ValueError):
+            GeneralUtilities.arguments_to_array('a "b c')
+
     def test_read_csv_file_ignores_comments_and_empty_lines_and_trims_values(self) -> None:
         # arrange
         with tempfile.TemporaryDirectory() as folder:

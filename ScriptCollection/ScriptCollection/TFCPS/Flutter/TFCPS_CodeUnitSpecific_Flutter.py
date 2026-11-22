@@ -90,11 +90,11 @@ class TFCPS_CodeUnitSpecific_Flutter_Functions(TFCPS_CodeUnitSpecific_Base):
             self._protected_sc.log.log(f"Build flutter-codeunit {codeunit_name} for target {target_names[target]}...")
             if target == "web":
                 self._protected_sc.run_with_epew("flutter", "build web", src_folder)
-                web_relase_folder = os.path.join(src_folder, "build/web")
+                web_release_folder = os.path.join(src_folder, "build/web")
                 web_folder = os.path.join(artifacts_folder, "BuildResult_WebApplication")
                 GeneralUtilities.ensure_directory_does_not_exist(web_folder)
                 GeneralUtilities.ensure_directory_exists(web_folder)
-                GeneralUtilities.copy_content_of_folder(web_relase_folder, web_folder)
+                GeneralUtilities.copy_content_of_folder(web_release_folder, web_folder)
             elif target == "windows":
                 # Windows-builds prefer a Windows-task-runner - even when building on a Windows-client - so that all builds
                 # are produced uniformly in the same defined environment. See the remote-build-article in the reference. If
