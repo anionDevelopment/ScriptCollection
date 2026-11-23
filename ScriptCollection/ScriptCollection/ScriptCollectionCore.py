@@ -41,7 +41,7 @@ from .ProgramRunnerBase import ProgramRunnerBase
 from .ProgramRunnerPopen import ProgramRunnerPopen
 from .SCLog import SCLog, LogLevel
 
-version = "5.0.4"
+version = "5.0.5"
 __version__ = version
 
 class VSCodeWorkspaceShellTask:
@@ -2531,7 +2531,15 @@ resolving a name requires fontconfig, which does not exist on every system ffmpe
 
     @staticmethod
     def __enqueue_output(file: IO, queue: Queue):
-        for line in iter(file.readline, ''):
+        """Transfers the lines of "file" into "queue" as strings.
+        "file" can be a binary-stream (e.g. ProgramRunnerPopen) or a text-stream (e.g. ProgramRunnerSudo).
+        Lines of a binary-stream are decoded per line, which is safe because the linebreak-byte never occurs inside a multi-byte-character in UTF-8."""
+        while True:
+            line = file.readline()
+            if len(line) == 0:  # b'' or '' means end of stream
+                break
+            if isinstance(line, bytes):
+                line = GeneralUtilities.decode_program_output(line)
             queue.put(line)
         file.close()
 

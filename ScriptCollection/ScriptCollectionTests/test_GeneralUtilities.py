@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 from datetime import datetime, date, timezone, timedelta
 import unittest
+from unittest.mock import patch
 from ..ScriptCollection.GeneralUtilities import GeneralUtilities, VersionEchelon, Dependency
 
 
@@ -1084,6 +1085,29 @@ class GeneralUtilitiesTests(unittest.TestCase):
 
         # assert
         assert actual == value
+
+    def test_decode_program_output_decodes_utf8(self) -> None:
+        # act
+        actual = GeneralUtilities.decode_program_output("schön".encode("utf-8"))
+
+        # assert
+        assert actual == "schön"
+
+    def test_decode_program_output_falls_back_to_the_encoding_of_the_system_locale_if_the_payload_is_not_valid_utf8(self) -> None:
+        # arrange
+        # "ö" in latin-1 is the single byte 0xf6, which is not valid utf-8.
+        payload = "schön".encode("latin-1")
+
+        # act
+        with patch("locale.getpreferredencoding", return_value="latin-1"):
+            actual = GeneralUtilities.decode_program_output(payload)
+
+        # assert
+        assert actual == "schön"
+
+    def test_decode_program_output_returns_empty_string_for_empty_payload(self) -> None:
+        # act & assert
+        assert GeneralUtilities.decode_program_output(b"") == ""
 
     def test_timedelta_to_simple_string_formats_as_hours_minutes_seconds(self) -> None:
         # act & assert
