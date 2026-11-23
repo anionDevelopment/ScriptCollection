@@ -47,6 +47,26 @@ def get_build_arguments_for_images_of_repository(repository: str, oci_image_mana
     return get_arguments(SimpleNamespace(get_repository_folder=lambda: repository, tfcps_Tools_General=tfcps_tools_general))
 
 
+def build_image_archive(codeunit_folder: str, build_arguments: list[str], target_file: str) -> list[str]:
+    """Calls the private TFCPS_CodeUnitSpecific_Docker_Functions.__build_image_archive for a test, the same way
+    get_build_arguments_for_images_of_repository above accesses another private method, and returns the arguments docker was
+    called with.
+    Docker is replaced by a stand-in which only writes a file to the destination given in the output-argument, so the test does
+    not require docker."""
+    # pylint:disable=protected-access
+    build_archive = TFCPS_CodeUnitSpecific_Docker_Functions._TFCPS_CodeUnitSpecific_Docker_Functions__build_image_archive
+    recorded_arguments: list[str] = []
+
+    def run_docker(program: str, arguments: list[str], working_directory: str, **_) -> None:
+        recorded_arguments.extend([program, working_directory]+arguments)
+        output_argument = arguments[arguments.index("--output")+1]
+        GeneralUtilities.write_text_to_file(output_argument.removeprefix("type=docker,dest="), "image-archive")
+
+    sc = SimpleNamespace(run_program_argsasarray_with_retry=run_docker)
+    build_archive(SimpleNamespace(_protected_sc=sc, get_codeunit_folder=lambda: codeunit_folder, get_verbosity=lambda: LogLevel.Information), build_arguments, target_file)
+    return recorded_arguments
+
+
 def write_vendored_pubspec(dependent_codeunits_folder: str, codeunit_name: str, flavor: str, package_name: str, pubspec_content: str) -> str:
     """Writes pubspec_content as the vendored copy of package_name (of codeunit_name, in the given "SourceCode"- or
     "BuildResult_SourceCode"-flavor) inside dependent_codeunits_folder, the same shape
@@ -1202,6 +1222,28 @@ items:
 
             # assert
             self.assertEqual(["--build-arg", "image_debian=docker.io/library/debian:13.4-slim"], actual_result)
+
+    def test_build_image_archive_lets_docker_write_outside_of_the_target_folder_and_moves_the_archive_to_the_target_file(self) -> None:
+        # The target-folder is mounted from the host when the build runs in a container, and docker must not write the
+        # image-archive into such a folder directly (see __build_image_archive).
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            # arrange
+            codeunit_folder = os.path.join(temporary_folder, "MyCodeUnit")
+            target_folder = os.path.join(codeunit_folder, "Other", "Artifacts", "BuildResult_OCIImage")
+            GeneralUtilities.ensure_directory_exists(target_folder)
+            target_file = os.path.join(target_folder, "MyCodeUnit_v1.0.0_Linux-x64.tar")
+
+            # act
+            docker_arguments = build_image_archive(codeunit_folder, ["buildx", "build", "--tag", "mycodeunit:1.0.0"], target_file)
+
+            # assert
+            self.assertEqual(["docker", codeunit_folder, "buildx", "build", "--tag", "mycodeunit:1.0.0", "--output"], docker_arguments[:-2])
+            self.assertEqual(".", docker_arguments[-1])
+            docker_destination = docker_arguments[-2].removeprefix("type=docker,dest=")
+            self.assertEqual("MyCodeUnit_v1.0.0_Linux-x64.tar", os.path.basename(docker_destination))
+            self.assertFalse(Path(docker_destination).is_relative_to(temporary_folder))
+            self.assertFalse(os.path.exists(docker_destination))
+            self.assertEqual("image-archive", GeneralUtilities.read_text_from_file(target_file))
 
     def test_dockerfile_contains_healthcheck_returns_true_for_healthcheck_instruction(self) -> None:
         # arrange

@@ -1,5 +1,7 @@
 import os
 import re
+import shutil
+import tempfile
 from urllib import request
 import time
 import ssl
@@ -50,17 +52,30 @@ class TFCPS_CodeUnitSpecific_Docker_Functions(TFCPS_CodeUnitSpecific_Base):
             if not self.use_cache():
                 args.append("--no-cache")
             target_file=os.path.join(app_artifacts_folder,f"{codeunitname}_v{codeunitversion}_{GeneralUtilities.platform_to_dash_str(platform)}.tar")
-            args.append("--output")
-            args.append(f"type=docker,dest={target_file}")
-            args.append(".")
             time.sleep(5)
-            self._protected_sc.run_program_argsasarray_with_retry("docker", args, codeunit_folder, print_errors_as_information=True,print_live_output=self.get_verbosity()==LogLevel.Debug,amount_of_attempts=3,delay_in_seconds=5)
+            self.__build_image_archive(args, target_file)
             time.sleep(2)
             self._protected_sc.run_program_argsasarray("docker", ["load", "-i", target_file], codeunit_folder, print_errors_as_information=True,print_live_output=self.get_verbosity()==LogLevel.Debug)
 
         self.__generate_sbom_for_docker_image()
         self.copy_source_files_to_output_directory()
 
+
+    @GeneralUtilities.check_arguments
+    def __build_image_archive(self, build_arguments: list[str], target_file: str) -> None:
+        """Runs the given "docker buildx build"-arguments (without output-argument and build-context) and stores the built image as
+        archive in target_file.
+        The archive is not written to target_file directly: docker writes it into a temporary folder of this machine first and the
+        finished file is moved to target_file afterwards. When the build runs in a container, target_file is located in a folder
+        which is mounted from the host, and letting the docker-client write a large image-archive directly into such a folder while
+        it receives the image from the builder makes the connection to the builder break ("failed to receive status: rpc error:
+        code = Unavailable desc = error reading from server: EOF") after some hundred megabytes. Receiving the archive into a
+        folder which is not mounted and writing a large file into the mounted folder each work on their own."""
+        with tempfile.TemporaryDirectory() as temporary_folder:
+            temporary_file = os.path.join(temporary_folder, os.path.basename(target_file))
+            args = build_arguments+["--output", f"type=docker,dest={temporary_file}", "."]
+            self._protected_sc.run_program_argsasarray_with_retry("docker", args, self.get_codeunit_folder(), print_errors_as_information=True,print_live_output=self.get_verbosity()==LogLevel.Debug,amount_of_attempts=3,delay_in_seconds=5)
+            shutil.move(temporary_file, target_file)
 
     @GeneralUtilities.check_arguments
     def __get_build_arguments_for_images_of_repository(self) -> list[str]:
