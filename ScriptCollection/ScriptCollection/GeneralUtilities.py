@@ -11,6 +11,7 @@ import hashlib
 import subprocess
 import shutil
 import time
+import locale
 import urllib
 import stat
 import fnmatch
@@ -1159,6 +1160,19 @@ class GeneralUtilities:
     @check_arguments
     def bytes_to_string(payload: bytes, encoding: str = 'utf-8') -> str:
         return payload.decode(encoding, errors="ignore")
+
+    @staticmethod
+    @check_arguments
+    def decode_program_output(payload: bytes) -> str:
+        """Decodes the output of a started program.
+        Most programs (e.g. git) write UTF-8, independent of the system-settings, so UTF-8 is tried first.
+        Some programs write in the encoding of the system-locale instead (e.g. cp1252 on Windows with a German locale, or latin-1 by gpgv).
+        A text with non-ascii-characters in such an encoding is practically never valid UTF-8, so if decoding as UTF-8 fails,
+        the encoding of the system-locale is used as fallback. Characters which are not valid in that encoding either are replaced."""
+        try:
+            return payload.decode("utf-8")
+        except UnicodeDecodeError:
+            return payload.decode(locale.getpreferredencoding(False), errors="replace")
 
     @staticmethod
     @check_arguments

@@ -914,6 +914,35 @@ class ScriptCollectionCoreTests(unittest.TestCase):
         assert exit_code == 0
         assert stdout == "expected-output"
 
+    def test_program_call_decodes_utf8_output_independent_of_the_system_locale(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        # the program writes the utf-8-bytes directly, so that the output does not depend on the encoding of the started python-process.
+        script = "import sys; sys.stdout.buffer.write('schön'.encode('utf-8')); sys.stderr.buffer.write('Grüße'.encode('utf-8'))"
+
+        # act
+        (exit_code, stdout, stderr, _3) = sc.run_program_argsasarray(sys.executable, ["-c", script], dir_path, timeoutInSeconds=60)
+
+        # assert
+        assert exit_code == 0
+        assert stdout == "schön"
+        assert stderr == "Grüße"
+
+    def test_program_call_with_direct_program_runner_call_decodes_utf8_output(self) -> None:
+        # arrange
+        sc = ScriptCollectionCore()
+        sc.call_program_runner_directly = True
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        script = "import sys; sys.stdout.buffer.write('schön'.encode('utf-8'))"
+
+        # act
+        (exit_code, stdout, _2, _3) = sc.run_program_argsasarray(sys.executable, ["-c", script], dir_path)
+
+        # assert
+        assert exit_code == 0
+        assert stdout == "schön"
+
     def test_program_call_returns_the_output_of_a_runner_which_returns_an_already_terminated_popen(self) -> None:
         # arrange
         sc = ScriptCollectionCore()

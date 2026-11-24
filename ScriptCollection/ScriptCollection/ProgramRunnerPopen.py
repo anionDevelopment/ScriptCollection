@@ -26,12 +26,13 @@ class ProgramRunnerPopen(ProgramRunnerBase):
     def run_program_argsasarray_async_helper(self, program: str, arguments_as_array: list[str] = [], working_directory: str = None, custom_argument: object = None, interactive: bool = False, env_vars: dict = None) -> Popen:
         arguments_for_process, env = self.__get_process_start_information(program, arguments_as_array, env_vars)
         try:
-            # errors="replace": a program can write bytes which are not valid in the used encoding (for example gpgv writes a name with
-            # an umlaut in latin-1). Without replacing them, reading the output would fail at the first such byte and the output would be lost.
+            # The output is read as bytes (no text=True) and decoded by the reader using GeneralUtilities.decode_program_output.
+            # With text=True Python would decode it using the encoding of the system-locale (e.g. cp1252 on Windows), but most
+            # programs (e.g. git) write UTF-8, so non-ascii-characters (e.g. umlauts in author-names) would be garbled.
             if interactive:
-                result = Popen(arguments_for_process, cwd=working_directory, stdout=PIPE, stderr=PIPE, shell=False, text=True, errors="replace", stdin=sys.stdin, env=env)  # pylint: disable=consider-using-with
+                result = Popen(arguments_for_process, cwd=working_directory, stdout=PIPE, stderr=PIPE, shell=False, stdin=sys.stdin, env=env)  # pylint: disable=consider-using-with
             else:
-                result = Popen(arguments_for_process, cwd=working_directory, stdout=PIPE, stderr=PIPE, shell=False, text=True, errors="replace", env=env)  # pylint: disable=consider-using-with
+                result = Popen(arguments_for_process, cwd=working_directory, stdout=PIPE, stderr=PIPE, shell=False, env=env)  # pylint: disable=consider-using-with
         except FileNotFoundError as fileNotFoundError:
             raise FileNotFoundError(f"Starting '{program}' in '{working_directory}' resulted in a FileNotFoundError: '{str(fileNotFoundError)}'")
         except NotADirectoryError as notADirectoryError:
@@ -44,8 +45,8 @@ class ProgramRunnerPopen(ProgramRunnerBase):
         pid = process.pid
         stdout, stderr = process.communicate()
         exit_code = process.wait()
-        stdout = GeneralUtilities.bytes_to_string(stdout).replace('\r', '')
-        stderr = GeneralUtilities.bytes_to_string(stderr).replace('\r', '')
+        stdout = GeneralUtilities.decode_program_output(stdout).replace('\r', '')
+        stderr = GeneralUtilities.decode_program_output(stderr).replace('\r', '')
         result = (exit_code, stdout, stderr, pid)
         return result
 
